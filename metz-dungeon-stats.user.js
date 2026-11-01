@@ -1370,7 +1370,15 @@
 #mds-root .mds-pane[hidden]{display:none}
 #mds-root p.mds-note{color:#c5d4de;font-size:.857em;margin:8px 0 0;line-height:1.45}
 #mds-root h4{margin:14px 0 6px;font-size:.786em;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6)}
-#mds-root .mds-pane h4:first-child{margin-top:0}
+#mds-root details.mds-fold{margin:0 0 6px}
+#mds-root details.mds-fold > summary{display:flex;align-items:baseline;gap:8px;list-style:none;cursor:pointer;margin:12px 0 6px;font-size:.786em;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6);user-select:none}
+#mds-root details.mds-fold:first-child > summary{margin-top:0}
+#mds-root details.mds-fold > summary::-webkit-details-marker{display:none}
+#mds-root details.mds-fold > summary::before{content:"▸";color:rgba(230,239,243,.5);font-size:1.1em;line-height:1}
+#mds-root details.mds-fold[open] > summary::before{content:"▾"}
+#mds-root details.mds-fold > summary:hover{color:#e6eff3}
+#mds-root .mds-fold-sum{margin-left:auto;text-transform:none;letter-spacing:0;font-size:1.05em;color:#c5d4de}
+#mds-root .mds-fold-body > .mds-set:first-child{margin-top:0}
 #mds-root details{margin:8px 0}
 #mds-root summary{cursor:pointer;color:#a9e9f1}
 #mds-root pre{white-space:pre-wrap;word-break:break-word;background:#1c2a35;padding:8px 10px;border-radius:8px;max-height:220px;overflow:auto;font-size:.857em;box-shadow:0 0 0 1px #3f424d}
@@ -1477,6 +1485,35 @@
             new MutationObserver(muts => { const tables = new Set(); for (const m of muts) { const t = m.target && m.target.closest ? m.target.closest("table") : null; if (t) tables.add(t); } for (const t of tables) applyOrder(t); }).observe(root, { childList: true, subtree: true });
             applyAllOrders();
         }
+        // Folds: every section header becomes a details/summary in the site's convention (chevron, no native marker, a
+        // muted count at the right). Open by default; each fold's state is saved per browser.
+        const FOLDS_KEY = PANEL_KEY + "-folds";
+        let folds = {};
+        try { folds = JSON.parse(localStorage.getItem(FOLDS_KEY) || "{}") || {}; } catch (_e) { folds = {}; }
+        function foldify(scope) {
+            for (const h of [...scope.querySelectorAll("h4")]) {
+                if (h.closest("details.mds-fold")) continue;
+                const parent = h.parentElement; const pane = h.closest(".mds-pane"); const key = `${pane ? pane.dataset.pane : "x"}:${cardKey(h.textContent)}`;
+                const d = document.createElement("details"); d.className = "mds-fold"; d.dataset.fold = key; if (h.dataset.noun) d.dataset.noun = h.dataset.noun; d.open = folds[key] !== false;
+                const sum = document.createElement("summary"); sum.innerHTML = `<span class="mds-fold-title">${h.innerHTML}</span><span class="mds-fold-sum"></span>`;
+                const body = document.createElement("div"); body.className = "mds-fold-body";
+                d.append(sum, body); parent.insertBefore(d, h); h.remove();
+                // The section runs to the next header, or to a container that holds sections of its own.
+                let n = d.nextSibling; while (n && !(n.nodeType === 1 && (n.tagName === "H4" || n.hasAttribute("data-sections")))) { const next = n.nextSibling; body.appendChild(n); n = next; }
+                d.addEventListener("toggle", () => { folds[key] = d.open; try { localStorage.setItem(FOLDS_KEY, JSON.stringify(folds)); } catch (_e) { /* fine */ } });
+            }
+        }
+        // The count in each fold's header: real table rows, or cards, or tiles.
+        function foldSummaries() {
+            for (const d of root.querySelectorAll("details.mds-fold")) {
+                const el = d.querySelector(".mds-fold-sum"); if (!el) continue;
+                const body = d.querySelector(".mds-fold-body"); let n = null;
+                const tb = body.querySelector("tbody"); if (tb) n = [...tb.rows].filter(r => !(r.cells.length === 1 && r.cells[0].colSpan > 1)).length;
+                else if (body.querySelector(".mds-card")) n = body.querySelectorAll(".mds-card").length;
+                else if (body.querySelector(".mds-tile")) n = body.querySelectorAll(".mds-tile").length;
+                el.textContent = n != null && d.dataset.noun ? `${n.toLocaleString()} ${n === 1 ? d.dataset.noun.replace(/ies$/, "y").replace(/s$/, "") : d.dataset.noun}` : "";
+            }
+        }
         function setScale(v) { scale = Math.max(0.7, Math.min(1.8, Math.round(v * 20) / 20)); try { localStorage.setItem(SCALE_KEY, String(scale)); } catch (_e) { /* fine */ } applyScale(); }
         let money = null, moneyAt = 0, moneyRev = -1, moneyPrices = 0;
         const isToken = h => /_token$/.test(h);
@@ -1513,15 +1550,17 @@
 <p class="mds-status" id="mds-status"></p>
 <div class="mds-banner" id="mds-banner" hidden><span>Open the game's <strong>Loot &amp; XP Log</strong> once this session (Combat → Loot &amp; XP Log) so the record can check its clears and chests against the game's own count.</span><button class="mds-x" title="Dismiss for this session">×</button></div>
 <div class="mds-pane" data-pane="overview">
+ <h4>Summary</h4>
  <div class="mds-cards" id="mds-cards"></div>
  <p class="mds-note" id="mds-ovnote"></p>
- <h4>Consumables</h4>
+ <h4 data-noun="items">Consumables</h4>
  <div class="mds-tiles" id="mds-consumables"></div>
 </div>
 <div class="mds-pane" data-pane="runs" hidden>
+ <h4 data-noun="runs">Runs</h4>
  <div class="mds-wrap mds-wrap-runs"><table><thead><tr><th>Start</th><th>Result</th><th>Dungeon</th><th>Run time</th><th>Waves</th><th>Chests</th><th>Keys</th><th>Deaths</th><th>XP</th><th>Seen by</th></tr></thead><tbody id="mds-runs"></tbody></table></div>
  <p class="mds-note" id="mds-runsnote"></p>
- <h4>Sessions in the game's Loot &amp; XP Log</h4>
+ <h4 data-noun="sessions">Sessions in the game's Loot &amp; XP Log</h4>
  <div class="mds-wrap"><table><thead><tr><th>Start</th><th>End</th><th>Action</th><th>Game: count</th><th>Game: drops</th><th>Game: XP</th><th>This record</th><th>Seen by</th></tr></thead><tbody id="mds-sessions"></tbody></table></div>
  <p class="mds-note" id="mds-sessionsnote"></p>
 </div>
@@ -1533,32 +1572,34 @@
   <div class="mds-wrap"><table><thead><tr><th>Material</th><th>Per key</th><th>Need</th><th>Owned</th><th>Buy</th><th>Ask</th><th>Cost</th><th></th></tr></thead><tbody id="mds-plan"></tbody></table></div>
   <p class="mds-note" id="mds-plan-sum"></p>
  </div>
- <h4>Keys in the record</h4>
+ <h4 data-noun="keys">Keys in the record</h4>
  <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Held</th><th>Crafted</th><th>Bought</th><th>Dropped</th><th>Used</th><th>Cost per key</th><th>Used at cost</th><th>At start</th><th>Crafted all time</th></tr></thead><tbody id="mds-keys"></tbody></table></div>
- <h4>Materials</h4>
+ <h4 data-noun="materials">Materials</h4>
  <div class="mds-wrap"><table><thead><tr><th>Material</th><th>Recipe</th><th>Bought</th><th>Avg price</th><th>Bought total</th><th>Used by crafts</th><th>Held</th><th>At start</th></tr></thead><tbody id="mds-mats"></tbody></table></div>
  <p class="mds-note" id="mds-keysnote"></p>
 </div>
 <div class="mds-pane" data-pane="loot" hidden>
- <h4>Loot to sell</h4>
+ <h4 data-noun="items">Loot to sell</h4>
  <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Gained</th><th>Sold</th><th>Sold net</th><th>Held</th><th>Listed</th><th>Kept</th><th>Held at bid</th><th></th></tr></thead><tbody id="mds-loot"></tbody></table></div>
- <h4>Dungeon tokens</h4>
+ <h4 data-noun="tokens">Dungeon tokens</h4>
  <div class="mds-wrap"><table><thead><tr><th>Token</th><th>Gained</th><th>Redeemed</th><th>Received</th><th>Held</th></tr></thead><tbody id="mds-tokens"></tbody></table></div>
- <h4>Supplies kept for future runs</h4>
+ <h4 data-noun="items">Supplies kept for future runs</h4>
  <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Kind</th><th>Held</th><th>Ledger cost</th><th>Held at cost</th><th>Used in the record</th></tr></thead><tbody id="mds-supplies"></tbody></table></div>
- <h4>Loot no longer held</h4>
+ <h4 data-noun="items">Loot no longer held</h4>
  <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Missing</th><th>Bid at open</th><th>Bid now</th><th>Value (net of tax)</th><th>Status</th><th></th></tr></thead><tbody id="mds-missing"></tbody></table></div>
  <p class="mds-note" id="mds-lootnote"></p>
 </div>
 <div class="mds-pane" data-pane="chests" hidden>
+ <h4>Chests</h4>
  <div class="mds-cards" id="mds-chestcards"></div>
+ <h4 data-noun="openings">Openings</h4>
  <div class="mds-wrap mds-wrap-chests"><table><thead><tr><th>Time</th><th>Chest</th><th>#</th><th>Contents</th><th>Value at bid</th><th>Coins</th><th>Key cost</th></tr></thead><tbody id="mds-chests"></tbody></table></div>
  <p class="mds-note" id="mds-chestsnote"></p>
 </div>
 <div class="mds-pane" data-pane="lifetime" hidden>
- <h4>Dungeons, from the game's Loot &amp; XP Log</h4>
+ <h4 data-noun="dungeons">Dungeons, from the game's Loot &amp; XP Log</h4>
  <div class="mds-wrap"><table><thead><tr><th>Dungeon</th><th>Sessions</th><th>Clears</th><th>Chests</th><th>Time in sessions</th><th>Per clear</th><th>XP</th><th>XP / h</th><th>From</th><th>To</th></tr></thead><tbody id="mds-life-dungeons"></tbody></table></div>
- <h4>Key crafts, from the game's Loot &amp; XP Log</h4>
+ <h4 data-noun="keys">Key crafts, from the game's Loot &amp; XP Log</h4>
  <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Sessions</th><th>Crafted</th><th>Essence</th><th>First</th><th>Last</th><th>Materials bought on this PC</th><th>Cost per key</th></tr></thead><tbody id="mds-life-keys"></tbody></table></div>
  <p class="mds-note" id="mds-lifenote"></p>
 </div>
@@ -1571,10 +1612,11 @@
   <div class="mds-bar"><button id="mds-order-reset">Reset column order</button><button id="mds-cards-reset">Reset card order</button><span class="mds-note">Drag a column header onto another, or a card onto another, to move it. Every table and the card grids remember their own order.</span></div>
  </div>
  <p class="mds-note">Everything here is saved in this browser only. Below, untick a column to hide it in that table; the Runs table's Seen by (sources and notes) is off by default, and a run with a note then shows a small flag next to its result.</p>
- <div id="mds-settings-tables"></div>
+ <div id="mds-settings-tables" data-sections></div>
 </div>
 <style id="mds-cols-style"></style>
 <div class="mds-pane" data-pane="data" hidden>
+<h4 data-noun="events">Capture log</h4>
 <div class="mds-bar">
  <label>Show <select id="mds-filter">${KINDS.map(k => `<option value="${k}">${k}</option>`).join("")}</select></label>
  <button id="mds-export">Export record (JSON)</button>
@@ -1636,6 +1678,7 @@
             applyScale();
             for (const t of root.querySelectorAll("table")) { const key = tableKey(t); if (key) { t.dataset.key = key; if (t.tHead && t.tHead.rows[0]) tagCells(t.tHead.rows[0]); } }
             buildColumnSettings();
+            foldify(root);
             applyCols();
             wireColumnDrag();
             wireCardDrag();
@@ -2137,6 +2180,7 @@
             const runLine = state.run ? `${zoneLabel(state.run.zone, state.run.tier)} · wave ${state.run.waves} · ${fmtDur(serverNow() - state.run.startAt)}` : "between runs";
             els["mds-status"].textContent = `${state.characterName || "waiting for login"}${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}`;
             root.querySelector("#mds-banner").hidden = bannerDismissed || state.lootLogReadThisSession || !state.ready;
+            setTimeout(foldSummaries, 0);
             if (tab === "overview") renderOverview();
             else if (tab === "runs") renderRuns(false);
             else if (tab === "keys") renderKeys();
