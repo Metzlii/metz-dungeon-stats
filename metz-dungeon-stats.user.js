@@ -1466,6 +1466,11 @@
         for (const c of crafts) for (const t of (c.teas || [])) { const r = bump(consUsed, t.item, () => ({ qty: 0, cost: 0, unknown: 0, offline: 0 })); r.qty += n(t.qty); r.craftQty = (r.craftQty || 0) + n(t.qty); if (t.unitCost != null) r.craftCost = (r.craftCost || 0) + t.unitCost * n(t.qty); }
         const used = { keys: keysUsed, consumables: consUsed, keyCost: Object.values(keysUsed).reduce((s, r) => s + r.cost, 0), consumableCost: Object.values(consUsed).reduce((s, r) => s + r.cost, 0) };
         used.total = used.keyCost + used.consumableCost;
+        used.entryKeyCost = Object.entries(keysUsed).filter(([k]) => X.isEntryKey && X.isEntryKey(k)).reduce((s, [, r]) => s + r.cost, 0); used.chestKeyCost = used.keyCost - used.entryKeyCost;
+        // Spent (operator, 2026-11-01): what the runs used, charged as used: entry keys at the clear, chest keys at the
+        // open, consumables as consumed, each at its lot or ledger cost. Buys and craft coins are stock, shown but not
+        // counted, or they would be charged twice.
+        spent.total = used.total; spent.entryKeys = used.entryKeyCost; spent.chestKeys = used.chestKeyCost; spent.consumables = used.consumableCost;
         // Per-item loot rows: what came in, what left, what is still here, what is unaccounted for.
         const keptBy = {}; for (const k of keeps) keptBy[k.item] = (keptBy[k.item] || 0) + n(k.qty);
         const valuedBy = {}; for (const v of values) { const r = bump(valuedBy, v.item, () => ({ qty: 0, value: 0 })); r.qty += n(v.qty); r.value += n(v.qty) * n(v.unitValue); }
@@ -1527,7 +1532,7 @@
         const consNames = new Set([...Object.keys(consUsed), ...((baseline && baseline.items) || []).filter(b => b.kind === "consumable").map(b => b.item), ...Object.keys(buyBy).filter(X.isConsumable)]);
         for (const item of consNames) { const u = consUsed[item] || { qty: 0, cost: 0, unknown: 0, offline: 0 }; consumables[item] = { used: u.qty, usedCost: u.cost + (u.craftCost || 0), unknown: u.unknown, offline: u.offline, crafting: u.craftQty || 0, held: X.held(item), avg: X.avgOf(item), bought: buyBy[item] ? buyBy[item].qty : 0 }; }
         const keptRows = Object.entries(keptBy).filter(([, q]) => q > 0).map(([item, qty]) => ({ item, qty, held: X.held(item), bidNow: X.bidOf(item) }));
-        const net = sold.loot.net + loot.coins - spent.total;
+        const net = sold.loot.net + loot.coins - used.total;
         return { tax, spent, loot, sold, sellBy, used, net, heldLoot, holdoverLoot, missingLoot, reviewRows, rows, tokens, chests: chestBy, keys, materials, consumables, kept: keptRows, counts: { buys: buys.length, sells: sells.length, crafts: crafts.length, opens: opens.length, redeems: redeems.length, dropped: events.filter(dup).length } };
     }
     // </money>
@@ -1756,7 +1761,7 @@
         const isToken = h => /_token$/.test(h);
         const moneyCtx = () => ({
             recordStart: state.meta.recordStart || 0, reviewPct: 0.5,
-            isCounted, isKey: h => ref.keyItems.has(h), isChest: h => !!ref.chestItems[h], isDungeonChest: h => !!(ref.chestItems[h] && ref.chestItems[h].zone), isDungeonLoot: h => ref.dungeonLoot.has(h), isConsumable, isToken, tokenShop: h => ref.tokenShop[h] || [],
+            isCounted, isKey: h => ref.keyItems.has(h), isChest: h => !!ref.chestItems[h], isDungeonChest: h => !!(ref.chestItems[h] && ref.chestItems[h].zone), isDungeonLoot: h => ref.dungeonLoot.has(h), isConsumable, isToken, tokenShop: h => ref.tokenShop[h] || [], isEntryKey: h => Object.values(ref.dungeons).some(d => d.keyItem === h),
             isOpenable: h => !!(ref.items[h] && ref.items[h].openable), isTradable: h => !(ref.items[h] && ref.items[h].tradable === false),
             held: h => held(h, 0), listed: h => listedQty(h, 0), bidOf, askOf, avgOf: ledgerAvg, keyAvg: keyAverage,
             keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, keyRecipes: ref.keyActions, artisanOf, consumeTotals: state.consumeTotals,
@@ -2188,7 +2193,7 @@
             if (S.unknownMs > 0) cards.push(card("Unaccounted", fmtHm(S.unknownMs), ["Runs whose end the chat ledger does not show"]));
             { const XS = xpSummary(serverNow()); if (XS && XS.total > 0) cards.push(card("XP", fmtCoins(XS.total), [XS.perHour != null ? `${fmtCoins(XS.perHour)} / h` : "", XS.today ? `Today ${fmtCoins(XS.today.total)}` : "", `Active ${fmtHm(XS.activeMs)}`])); }
             cards.push(
-                card("Spent", fmtCoins(M.spent.total), [`Buys ${fmtCoins(M.spent.buys)}`, `Craft coins ${fmtCoins(M.spent.craftCoins)}`, `Used in runs ${fmtCoins(M.used.total)} at ledger cost`]),
+                card("Spent", fmtCoins(M.spent.total), [`Entry keys ${fmtCoins(M.spent.entryKeys)}`, `Chest keys ${fmtCoins(M.spent.chestKeys)}`, `Consumables ${fmtCoins(M.spent.consumables)}`, `Bought ${fmtCoins(M.spent.buys + M.spent.craftCoins)} as stock, charged as used`]),
                 card("Loot at open", fmtCoins(M.loot.atOpen), [`${M.loot.opened} Dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid`, M.loot.nestedOpened ? `${M.loot.nestedOpened} Chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : "", `+ ${fmtCoins(M.loot.coins)} Coins`]),
                 card("Sold", fmtCoins(M.sold.loot.net), [`${M.sold.loot.qty} Items`, `${fmtCoins(M.sold.loot.tax)} Tax (${(M.tax.rate * 100).toFixed(1)}%${assumed})`, M.sold.other.net ? `Other sales ${fmtCoins(M.sold.other.net)} not counted` : ""]),
                 card("Net", fmtCoins(M.net), [`Sold ${fmtCoins(M.sold.loot.net)}`, `+ Chest coins ${fmtCoins(M.loot.coins)}`, `− Spent ${fmtCoins(M.spent.total)}`, `Held loot ${fmtCoins(M.heldLoot)} at bid`, M.holdoverLoot ? `Holdover ${fmtCoins(M.holdoverLoot)} not counted` : "", `No longer held ${fmtCoins(M.missingLoot)}`, M.reviewRows ? `${M.reviewRows} To review` : ""]),
