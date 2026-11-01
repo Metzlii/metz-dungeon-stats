@@ -140,11 +140,11 @@
     // ---------------------------------------------------------------------------------------------------------------
     // Static reference: dungeons, key recipes, openables, item facts. From init_client_data (message or cache).
     // ---------------------------------------------------------------------------------------------------------------
-    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), chestItems: {}, items: {}, version: null, source: null };
+    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), realKeys: new Set(), chestItems: {}, items: {}, version: null, source: null };
 
     function buildRef(data) {
         if (!isObj(data) || !isObj(data.actionDetailMap) || !isObj(data.itemDetailMap)) return false;
-        ref.dungeons = {}; ref.keyActions = {}; ref.keyItems = new Set(); ref.chestItems = {}; ref.items = {};
+        ref.dungeons = {}; ref.keyActions = {}; ref.keyItems = new Set(); ref.realKeys = new Set(); ref.chestItems = {}; ref.items = {};
         for (const [hrid, item] of Object.entries(data.itemDetailMap)) {
             ref.items[hrid] = { name: item.name, category: item.categoryHrid, openable: !!item.isOpenable, openKey: item.openKeyItemHrid || null, tradable: item.isTradable !== false && !(item.isOpenable && item.openKeyItemHrid === undefined && false), sellPrice: num(item.sellPrice) };
             if (item.categoryHrid === "/item_categories/dungeon_key") ref.keyItems.add(hrid);
@@ -162,6 +162,7 @@
             }
         }
         for (const [hrid, item] of Object.entries(data.itemDetailMap)) if (item.isOpenable && item.openKeyItemHrid && !ref.chestItems[hrid]) ref.chestItems[hrid] = { zone: null, key: item.openKeyItemHrid };
+        ref.realKeys = new Set([...Object.values(ref.dungeons).map(d => d.keyItem), ...Object.values(ref.chestItems).map(c => c.key)].filter(Boolean));
         ref.version = data.gameVersion || null;
         ref.ready = Object.keys(ref.dungeons).length > 0;
         return ref.ready;
@@ -963,7 +964,21 @@
         for (const c of clears) { const k = X.keyOf(c.zone); if (!k || !n(c.keysCharged)) continue; const r = bump(keysUsed, k, () => ({ qty: 0, cost: 0, exact: 0, fallback: 0 })); r.qty += c.keysCharged; if (c.keyCost && c.keyCost.unitCost != null) { r.cost += c.keyCost.unitCost * c.keysCharged; r.exact += c.keysCharged; } else r.fallback += c.keysCharged; }
         for (const o of offline) for (const it of (o.items || [])) if (X.isKey(it.item) && n(it.delta) < 0) { const r = bump(keysUsed, it.item, () => ({ qty: 0, cost: 0, exact: 0, fallback: 0 })); r.qty += -it.delta; r.fallback += -it.delta; }
         for (const [chest, cb] of Object.entries(chestBy)) if (cb.keyItem) { const r = bump(keysUsed, cb.keyItem, () => ({ qty: 0, cost: 0, exact: 0, fallback: 0 })); r.qty += cb.opened; const exact = Object.entries(cb.keyBasis).filter(([b]) => b !== "unknown").reduce((s, [, q]) => s + q, 0); r.cost += cb.keyCost; r.exact += exact; r.fallback += cb.opened - exact; }
-        for (const [k, r] of Object.entries(keysUsed)) { if (r.fallback) { const u = X.keyAvg(k); const a = u != null ? u : X.askOf(k); r.fallbackBasis = u != null ? "craft average" : (a != null ? "ask now" : "unknown"); if (a != null) r.cost += a * r.fallback; else r.unknown = r.fallback; } }
+        // Cost per key when this record has not seen the key crafted: the recipe's materials at their purchase ledger
+        // average (asks for materials never bought), plus the recipe's coins. Full recipe quantities: an Artisan saving
+        // only shows once a craft has been observed.
+        const recipeCost = k => {
+            for (const r of Object.values(X.keyRecipes || {})) {
+                const out = (r.outputs || []).find(o => o.item === k); if (!out || !(out.qty > 0)) continue;
+                let cost = 0, asks = 0, missing = 0;
+                for (const i of r.inputs || []) { if (i.item === "/items/coin") { cost += n(i.qty); continue; } const a = X.avgOf(i.item); const p = a != null ? a : X.askOf(i.item); if (p == null) { missing++; continue; } if (a == null) asks++; cost += p * n(i.qty); }
+                if (missing) return null;
+                return { unitCost: cost / out.qty, basis: asks ? `recipe (${asks} material${asks > 1 ? "s" : ""} at ask)` : "recipe at purchase prices" };
+            }
+            return null;
+        };
+        const keyPrice = k => { const u = X.keyAvg(k); if (u != null) return { unitCost: u, basis: "craft average" }; const rc = recipeCost(k); if (rc) return rc; const a = X.askOf(k); return a != null ? { unitCost: a, basis: "key ask now" } : null; };
+        for (const [k, r] of Object.entries(keysUsed)) { if (r.fallback) { const p = keyPrice(k); r.fallbackBasis = p ? p.basis : "unknown"; if (p) r.cost += p.unitCost * r.fallback; else r.unknown = r.fallback; } }
         const consUsed = {};
         for (const [item, t] of (X.consumeTotals || new Map())) { const r = bump(consUsed, item, () => ({ qty: 0, cost: 0, unknown: 0, offline: 0 })); r.qty += t.qty; r.cost += t.cost; r.unknown += t.unknownQty; }
         for (const o of offline) for (const it of (o.items || [])) if (X.isConsumable(it.item) && n(it.delta) < 0) { const r = bump(consUsed, it.item, () => ({ qty: 0, cost: 0, unknown: 0, offline: 0 })); const q = -it.delta; r.qty += q; r.offline += q; const u = it.unitCost != null ? it.unitCost : X.avgOf(it.item); if (u != null) r.cost += u * q; else r.unknown += q; }
@@ -1003,15 +1018,17 @@
         const keyItems = new Set([...Object.keys(keysUsed), ...crafts.flatMap(c => (c.outputs || []).map(o => o.item)), ...Object.keys(buyBy).filter(X.isKey), ...((baseline && baseline.keys) || []).map(k => k.item), ...X.heldKeys()]);
         const keys = {};
         for (const k of keyItems) {
+            if (X.isRealKey && !X.isRealKey(k)) continue;
             const crafted = crafts.reduce((s, c) => s + (c.outputs || []).filter(o => o.item === k).reduce((a, o) => a + n(o.qty), 0), 0);
             const bought = buyBy[k] ? buyBy[k].qty : 0, boughtCoins = buyBy[k] ? buyBy[k].coins : 0;
             const u = keysUsed[k] || { qty: 0, cost: 0, exact: 0, fallback: 0 };
-            const avg = X.keyAvg(k), ask = X.askOf(k);
+            const avg = X.keyAvg(k), price = keyPrice(k);
             const base = ((baseline && baseline.keys) || []).find(b => b.item === k);
-            keys[k] = { crafted, bought, boughtAvg: bought ? boughtCoins / bought : null, used: u.qty, usedCost: u.cost, usedExact: u.exact, usedFallback: u.fallback, fallbackBasis: u.fallbackBasis || null, held: X.held(k), costPerKey: avg != null ? avg : ask, costBasis: avg != null ? "craft average" : (ask != null ? "ask now" : "unknown"), craftAvg: avg, baseline: base ? base.qty : 0, dropped: gained[k] ? gained[k].qty : 0 };
+            keys[k] = { crafted, bought, boughtAvg: bought ? boughtCoins / bought : null, used: u.qty, usedCost: u.cost, usedExact: u.exact, usedFallback: u.fallback, fallbackBasis: u.fallbackBasis || null, held: X.held(k), costPerKey: price ? price.unitCost : null, costBasis: price ? price.basis : "unknown", craftAvg: avg, baseline: base ? base.qty : 0, dropped: gained[k] ? gained[k].qty : 0 };
         }
         const materials = {};
         for (const [action, recipe] of Object.entries(X.keyRecipes || {})) {
+            if (!(recipe.outputs || []).some(o => keys[o.item])) continue;
             for (const inp of recipe.inputs) {
                 if (inp.item === "/items/coin") continue;
                 const m = bump(materials, inp.item, () => ({ item: inp.item, recipes: [], perCraft: n(inp.qty), bought: 0, boughtCoins: 0, consumed: 0, consumedCost: 0, held: X.held(inp.item), avg: X.avgOf(inp.item), baseline: 0 }));
@@ -1104,7 +1121,8 @@
             isOpenable: h => !!(ref.items[h] && ref.items[h].openable), isTradable: h => !(ref.items[h] && ref.items[h].tradable === false),
             held: h => held(h, 0), listed: h => listedQty(h, 0), bidOf, askOf, avgOf: ledgerAvg, keyAvg: keyAverage,
             keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, keyRecipes: ref.keyActions, consumeTotals: state.consumeTotals,
-            heldKeys: () => [...state.inventory.values()].filter(r => r.itemLocationHrid === INV && ref.keyItems.has(r.itemHrid)).map(r => r.itemHrid),
+            isRealKey: h => ref.realKeys.has(h),
+            heldKeys: () => [...state.inventory.values()].filter(r => r.itemLocationHrid === INV && ref.realKeys.has(r.itemHrid)).map(r => r.itemHrid),
         });
         function getMoney() {
             if (!money || moneyRev !== state.timelineRev || moneyPrices !== prices.at || Date.now() - moneyAt > 5000) { money = deriveMoney(state.timeline, moneyCtx()); moneyAt = Date.now(); moneyRev = state.timelineRev; moneyPrices = prices.at; }
@@ -1387,7 +1405,7 @@
             els["mds-keys"].innerHTML = keyRows.map(([h, k]) => `<tr><td class="k">${it(h)}</td><td>${fmtQ(k.held)}</td><td>${fmtQ(k.crafted)}</td><td>${k.bought ? `${fmtQ(k.bought)} @ ${fmtCoins(k.boughtAvg)}` : "–"}</td><td>${k.dropped || "–"}</td><td>${fmtQ(k.used)}</td><td>${coinsOr(k.costPerKey, "?")}<small> ${esc(k.costBasis)}</small></td><td>${fmtCoins(k.usedCost)}${k.usedFallback ? `<small> ${k.usedFallback} at ${esc(k.fallbackBasis || "?")}</small>` : ""}</td><td>${fmtQ(k.baseline)}</td></tr>`).join("") || `<tr><td colspan="9" class="t">No keys seen yet.</td></tr>`;
             const mats = Object.values(M.materials).sort((a, b) => (b.boughtCoins + b.consumedCost) - (a.boughtCoins + a.consumedCost));
             els["mds-mats"].innerHTML = mats.map(m => `<tr><td class="k">${it(m.item)}</td><td class="t">${m.recipes.map(r => esc(shortAction(r))).join(", ")} ×${m.perCraft}</td><td>${m.bought ? fmtQ(m.bought) : "–"}</td><td>${m.bought ? fmtCoins(m.boughtCoins / m.bought) : "–"}</td><td>${m.bought ? fmtCoins(m.boughtCoins) : "–"}</td><td>${m.consumed ? `${fmtQ(m.consumed)} (${fmtCoins(m.consumedCost)})` : "–"}</td><td>${fmtQ(m.held)}${m.avg != null ? `<small> @ ${fmtCoins(m.avg)}</small>` : ""}</td><td>${m.baseline ? fmtQ(m.baseline) : "–"}</td></tr>`).join("") || `<tr><td colspan="8" class="t">No key recipes loaded yet.</td></tr>`;
-            els["mds-keysnote"].textContent = "Cost per key = the average of the key crafts this record has seen (materials at their purchase price, plus the recipe's coins), or the current ask when none. Used at cost charges each live clear the exact lot it took; offline and older clears use the craft average. At start = held when the record began, priced at ask then.";
+            els["mds-keysnote"].textContent = "Cost per key = the average of the key crafts this record has seen (materials at their purchase price, plus the recipe's coins); until one is seen, the full recipe at the materials' purchase prices (asks for materials never bought), and the key's own ask only when a material has no price at all. Used at cost charges each live clear the exact lot it took; offline and older clears use the craft average. At start = held when the record began, priced at ask then.";
         }
         function renderLoot() {
             const M = getMoney();
@@ -1436,6 +1454,7 @@
         }
         function render() {
             ensure(); if (!root) return;
+            if (!prices.map && !prices.fetching && !prices.error) fetchPrices(false).then(() => touch(), () => {});
             const used = state.events.filter(e => e.kind === "consume").reduce((s, e) => { s.n += e.qty; s.cost += e.unitCost != null ? e.unitCost * e.qty : 0; return s; }, { n: 0, cost: 0 });
             const runLine = state.run ? `${shortAction(state.run.zone)} T${state.run.tier} · wave ${state.run.waves} · ${fmtDur(serverNow() - state.run.startAt)}` : "between runs";
             els["mds-status"].textContent = `${state.characterName || "waiting for login"}${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}`;
