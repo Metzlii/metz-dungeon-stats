@@ -1972,14 +1972,20 @@
         // renders its category tabs (General, Dungeon); the Dungeon tab is clicked once it is there, like a player would.
         const goToShop = () => {
             let f = gameHandler("handleGoToNavTarget"); let via = "handleGoToNavTarget";
-            if (!f) { const h = gameHandlerLike(/^handleGoTow*Shopw*$/i); if (h) { f = h.call; via = h.name; } }
+            if (!f) { const h = gameHandlerLike(/^handleGoTo\w*Shop\w*$/i); if (h) { f = h.call; via = h.name; } }
             if (!f) { W.alert("The game's shop navigation was not found; open the shop yourself."); return false; }
             try { f("shop"); } catch (e) { warn("shop navigation failed", via, e); W.alert("The game's shop navigation failed; open the shop yourself."); return false; }
+            // The game's tabs are MUI tab buttons whose label sits in a badge span, so the text may end in a count
+            // ("My Listings0"). Match the name with any count stripped; prefer a tab inside the shop panel, since the
+            // Marketplace has a Dungeon tab of its own.
             let tries = 0;
             const pick = () => {
-                const tab = [...document.querySelectorAll('[class*="tabsComponentContainer"] [role="tab"], [class*="tabsComponentContainer"] button')].find(el => !root.contains(el) && /^Dungeon$/i.test(el.textContent.trim()));
+                const tabs = [...document.querySelectorAll('[role="tab"]')].filter(el => !root.contains(el));
+                const norm = el => el.textContent.replace(/\d+$/, "").trim();
+                const named = tabs.filter(el => /^dungeon$/i.test(norm(el)));
+                const tab = named.find(el => el.closest('[class*="Shop"]')) || (tries > 15 ? named[0] : null);
                 if (tab) { if (tab.getAttribute("aria-selected") !== "true") tab.click(); return; }
-                if (++tries < 20) setTimeout(pick, 100);
+                if (++tries < 40) setTimeout(pick, 100); else warn("shop Dungeon tab not found; tabs seen:", tabs.map(el => `${norm(el)} in ${(el.closest('[class*="Panel"]') || {}).className || "?"}`));
             };
             setTimeout(pick, 50);
             return true;
