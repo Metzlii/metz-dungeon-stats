@@ -150,7 +150,7 @@
         if (!isObj(data) || !isObj(data.actionDetailMap) || !isObj(data.itemDetailMap)) return false;
         ref.dungeons = {}; ref.keyActions = {}; ref.keyItems = new Set(); ref.realKeys = new Set(); ref.dungeonLoot = new Set(); ref.chestItems = {}; ref.items = {};
         for (const [hrid, item] of Object.entries(data.itemDetailMap)) {
-            ref.items[hrid] = { name: item.name, category: item.categoryHrid, openable: !!item.isOpenable, openKey: item.openKeyItemHrid || null, tradable: item.isTradable !== false && !(item.isOpenable && item.openKeyItemHrid === undefined && false), sellPrice: num(item.sellPrice) };
+            ref.items[hrid] = { name: item.name, category: item.categoryHrid, openable: !!item.isOpenable, openKey: item.openKeyItemHrid || null, tradable: item.isTradable === true, sellPrice: num(item.sellPrice) };
             if (item.categoryHrid === "/item_categories/dungeon_key") ref.keyItems.add(hrid);
         }
         for (const [hrid, action] of Object.entries(data.actionDetailMap)) {
@@ -1261,7 +1261,7 @@
                 bidNow, bidAtOpen, heldValue: bidNow != null ? (held + onMarket) * bidNow : null, valueAtOpen: gi.value, unpricedAtOpen: gi.qty - gi.priced,
                 acceptedQty: accepted.qty, acceptedValue: accepted.value, remaining, netBid, drift, review,
                 missingValue: accepted.value + (!review && netBid != null ? remaining * netBid : 0),
-                kind: X.isKey(item) ? "key" : X.isChest(item) ? "chest" : X.isOpenable(item) ? "container" : X.isTradable(item) ? "loot" : "untradable",
+                kind: X.isKey(item) ? "key" : X.isChest(item) ? "chest" : X.isOpenable(item) && X.isTradable(item) ? "container" : X.isTradable(item) ? "loot" : "untradable",
             });
         }
         rows.sort((a, b) => (b.valueAtOpen + b.soldNet) - (a.valueAtOpen + a.soldNet));
