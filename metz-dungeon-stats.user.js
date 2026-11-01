@@ -183,6 +183,9 @@
     const itemName = hrid => (ref.items[hrid] && ref.items[hrid].name) || shortItem(hrid);
     const isConsumable = hrid => { const c = ref.items[hrid] && ref.items[hrid].category; return c === "/item_categories/food" || c === "/item_categories/drink"; };
     const isLootItem = hrid => hrid && hrid !== "/items/coin" && !ref.keyItems.has(hrid) && !ref.chestItems[hrid];
+    // Items that cannot be sold for coins: counted and averaged per chest, never priced (same as the simulator site).
+    const COUNT_ONLY = new Set(["/items/cowbell"]);
+    const isCounted = hrid => COUNT_ONLY.has(hrid);
 
     // ---------------------------------------------------------------------------------------------------------------
     // Prices: marketplace.json, lowest ask (instant buy) and highest bid (instant sell), 15 minute cache.
@@ -197,7 +200,6 @@
             .then(json => {
                 const map = {}; const md = json && json.marketData;
                 if (isObj(md)) for (const [hrid, levels] of Object.entries(md)) { const l0 = levels && levels["0"]; if (l0) map[hrid] = { a: num(l0.a) > 0 ? num(l0.a) : null, b: num(l0.b) > 0 ? num(l0.b) : null }; }
-                if (!map["/items/cowbell"] && map["/items/bag_of_10_cowbells"]) { const b = map["/items/bag_of_10_cowbells"]; map["/items/cowbell"] = { a: b.a != null ? b.a / 10 : null, b: b.b != null ? b.b / 10 : null, via: "/items/bag_of_10_cowbells" }; }
                 prices.map = map; prices.at = Date.now(); prices.error = null; prices.serverTs = num(json && json.timestamp) * 1000 || null;
                 if (state.record) state.record.queue("meta", { key: "prices", at: prices.at, serverTs: prices.serverTs, count: Object.keys(map).length });
                 return map;
@@ -549,10 +551,10 @@
         const key = ref.chestItems[chest] ? ref.chestItems[chest].key : null;
         const at = serverNow();
         const finish = () => {
-            const list = [...gains.values()].map(g => ({ ...g, bid: g.item === "/items/coin" ? 1 : bidOf(g.item), ask: g.item === "/items/coin" ? 1 : askOf(g.item) }));
+            const list = [...gains.values()].map(g => isCounted(g.item) ? { ...g, bid: null, ask: null, counted: true } : { ...g, bid: g.item === "/items/coin" ? 1 : bidOf(g.item), ask: g.item === "/items/coin" ? 1 : askOf(g.item) });
             const coinsGained = list.filter(g => g.item === "/items/coin").reduce((s, g) => s + g.qty, 0);
-            const valueBid = list.filter(g => g.item !== "/items/coin").reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0);
-            const unpriced = list.filter(g => g.item !== "/items/coin" && !g.bid).map(g => g.item);
+            const valueBid = list.filter(g => g.item !== "/items/coin" && !g.counted).reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0);
+            const unpriced = list.filter(g => g.item !== "/items/coin" && !g.counted && !g.bid).map(g => g.item);
             emit("open", { chest, count, keyItem: key, zone: ref.chestItems[chest] ? ref.chestItems[chest].zone : null, gains: list, coinsGained, valueBid, unpriced, pricesAt: prices.at || null, keyCost: key ? keyLotTake(key, count) : null }, "loot_opened", at);
             for (const g of list) if (ref.keyItems.has(g.item)) keyLotAdd(g.item, g.qty, 0, "dropped", null);
         };
@@ -740,6 +742,7 @@
         const n = v => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
         const evs = events.filter(e => e && e.kind !== "consume").sort((a, b) => a.at - b.at);
         const markers = [], liveStarts = [], liveEnds = [], crafts = [], offline = [], keyMoves = [];
+        const opens = [];
         const seenChat = new Set();
         let zoneSeen = null;
         for (const e of evs) {
@@ -760,7 +763,11 @@
                 case "craft": crafts.push(e); for (const o of (e.outputs || [])) if (C.isKey(o.item)) keyMoves.push({ t: e.at, item: o.item, delta: n(o.qty) }); break;
                 case "buy": if (C.isKey(e.item)) keyMoves.push({ t: e.at, item: e.item, delta: n(e.qty) }); break;
                 case "sell": if (C.isKey(e.item)) keyMoves.push({ t: e.at, item: e.item, delta: -n(e.qty) }); break;
-                case "open": for (const g of (e.gains || [])) if (C.isKey(g.item)) keyMoves.push({ t: e.at, item: g.item, delta: n(g.qty) }); break;
+                case "open": {
+                    opens.push(e);
+                    for (const g of (e.gains || [])) if (C.isKey(g.item)) keyMoves.push({ t: e.at, item: g.item, delta: n(g.qty) });
+                    break;
+                }
                 case "offline": {
                     // Old records carry the game's 72 h horizon as `to`; the window can never run past the login itself.
                     const from = n(e.from), to = Math.min(n(e.to) || e.at, e.at);
@@ -851,7 +858,14 @@
         const bursts = []; for (const c of crafts) { const last = bursts[bursts.length - 1]; if (last && c.at - last.last <= C.craftBurstMs) { last.last = c.at; last.n++; } else bursts.push({ first: c.at, last: c.at, n: 1 }); }
         const craftIv = merge(bursts.map(b => { const per = b.n > 1 ? (b.last - b.first) / (b.n - 1) : 10e3; return clip(b.first - per, b.last); }));
         const craftingBetween = intersect(between, craftIv), offlineBetween = intersect(between, offlineIv);
-        const S = { windowStart, windowEnd, totalMs: windowEnd - windowStart, clears: 0, fails: 0, cancelled: 0, open: 0, unknown: 0, chests: {}, chestTotal: 0, keysCharged: 0, deaths: 0, clearMs: [], runMs: [], dungeonMs: sum(dungeonMerged), unknownMs: sum(unknownOnly), betweenMs: sum(between), craftingMs: sum(craftingBetween), offlineBetweenMs: sum(offlineBetween), offlineMs: sum(offlineIv), crafts: crafts.length, keysCrafted: crafts.reduce((s, c) => s + (c.outputs || []).reduce((a, o) => a + n(o.qty), 0), 0) };
+        const S = { windowStart, windowEnd, totalMs: windowEnd - windowStart, clears: 0, fails: 0, cancelled: 0, open: 0, unknown: 0, chests: {}, chestTotal: 0, keysCharged: 0, deaths: 0, clearMs: [], runMs: [], dungeonMs: sum(dungeonMerged), unknownMs: sum(unknownOnly), betweenMs: sum(between), craftingMs: sum(craftingBetween), offlineBetweenMs: sum(offlineBetween), offlineMs: sum(offlineIv), crafts: crafts.length, keysCrafted: crafts.reduce((s, c) => s + (c.outputs || []).reduce((a, o) => a + n(o.qty), 0), 0), counted: {} };
+        // Items that are only counted (cowbells): total and per chest type, with how many chests of that type were opened.
+        {
+            const openedBy = {};
+            for (const e of opens) { if (e.at < windowStart) continue; openedBy[e.chest] = (openedBy[e.chest] || 0) + (n(e.count) || 1); }
+            for (const e of opens) { if (e.at < windowStart) continue; for (const g of (e.gains || [])) { if (!(g.counted || (C.isCounted && C.isCounted(g.item)))) continue; const c = S.counted[g.item] || (S.counted[g.item] = { qty: 0, byChest: {} }); c.qty += n(g.qty); const b = c.byChest[e.chest] || (c.byChest[e.chest] = { qty: 0, opened: 0 }); b.qty += n(g.qty); } }
+            for (const c of Object.values(S.counted)) for (const [chest, b] of Object.entries(c.byChest)) b.opened = openedBy[chest] || 0;
+        }
         S.otherMs = Math.max(0, S.betweenMs - S.craftingMs - S.offlineBetweenMs);
         for (const r of kept) {
             if (r.result === "clear") { S.clears++; if (r.durationMs != null) { S.clearMs.push(r.durationMs); S.runMs.push(r.durationMs); } }
@@ -869,7 +883,8 @@
     // </derive>
 
     // ---------------------------------------------------------------------------------------------------------------
-    // Panel: Overview, Runs, Data. Floating, toggled by a small button; docking into the game's tab strip comes later.
+    // Panel: Overview, Runs, Data. Docked as a "Dungeon Stats" tab in the game's Combat tab strip when that strip is on
+    // screen; a small floating button opens it anywhere else.
     // ---------------------------------------------------------------------------------------------------------------
     const CSS = `
 #mds-toggle{position:fixed;left:10px;bottom:10px;z-index:2147483000;background:rgba(20,16,31,.92);color:#e6ddf5;border:1px solid rgba(190,160,255,.35);border-radius:9px;padding:5px 9px;font:600 11px/1.2 system-ui,sans-serif;letter-spacing:.3px;cursor:pointer;backdrop-filter:blur(6px)}
@@ -910,6 +925,12 @@
 #mds-root tr.cancelled td.k,#mds-root tr.offline td{color:#b9a9d6}
 #mds-root tr.offline td{font-style:italic}
 #mds-root tr.open td.k{color:#ffcf7a}
+#mds-toggle[hidden]{display:none}
+#mds-root.docked{position:static;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;backdrop-filter:none;margin:0}
+#mds-root.docked .mds-head .mds-x{display:none}
+#mds-root.docked .mds-body{overflow:visible}
+#mds-root.docked .mds-cards{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+#mds-tab{white-space:nowrap}
 #mds-root details{margin:6px 0}
 #mds-root summary{cursor:pointer;color:#cdbfe8}
 #mds-root pre{white-space:pre-wrap;word-break:break-word;background:rgba(0,0,0,.25);padding:6px;border-radius:6px;max-height:200px;overflow:auto;font-size:11px}
@@ -921,7 +942,7 @@
         let derived = null, derivedAt = 0, derivedRev = -1;
         const KINDS = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
         const TABS = [["overview", "Overview"], ["runs", "Runs"], ["data", "Data"]];
-        const deriveCfg = () => ({ selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null });
+        const deriveCfg = () => ({ selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null });
         function getDerived() {
             if (!derived || derivedRev !== state.timelineRev || Date.now() - derivedAt > 30000) { derived = derive(state.timeline, serverNow(), deriveCfg()); derivedAt = Date.now(); derivedRev = state.timelineRev; }
             return derived;
@@ -974,6 +995,111 @@
             try { open = localStorage.getItem(PANEL_KEY) === "open"; tab = localStorage.getItem(PANEL_KEY + "-tab") || tab; } catch (_e) { open = false; }
             setTab(tab, true);
             root.hidden = !open; if (open) render();
+            dockStart();
+        }
+        // -----------------------------------------------------------------------------------------------------------
+        // Docking. The Combat page's strip (Combat Zones · Find Party · My Party · Battle · Statistics) is MUI Tabs
+        // rendered by React. Our tab is a plain button React never sees. While it is selected the game's own tab panel is
+        // hidden and the panel sits in its place; clicking any game tab hands the strip back exactly as it was. React may
+        // re-render the strip at any time, so an observer re-applies the selection and re-hides a re-rendered panel.
+        // -----------------------------------------------------------------------------------------------------------
+        const dock = { strip: null, tab: null, active: false, saved: null, compMo: null, bodyMo: null, timer: null, worked: false };
+        const STRIP_TABS = ["Combat Zones", "Find Party", "My Party"];
+        const tabText = b => { const sp = b.querySelector(".MuiBadge-root") || b; for (const nd of sp.childNodes) if (nd.nodeType === 3 && nd.textContent.trim()) return nd.textContent.trim(); return (sp.textContent || "").trim(); };
+        function findStrip() {
+            for (const list of document.querySelectorAll('[class*="TabsComponent_tabsComponent"] [role="tablist"]')) {
+                const tabs = [...list.querySelectorAll('[role="tab"]')].filter(t => t !== dock.tab);
+                if (tabs.length >= 3 && tabs.some(t => STRIP_TABS.includes(tabText(t)))) return list;
+            }
+            return null;
+        }
+        const dockParts = () => { const comp = dock.strip && dock.strip.closest('[class*="TabsComponent_tabsComponent"]'); const cont = dock.strip && dock.strip.closest('[class*="TabsComponent_tabsContainer"]'); return comp && cont ? { comp, cont } : null; };
+        function dockSchedule() { if (dock.timer) return; dock.timer = setTimeout(() => { dock.timer = null; dockTick(); }, 60); }
+        function dockStart() {
+            if (dock.bodyMo || !document.body) return;
+            dock.bodyMo = new MutationObserver(dockSchedule);
+            dock.bodyMo.observe(document.body, { childList: true, subtree: true });
+            dockTick();
+        }
+        function dockTick() {
+            const list = findStrip();
+            if (!list) { if (dock.strip) dockLost(); return; }
+            if (dock.strip !== list || !dock.tab || dock.tab.parentNode !== list) dockMount(list);
+            else if (dock.active) dockApply();
+        }
+        function dockMount(list) {
+            if (dock.strip && dock.strip !== list) dockLost();
+            dock.strip = list;
+            const model = list.querySelector('[role="tab"]');
+            if (!dock.tab) {
+                dock.tab = document.createElement("button"); dock.tab.id = "mds-tab"; dock.tab.type = "button"; dock.tab.setAttribute("role", "tab"); dock.tab.tabIndex = -1; dock.tab.title = "Metz Dungeon Stats";
+                dock.tab.addEventListener("click", e => { e.stopPropagation(); dockActivate(); });
+            }
+            dock.tab.className = model ? model.className.replace(/\bMui-selected\b/g, "").replace(/\s+/g, " ").trim() : "";
+            dock.tab.setAttribute("aria-selected", "false");
+            const badge = model && model.querySelector(".MuiBadge-root");
+            dock.tab.textContent = ""; const sp = document.createElement("span"); sp.className = badge ? badge.className : ""; sp.textContent = "Dungeon Stats"; dock.tab.appendChild(sp);
+            list.appendChild(dock.tab);
+            list.addEventListener("click", onStripClick, true); // capture: runs before React selects the clicked tab
+            dock.worked = true;
+            if (toggle) toggle.hidden = true;
+            if (open && !dock.active) { open = false; root.hidden = true; } // the floating panel yields to the strip
+            const parts = dockParts();
+            if (parts) {
+                if (dock.compMo) dock.compMo.disconnect();
+                dock.compMo = new MutationObserver(() => { if (dock.active) dockSchedule(); });
+                dock.compMo.observe(parts.comp, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "aria-selected"] });
+            }
+        }
+        function onStripClick(e) { const t = e.target.closest('[role="tab"]'); if (!t || t === dock.tab) return; if (dock.active) dockDeactivate(); }
+        function dockActivate() {
+            const parts = dockParts(); if (!parts || !root) return;
+            if (!dock.active) {
+                const ind = parts.comp.querySelector(".MuiTabs-indicator");
+                dock.saved = { selected: [...dock.strip.querySelectorAll('[role="tab"].Mui-selected')].filter(t => t !== dock.tab), indicator: ind ? ind.getAttribute("style") : null };
+                dock.active = true;
+            }
+            dockApply();
+            root.classList.add("docked"); root.hidden = false;
+            if (root.parentNode !== parts.comp) parts.comp.appendChild(root);
+            open = true; render();
+        }
+        // Idempotent: every write is guarded so re-applying under the observer never loops.
+        function dockApply() {
+            const parts = dockParts(); if (!parts || !dock.active) return;
+            for (const t of dock.strip.querySelectorAll('[role="tab"]')) { const me = t === dock.tab; if (t.classList.contains("Mui-selected") !== me) t.classList.toggle("Mui-selected", me); if (t.getAttribute("aria-selected") !== String(me)) t.setAttribute("aria-selected", String(me)); }
+            const ind = parts.comp.querySelector(".MuiTabs-indicator");
+            if (ind) { const l = dock.tab.offsetLeft + "px", w = dock.tab.offsetWidth + "px"; if (ind.style.left !== l) ind.style.left = l; if (ind.style.width !== w) ind.style.width = w; }
+            for (const el of parts.comp.children) { if (el === parts.cont || el === root) continue; if (el.style.display !== "none") { el.dataset.mdsHidden = el.style.display || ""; el.style.display = "none"; } }
+            if (root.parentNode !== parts.comp) parts.comp.appendChild(root);
+            if (root.hidden) root.hidden = false;
+        }
+        function dockRestore() {
+            const parts = dockParts();
+            if (parts) {
+                for (const el of parts.comp.querySelectorAll("[data-mds-hidden]")) { el.style.display = el.dataset.mdsHidden; delete el.dataset.mdsHidden; }
+                const ind = parts.comp.querySelector(".MuiTabs-indicator");
+                if (ind && dock.saved) { if (dock.saved.indicator == null) ind.removeAttribute("style"); else ind.setAttribute("style", dock.saved.indicator); }
+            }
+            if (dock.strip) for (const t of dock.strip.querySelectorAll('[role="tab"]')) { const sel = !!dock.saved && dock.saved.selected.includes(t); t.classList.toggle("Mui-selected", sel); t.setAttribute("aria-selected", String(sel)); }
+            if (dock.tab) { dock.tab.classList.remove("Mui-selected"); dock.tab.setAttribute("aria-selected", "false"); }
+            dock.saved = null;
+        }
+        function dockDeactivate() {
+            if (!dock.active) return;
+            dock.active = false;
+            dockRestore();
+            root.classList.remove("docked"); root.hidden = true; open = false;
+            if (root.parentNode !== document.body) document.body.appendChild(root);
+        }
+        function dockLost() {
+            // The strip left the page (another game tab). Nothing to restore: React took its panel with it.
+            if (dock.compMo) { dock.compMo.disconnect(); dock.compMo = null; }
+            if (dock.strip) dock.strip.removeEventListener("click", onStripClick, true);
+            if (dock.tab && dock.tab.parentNode) dock.tab.parentNode.removeChild(dock.tab);
+            dock.strip = null; dock.saved = null;
+            if (dock.active) { dock.active = false; root.classList.remove("docked"); root.hidden = true; open = false; }
+            if (root && root.parentNode !== document.body) document.body.appendChild(root);
         }
         function setTab(k, silent) {
             if (!TABS.some(t => t[0] === k)) k = "overview";
@@ -983,7 +1109,11 @@
             try { localStorage.setItem(PANEL_KEY + "-tab", k); } catch (_e) { /* fine */ }
             if (!silent) render();
         }
-        function setOpen(v) { open = v; if (root) root.hidden = !v; try { localStorage.setItem(PANEL_KEY, v ? "open" : "closed"); } catch (_e) { /* fine */ } if (v) render(); }
+        function setOpen(v) {
+            if (dock.active) { if (!v) dockDeactivate(); return; }
+            if (v && dock.strip) { dockActivate(); return; }
+            open = v; if (root) root.hidden = !v; try { localStorage.setItem(PANEL_KEY, v ? "open" : "closed"); } catch (_e) { /* fine */ } if (v) render();
+        }
         function touch() { dirty = true; if (!timer) timer = setTimeout(() => { timer = null; if (dirty && open) render(); dirty = false; }, 1000); }
         function refresh() { ensure(); touch(); }
         const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -1000,7 +1130,7 @@
                 case "craft": return `${esc(shortAction(ev.action))} ×${(ev.outputs || []).reduce((s, o) => s + o.qty, 0)} · ${(ev.inputs || []).map(i => `${i.qty} ${it(i.item)}${i.unitCost != null ? ` @${fmtCoins(i.unitCost)}` : " @?"}`).join(", ")}${ev.coins ? ` + ${fmtCoins(ev.coins)} coins` : ""} · ${ev.unitCost != null ? `${fmtCoins(ev.unitCost)} per key` : "cost unknown"}`;
                 case "buy": return `${ev.qty}× ${it(ev.item)} ${ev.unitPrice != null ? `@ ${fmtCoins(ev.unitPrice)} = ${fmtCoins(ev.coins)}` : "price unresolved"}${ev.instant ? " · instant" : ""}`;
                 case "sell": return `${ev.qty}× ${it(ev.item)} ${ev.unitPrice != null ? `@ ${fmtCoins(ev.unitPrice)}` : ""} · net ${fmtCoins(ev.net)}${ev.tax != null ? ` (tax ${fmtCoins(ev.tax)})` : ""}${ev.instant ? " · instant" : ""}`;
-                case "open": return `${ev.count}× ${it(ev.chest)} → ${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}`).join(", ")} · value at bid ${fmtCoins(ev.valueBid)}${ev.coinsGained ? ` + ${fmtCoins(ev.coinsGained)} coins` : ""}${ev.unpriced && ev.unpriced.length ? ` · unpriced: ${ev.unpriced.map(it).join(", ")}` : ""}`;
+                case "open": return `${ev.count}× ${it(ev.chest)} → ${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}`).join(", ")} · value at bid ${fmtCoins(ev.valueBid)}${ev.coinsGained ? ` + ${fmtCoins(ev.coinsGained)} coins` : ""}${ev.unpriced && ev.unpriced.length ? ` · unpriced: ${ev.unpriced.map(it).join(", ")}` : ""}${(ev.gains || []).some(g => g.counted || isCounted(g.item)) ? ` · counted: ${(ev.gains || []).filter(g => g.counted || isCounted(g.item)).map(g => `${g.qty} ${it(g.item)}`).join(", ")}` : ""}`;
                 case "consume": return `${ev.qty}× ${it(ev.item)}${ev.unitCost != null ? ` @ ${fmtCoins(ev.unitCost)}` : ` (purchase price known for ${ev.covered || 0} of ${ev.qty})`}`;
                 case "redeem": return `${ev.qty}× ${it(ev.token)} → ${ev.itemQty}× ${it(ev.item)}`;
                 case "baseline": return `${(ev.items || []).filter(i => i.kind !== "key material").length} consumables and ${(ev.items || []).filter(i => i.kind === "key material").length} key materials priced at ask, ${(ev.keys || []).length} key types, ${(ev.chests || []).length} chest types · ${fmtCoins(ev.coins)} coins`;
@@ -1031,6 +1161,7 @@
                 card("In dungeons", fmtHm(S.dungeonMs), `${pct(S.dungeonMs, S.totalMs)} of ${fmtHm(S.totalMs)} recorded`),
                 card("Between runs", fmtHm(S.betweenMs), `crafting ${fmtHm(S.craftingMs)} · offline ${fmtHm(S.offlineBetweenMs)} · other ${fmtHm(S.otherMs)}`),
             ];
+            for (const [h, c] of Object.entries(S.counted || {})) if (c.qty > 0) cards.push(card(it(h) + "s", c.qty, Object.entries(c.byChest).filter(([, b]) => b.qty > 0).map(([chest, b]) => `${b.opened ? (b.qty / b.opened).toFixed(2) : "?"} per ${it(chest)}`).join(" · ")));
             if (S.unknownMs > 0) cards.push(card("Unaccounted", fmtHm(S.unknownMs), "runs whose end the chat ledger does not show"));
             els["mds-cards"].innerHTML = cards.join("");
             els["mds-ovnote"].textContent = `Since ${fmtTime(S.windowStart)}. A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.${S.open ? " One run is in progress." : ""}`;
@@ -1071,7 +1202,7 @@
                 ].join("\n");
             }
         }
-        return { refresh, touch, render };
+        return { refresh, touch, render, dock: () => ({ docked: !!dock.strip, active: dock.active, worked: dock.worked }), show: () => setOpen(true) };
     })();
 
     function download(name, text) { const blob = new Blob([text], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
@@ -1104,6 +1235,6 @@
     const boot = () => { panel.refresh(); };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { state, ref, prices, version: VERSION, derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { state, ref, prices, version: VERSION, panel, derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();

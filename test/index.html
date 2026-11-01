@@ -13,7 +13,55 @@
   <button id="run">Run the scenario</button>
   <button id="status">Status</button>
   <button id="reset">Reset record (IndexedDB)</button>
+  <button id="strip-toggle">Remove the Combat strip</button>
 </div>
+<!-- A replica of the game's Combat tab strip (MUI Tabs under React), from the 2026-11-01 DOM dump. Clicking a tab swaps
+     the panel element the way React does. -->
+<style>
+  #strip-host { margin: 10px 0; border: 1px dashed rgba(190,160,255,.35); border-radius: 8px; padding: 8px; }
+  .TabsComponent_tabsComponent__3PqGp .MuiTabs-scroller { position: relative; }
+  .TabsComponent_tabsComponent__3PqGp [role=tablist] { display: flex; }
+  .TabsComponent_tabsComponent__3PqGp [role=tab] { background: none; border: 0; color: #b9a9d6; padding: 8px 14px; margin: 0; cursor: pointer; font: inherit; min-width: 90px; }
+  .TabsComponent_tabsComponent__3PqGp [role=tab].Mui-selected { color: #fff; }
+  .TabsComponent_tabsComponent__3PqGp .MuiTabs-indicator { position: absolute; bottom: 0; height: 2px; background: #c9a7ff; transition: left .2s, width .2s; }
+  .TabsComponent_tabsComponent__3PqGp .fake-panel { padding: 12px; background: rgba(255,255,255,.04); min-height: 60px; }
+</style>
+<div id="strip-host">
+<div class="TabsComponent_tabsComponent__3PqGp TabsComponent_condensed__2q1YX" id="fake-strip">
+ <div class="TabsComponent_tabsContainer__3BDUp"><div class="MuiTabs-root css-orq8zk"><div class="MuiTabs-scroller MuiTabs-fixed css-1anid1y" style="overflow: hidden; margin-bottom: 0px;">
+  <div class="MuiTabs-flexContainer css-k008qs" role="tablist">
+   <button class="MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-1q2h7u5" tabindex="-1" type="button" role="tab" aria-selected="false"><span class="MuiBadge-root TabsComponent_badge__1Du26 css-1rzb3uu">Combat Zones<span class="MuiBadge-badge MuiBadge-invisible"></span></span></button>
+   <button class="MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-1q2h7u5" tabindex="-1" type="button" role="tab" aria-selected="false"><span class="MuiBadge-root TabsComponent_badge__1Du26 css-1rzb3uu">Find Party<span class="MuiBadge-badge MuiBadge-invisible"></span></span></button>
+   <button class="MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary Mui-selected css-1q2h7u5" tabindex="0" type="button" role="tab" aria-selected="true"><span class="MuiBadge-root TabsComponent_badge__1Du26 css-1rzb3uu">My Party<span class="MuiBadge-badge MuiBadge-invisible"></span></span></button>
+   <button class="MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-1q2h7u5" tabindex="-1" type="button" role="tab" aria-selected="false"><span class="MuiBadge-root TabsComponent_badge__1Du26 css-1rzb3uu">Battle #47<span class="MuiBadge-badge MuiBadge-invisible"></span></span></button>
+   <button class="MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-1q2h7u5" tabindex="-1" type="button" role="tab" aria-selected="false"><span class="MuiBadge-root TabsComponent_badge__1Du26 css-1rzb3uu">Statistics<span class="MuiBadge-badge MuiBadge-invisible"></span></span></button>
+  </div>
+  <span class="MuiTabs-indicator css-ttwr4n" style="left: 236px; width: 118px;"></span>
+ </div></div></div>
+ <div class="fake-panel">My Party panel · Metzli 1899/1899 1880/2279 Frost Surge</div>
+</div>
+</div>
+<script>
+  // The "React" of the replica: a game tab click selects it, moves the indicator and swaps the panel element.
+  (() => {
+    const host = document.getElementById("strip-host"); const stripHTML = host.innerHTML;
+    function wire() {
+      const list = host.querySelector("[role=tablist]"); if (!list) return;
+      list.addEventListener("click", e => {
+        const t = e.target.closest("[role=tab]"); if (!t || t.id === "mds-tab") return;
+        for (const b of list.querySelectorAll("[role=tab]")) { b.classList.toggle("Mui-selected", b === t); b.setAttribute("aria-selected", String(b === t)); }
+        const ind = host.querySelector(".MuiTabs-indicator"); ind.style.left = t.offsetLeft + "px"; ind.style.width = t.offsetWidth + "px";
+        const comp = host.querySelector(".TabsComponent_tabsComponent__3PqGp"); const old = comp.querySelector(".fake-panel"); if (old) old.remove();
+        const p = document.createElement("div"); p.className = "fake-panel"; p.textContent = t.textContent.trim() + " panel · rendered " + new Date().toLocaleTimeString(); comp.appendChild(p);
+      });
+    }
+    wire();
+    const btn = document.getElementById("strip-toggle");
+    btn.addEventListener("click", () => { if (host.innerHTML.trim()) { host.innerHTML = ""; btn.textContent = "Put the Combat strip back"; } else { host.innerHTML = stripHTML; wire(); btn.textContent = "Remove the Combat strip"; } });
+    // Battle number ticking, like the real strip between waves.
+    setInterval(() => { const b = [...host.querySelectorAll("[role=tab] .MuiBadge-root")].find(x => /^Battle #/.test(x.firstChild && x.firstChild.textContent)); if (b) b.firstChild.textContent = "Battle #" + (Number(b.firstChild.textContent.slice(8)) + 1); }, 4000);
+  })();
+</script>
 <div id="log"></div>
 <script>
   // Fake the market feed for the price lookups the script makes.
@@ -23,7 +71,6 @@
     "/items/redwood_lumber": { "0": { a: 1500, b: 1400 } },
     "/items/pirate_entry_key": { "0": { a: 800000, b: 700000 } },
     "/items/pirate_chest_key": { "0": { a: 2000000, b: 1800000 } },
-    "/items/cowbell": { "0": { a: 400000, b: 380000 } },
     "/items/holy_cheese": { "0": { a: 300, b: 280 } },
     "/items/blooming_trident": { "0": { a: 260000000, b: 240000000 } },
     "/items/pearl": { "0": { a: 50000, b: 45000 } }, "/items/amber": { "0": { a: 60000, b: 55000 } }, "/items/garnet": { "0": { a: 70000, b: 65000 } }, "/items/jade": { "0": { a: 80000, b: 75000 } }, "/items/amethyst": { "0": { a: 90000, b: 85000 } }, "/items/moonstone": { "0": { a: 100000, b: 95000 } },
