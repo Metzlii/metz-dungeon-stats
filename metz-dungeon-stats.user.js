@@ -717,7 +717,7 @@
             if (!e.first && source === "game" && Math.abs(e.end - serverNow()) < 15e3) e.first = { at: serverNow(), count: e.count, drops: { ...e.drops }, xp: { ...e.xp } };
             const fresher = !prev || e.end > prev.end || e.count > prev.count || (e.end === prev.end && JSON.stringify(e.drops) !== JSON.stringify(prev.drops)) || (!prev.first && e.first);
             if (!fresher) continue;
-            e.source = prev ? `${prev.source}+${source}`.replace(/game\+game/, "game").replace(/toolasha\+toolasha/, "toolasha") : source;
+            e.source = [...new Set(`${prev ? prev.source + "+" : ""}${source}`.split("+").filter(Boolean))].join("+");
             state.lootLog.set(e.id, e); changed++;
         }
         if (changed) { state.lootLogRev++; state.lootLogAt = serverNow(); if (state.record) state.record.queue("meta", { key: "lootLog", value: [...state.lootLog.values()] }); }
@@ -856,7 +856,7 @@
             if (state.meta.ledger) restoreLedger(state.meta.ledger);
             if (isObj(state.meta.artisan)) state.artisan = state.meta.artisan;
             state.marketHistory = new Map(); for (const l of (Array.isArray(state.meta.marketHistory) ? state.meta.marketHistory : [])) if (l && l.id != null) state.marketHistory.set(l.id, l);
-            state.lootLog = new Map(); for (const e of (Array.isArray(state.meta.lootLog) ? state.meta.lootLog : [])) if (e && e.id != null) state.lootLog.set(e.id, e); state.lootLogRev++;
+            state.lootLog = new Map(); for (const e of (Array.isArray(state.meta.lootLog) ? state.meta.lootLog : [])) if (e && e.id != null) { e.source = [...new Set(String(e.source || "").split("+").filter(Boolean))].join("+"); state.lootLog.set(e.id, e); } state.lootLogRev++;
             state.lastChatAt = num(state.meta.lastChatAt);
             state.chatSeen = new Set(Array.isArray(state.meta.chatSeen) ? state.meta.chatSeen : []);
             state.events = (await state.record.getAll("events", "at", null, "prev", 200));
@@ -1778,7 +1778,11 @@
             const xpSumAll = x => Object.values(x || {}).reduce((s, v) => s + v, 0);
             els["mds-sessions"].innerHTML = list.map(e => {
                 const dungeon = !!ref.dungeons[e.action] || /\/combat\//.test(e.action);
-                const drops = Object.entries(e.drops).map(([h, q]) => `${q} ${it(h.split("::")[0])}`).join(", ") || "none";
+                const dropList = Object.entries(e.drops).map(([h, q]) => `${q} ${it(h.split("::")[0])}`).join(", ") || "none";
+                const chestsFirst = Object.entries(e.drops).map(([h, q]) => [h.split("::")[0], q]).sort((a, b) => (ref.chestItems[b[0]] ? 1 : 0) - (ref.chestItems[a[0]] ? 1 : 0));
+                const drops = ref.dungeons[e.action] || ref.keyActions[e.action]
+                    ? chestsFirst.map(([h, q]) => `${q} ${ref.chestItems[h] ? (/refinement/.test(h) ? "Refine" : "Chest") : it(h)}`).join(", ") || "none"
+                    : (() => { const coins = e.drops["/items/coin"] || 0; const rest = Object.entries(e.drops).filter(([h]) => h !== "/items/coin"); return `<span class="mds-flag" title="${esc(dropList)}">${coins ? fmtCoins(coins) + " coins" : ""}${coins && rest.length ? " + " : ""}${rest.length ? `${rest.reduce((a, [, q]) => a + q, 0).toLocaleString()} items, ${rest.length} kinds` : ""}</span>`; })();
                 const ours = dungeon ? recordInSpan(d, e) : null;
                 const text = compareText(ours, e, d.summary.windowStart);
                 const off = ours && text && /≠/.test(text) && !isRunning(e);
