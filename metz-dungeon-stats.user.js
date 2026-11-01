@@ -1610,11 +1610,13 @@
         function renderOverview() {
             const d = getDerived(), S = d.summary;
             const offChests = d.offline.reduce((s, b) => s + b.chestTotal, 0);
-            const chestLines = Object.entries(S.chests).map(([h, q]) => `${q} ${it(h)}`).join(" · ");
+            const perType = { ...S.chests }; for (const b of d.offline) for (const [h, q] of Object.entries(b.chests)) perType[h] = (perType[h] || 0) + q;
+            const chestLines = Object.entries(perType).map(([h, q]) => `${q} ${it(h)}`).join(" · ");
             const cards = [
                 card("Clears", S.clears, `${S.fails} failed${S.failRate != null ? ` (${(S.failRate * 100).toFixed(1)}%)` : ""} · ${S.cancelled} cancelled${S.unknown ? ` · ${S.unknown} end unknown` : ""}`),
                 card("Average run", S.avgClearMs != null ? fmtDur(S.avgClearMs) : "–", S.clearMs.length ? `${S.avgRunMs != null && S.fails ? `${fmtDur(S.avgRunMs)} counting fails · ` : ""}fastest ${fmtDur(S.fastestMs)} · slowest ${fmtDur(S.slowestMs)}` : "no completed run yet"),
-                card("Chests", S.chestTotal + offChests, `${chestLines || "none yet"}${offChests ? ` · ${offChests} of them while offline` : ""}${bagLine()}`),
+                card("Chests earned", S.chestTotal + offChests, chestLines || "none yet"),
+                ...(holdover().total ? [card("Holdover chests", holdover().total, holdover().lines)] : []),
                 card("Keys charged", S.keysCharged, `${S.keysCrafted} crafted in the record`),
                 card("In dungeons", fmtHm(S.dungeonMs), `${pct(S.dungeonMs, S.totalMs)} of ${fmtHm(S.totalMs)} recorded`),
                 card("Between runs", fmtHm(S.betweenMs), `crafting ${fmtHm(S.craftingMs)} · offline ${fmtHm(S.offlineBetweenMs)} · other ${fmtHm(S.otherMs)}`),
@@ -1664,7 +1666,8 @@
             }).join("") || `<tr><td colspan="7" class="t">Everything gained is sold, held, listed or kept.</td></tr>`;
             els["mds-lootnote"].textContent = `Loot = what this record saw come out of a chest or a token redemption. Held = in the bag now; Listed = on your sell orders. No longer held = gained − sold − opened − held − listed − kept, valued at the current bid less ${(M.tax.rate * 100).toFixed(1)}% tax; a bid that moved more than 50% since opening (or no bid) is marked for review and left out of the totals until accepted. Accepting freezes that value as a recorded event.`;
         }
-        const bagLine = () => { const bag = Object.keys(ref.chestItems).map(h => [h, held(h, 0)]).filter(([, q]) => q > 0); return bag.length ? ` · in the bag now: ${bag.map(([h, q]) => `${q} ${it(h)}`).join(", ")}` : ""; };
+        // Chests held before the record began (the baseline stock), shown as their own block.
+        const holdover = () => { const base = state.timeline.find(e => e.kind === "baseline"); const rows = ((base && base.chests) || []).filter(c => c.qty > 0); return { total: rows.reduce((a, c) => a + c.qty, 0), lines: rows.map(c => `${c.qty} ${it(c.item)}`).join(" · ") }; };
         function renderChests() {
             const M = getMoney();
             const cards = Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(it(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`));
