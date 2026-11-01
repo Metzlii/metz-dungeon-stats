@@ -233,6 +233,7 @@
         artisan: {},                    // actionType -> {rate, tea, at}: the game's artisan buff (tea × pouch), from consumableActionTypeBuffsMap
         lootLog: new Map(),             // characterActionId -> session from the game's Loot & XP Log (loot_log_updated) and Toolasha's copy
         lootLogRev: 0, lootLogAt: 0,
+        marketHistory: new Map(),       // listing id -> {id, at, item, level, price, qty, ordered, isSell, src}: this PC's Toolasha store + imported files
         ledger: new Map(),              // itemHrid -> {qty, cost} running purchase ledger (average cost)
         keyLots: new Map(),             // keyItem -> [{qty, unitCost, basis, craftId}]
         counts: { frames: 0, byType: new Map(), events: 0 },
@@ -742,20 +743,65 @@
                 const v = await new Promise((res, rej) => { const q = db.transaction("marketListings", "readonly").objectStore("marketListings").get("marketListingTimestamps"); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
                 if (!Array.isArray(v)) { TOOLASHA.status = "no listing history"; return null; }
                 TOOLASHA.status = "read"; TOOLASHA.listings = v.length; TOOLASHA.at = Date.now();
-                return TOOLASHA.rows = v.map(l => ({ id: l.id, at: parseServerTime(l.createdTimestamp) || num(l.timestamp), item: l.itemHrid, level: num(l.enhancementLevel), price: num(l.price), qty: num(l.filledQuantity), ordered: num(l.orderQuantity), isSell: !!l.isSell })).filter(l => l.id != null && l.item && l.qty > 0 && l.price > 0 && l.at > 0);
+                return v.map(l => ({ id: l.id, at: parseServerTime(l.createdTimestamp) || num(l.timestamp), item: l.itemHrid, level: num(l.enhancementLevel), price: num(l.price), qty: num(l.filledQuantity), ordered: num(l.orderQuantity), isSell: !!l.isSell })).filter(l => l.id != null && l.item && l.qty > 0 && l.price > 0 && l.at > 0);
             } finally { db.close(); }
         } catch (error) { TOOLASHA.status = "unavailable: " + String(error && error.message || error); return null; }
     }
     function taxRateNow() { for (let i = state.timeline.length - 1; i >= 0; i--) { const e = state.timeline[i]; if (e.kind === "sell" && !e.imported && num(e.gross) > 0 && e.tax != null) return e.tax / e.gross; } return 0.04; }
     let toolashaRunning = null;
-    function importToolasha(reason) {
+    // Merge listings into the record's market history by listing id (a listing with more filled wins). Returns how many
+    // were new or changed.
+    function addMarketHistory(list, src) {
+        let changed = 0;
+        for (const l of list) { if (!l || l.id == null) continue; const prev = state.marketHistory.get(l.id); if (prev && prev.qty >= l.qty && prev.at) continue; state.marketHistory.set(l.id, { ...l, src: prev && prev.src && !prev.src.includes(src) ? `${prev.src}+${src}` : (prev && prev.src) || src }); changed++; }
+        if (changed && state.record) state.record.queue("meta", { key: "marketHistory", value: [...state.marketHistory.values()] });
+        return changed;
+    }
+    const marketHistoryRows = () => [...state.marketHistory.values()];
+    // A market history file from another PC: Toolasha's IndexedDB array (the console download) or its Export CSV
+    // (Date, Item, Enh Lvl, Type, Status, Price, Quantity, Filled, Total; items by name, ids synthesised).
+    function parseMarketHistoryFile(text) {
+        const t = String(text || "").trim(); if (!t) return [];
+        if (t[0] === "[" || t[0] === "{") {
+            let json; try { json = JSON.parse(t); } catch (_e) { return []; }
+            const arr = Array.isArray(json) ? json : (Array.isArray(json.listings) ? json.listings : Array.isArray(json.marketListingTimestamps) ? json.marketListingTimestamps : []);
+            return arr.map(l => ({ id: l.id, at: parseServerTime(l.createdTimestamp) || num(l.timestamp) || num(l.at), item: l.itemHrid || l.item, level: num(l.enhancementLevel != null ? l.enhancementLevel : l.level), price: num(l.price), qty: num(l.filledQuantity != null ? l.filledQuantity : l.qty), ordered: num(l.orderQuantity != null ? l.orderQuantity : l.ordered), isSell: !!l.isSell })).filter(l => l.id != null && l.item && l.qty > 0 && l.price > 0 && l.at > 0);
+        }
+        const lines = t.split(/\r?\n/).filter(Boolean); if (lines.length < 2) return [];
+        const cell = line => { const out = []; let cur = "", q = false; for (const ch of line) { if (ch === '"') q = !q; else if (ch === "," && !q) { out.push(cur); cur = ""; } else cur += ch; } out.push(cur); return out.map(x => x.trim()); };
+        const head = cell(lines[0]).map(h => h.toLowerCase());
+        const col = name => head.findIndex(h => h === name || h.startsWith(name));
+        const cDate = col("date"), cItem = col("item"), cLvl = col("enh"), cType = col("type"), cPrice = col("price"), cQty = col("quantity"), cFilled = col("filled");
+        if (cDate < 0 || cItem < 0 || cType < 0 || cPrice < 0) return [];
+        const byName = new Map(Object.entries(ref.items).map(([h, i]) => [String(i.name).toLowerCase(), h]));
+        const rows = [];
+        for (const line of lines.slice(1)) {
+            const c = cell(line); const name = c[cItem]; const hrid = /^\/items\//.test(name) ? name : byName.get(String(name).toLowerCase()); if (!hrid) continue;
+            const at = Date.parse(c[cDate]); const price = num(String(c[cPrice]).replace(/[^\d.]/g, "")); const filled = num(String(c[cFilled >= 0 ? cFilled : cQty]).replace(/[^\d.]/g, "")); const ordered = num(String(c[cQty]).replace(/[^\d.]/g, ""));
+            if (!(at > 0) || !(price > 0) || !(filled > 0)) continue;
+            const isSell = /sell/i.test(c[cType]); const level = cLvl >= 0 ? num(String(c[cLvl]).replace(/[^\d]/g, "")) : 0;
+            rows.push({ id: `csv:${at}|${hrid}|${level}|${isSell ? "s" : "b"}|${price}|${ordered}`, at, item: hrid, level, price, qty: filled, ordered, isSell });
+        }
+        return rows;
+    }
+    async function importMarketHistoryFile(file) {
+        const text = await file.text(); const rows = parseMarketHistoryFile(text);
+        if (!rows.length) { W.alert("No listings recognised in that file. Expected Toolasha's listing array (JSON) or its Market History CSV."); return 0; }
+        const changed = addMarketHistory(rows, `file:${file.name}`);
+        emit("note", { text: `Market history file ${file.name}: ${rows.length} listings, ${changed} new or updated; history now ${state.marketHistory.size}` }, "import");
+        if (changed) await importToolasha("file", true);
+        return changed;
+    }
+    function importToolasha(reason, reseed) {
         if (toolashaRunning) return toolashaRunning;
         toolashaRunning = (async () => {
             if (!state.record || !state.ready || !state.meta.recordStart) return;
-            const listings = await readToolashaListings(); if (!listings) return;
+            const fresh = await readToolashaListings();
+            const added = fresh ? addMarketHistory(fresh, "toolasha:" + DEVICE) : 0;
+            const listings = marketHistoryRows(); if (!listings.length) return;
             const start = state.meta.recordStart;
             // 1. Seed purchase prices for the stock the baseline priced at ask.
-            if (!state.meta.toolashaSeeded) {
+            if (!state.meta.toolashaSeeded || reseed) {
                 const rows = [];
                 for (const [item, e] of state.ledger) {
                     if (!(e.qty > 0)) continue;
@@ -805,6 +851,7 @@
             state.meta = {}; for (const r of metaRows) state.meta[r.key] = r.value !== undefined ? r.value : r;
             if (state.meta.ledger) restoreLedger(state.meta.ledger);
             if (isObj(state.meta.artisan)) state.artisan = state.meta.artisan;
+            state.marketHistory = new Map(); for (const l of (Array.isArray(state.meta.marketHistory) ? state.meta.marketHistory : [])) if (l && l.id != null) state.marketHistory.set(l.id, l);
             state.lootLog = new Map(); for (const e of (Array.isArray(state.meta.lootLog) ? state.meta.lootLog : [])) if (e && e.id != null) state.lootLog.set(e.id, e); state.lootLogRev++;
             state.lastChatAt = num(state.meta.lastChatAt);
             state.chatSeen = new Set(Array.isArray(state.meta.chatSeen) ? state.meta.chatSeen : []);
@@ -1357,6 +1404,7 @@
  <button id="mds-export">Export record (JSON)</button>
  <button id="mds-export-frames">Export raw frames</button>
  <button id="mds-prices">Refresh prices</button>
+ <button id="mds-history-file" title="Merge a market history file from another PC: Toolasha's listing array (JSON) or its Market History CSV">Merge market history file…</button><input type="file" id="mds-history-input" accept=".json,.csv,application/json,text/csv" hidden>
  <button id="mds-toolasha" title="Re-price stock held at record start from your own purchases and catch up fills the script did not see">Import Toolasha history</button>
  <button id="mds-reset" class="danger">Reset record</button>
  <span class="mds-note">Newest first. Source = the game message the event came from. Consumable uses are recorded but shown only under "consume".</span>
@@ -1391,6 +1439,8 @@
             root.querySelector("#mds-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
             root.querySelector("#mds-reset").addEventListener("click", resetRecord);
             root.querySelector("#mds-toolasha").addEventListener("click", () => importToolasha("manual").then(() => render()));
+            root.querySelector("#mds-history-file").addEventListener("click", () => root.querySelector("#mds-history-input").click());
+            root.querySelector("#mds-history-input").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importMarketHistoryFile(f).then(() => render(), err => warn("history import failed", err)); });
             // Rows are held while the reader is scrolled down; they catch up at the top.
             els.wrap.addEventListener("scroll", () => { if (rowsHeld && els.wrap.scrollTop <= 8) renderRows(true); }, { passive: true });
             els.runsWrap.addEventListener("scroll", () => { if (runsHeld && els.runsWrap.scrollTop <= 8) renderRuns(true); }, { passive: true });
@@ -1651,7 +1701,8 @@
             // when another PC bought some of them).
             const craftGroups = {};
             for (const e of all) { const r = ref.keyActions[e.action]; if (!r) continue; const key = (r.outputs[0] || {}).item; if (!key) continue; const g = craftGroups[key] || (craftGroups[key] = { key, action: e.action, n: 0, crafted: 0, essence: 0, from: e.start, to: e.end }); g.n++; g.crafted += e.drops[key] || e.count; g.essence += Object.entries(e.drops).filter(([h]) => /essence/.test(h)).reduce((s, [, q]) => s + q, 0); g.from = Math.min(g.from, e.start); g.to = Math.max(g.to, e.end); }
-            const buys = (TOOLASHA.rows || []).filter(l => !l.isSell);
+            const buys = marketHistoryRows().filter(l => !l.isSell);
+            const devices = new Set(marketHistoryRows().map(l => String(l.src || "").split("+")).flat().filter(Boolean)).size;
             els["mds-life-keys"].innerHTML = Object.values(craftGroups).sort((a, b) => b.to - a.to).map(g => {
                 // Prices from this PC's buys (an average paid is a price, whatever share of the quantity was bought here),
                 // quantities from the recipe at the current artisan rate: the history has no consumption per craft.
@@ -1664,9 +1715,9 @@
                 if (cost != null && art && art.tea) { const tp = ledgerAvg(art.tea) != null ? ledgerAvg(art.tea) : askOf(art.tea); if (tp != null) cost += tp * art.seconds / art.teaSeconds; }
                 const asks = mats.filter(m => m.paid == null && m.price != null).length;
                 const coverage = mats.reduce((s, m) => s + m.needed, 0) > 0 ? mats.reduce((s, m) => s + Math.min(m.qty, m.needed), 0) / mats.reduce((s, m) => s + m.needed, 0) : 0;
-                return `<tr><td class="k">${it(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtTime(g.from).slice(0, 10)}</td><td class="t">${fmtTime(g.to).slice(0, 10)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.paid != null ? ` @ ${fmtCoins(m.paid)}` : " (none here)"}`).join(", ")}<small>${Math.round(coverage * 100)}% of what these crafts consumed was bought on this PC</small></td><td>${cost != null ? `${fmtCoins(cost)}<small>recipe at your average paid price${asks ? ` (${asks} at ask)` : ""}${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan"}${art && art.tea ? " + tea" : ""}</small>` : "–"}</td></tr>`;
+                return `<tr><td class="k">${it(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtTime(g.from).slice(0, 10)}</td><td class="t">${fmtTime(g.to).slice(0, 10)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.paid != null ? ` @ ${fmtCoins(m.paid)}` : " (none here)"}`).join(", ")}<small>${Math.round(coverage * 100)}% of what these crafts consumed is in the merged history (${devices} source${devices === 1 ? "" : "s"})</small></td><td>${cost != null ? `${fmtCoins(cost)}<small>recipe at your average paid price${asks ? ` (${asks} at ask)` : ""}${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan"}${art && art.tea ? " + tea" : ""}</small>` : "–"}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="t">No key crafts in the log yet.</td></tr>`;
-            els["mds-lifenote"].textContent = `The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: ${all.length} sessions${all.length ? ` from ${fmtTime(Math.min(...all.map(e => e.start))).slice(0, 10)}` : ""}. Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device: the cost per key takes this PC's average paid prices (prices hold whatever share was bought here) with recipe quantities at your current artisan rate, since the log has no consumption per craft; no lifetime income is shown until the records from both PCs are merged (import, milestone 5).`;
+            els["mds-lifenote"].textContent = `The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: ${all.length} sessions${all.length ? ` from ${fmtTime(Math.min(...all.map(e => e.start))).slice(0, 10)}` : ""}. Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device, merged here by listing id from this PC's Toolasha store and any file merged on the Data tab (${state.marketHistory.size} listings); the cost per key takes the average paid price in that history (a price holds whatever share was bought on one PC) with recipe quantities at your current artisan rate, since the log has no consumption per craft; no lifetime income is shown until the records from both PCs are merged (import, milestone 5).`;
         }
         function renderChests() {
             const M = getMoney();
@@ -1749,6 +1800,7 @@
                     `frames heard ${state.counts.frames} · ${state.sockets} socket${state.sockets === 1 ? "" : "s"}${state.viaData ? ` · ${state.viaData} via data getter` : ""}`,
                     `game data: ${ref.ready ? Object.keys(ref.dungeons).length + " dungeons" : "not loaded"} · ${ref.source || "waiting"}${ref.version ? " · " + ref.version : ""}`,
                     `loot log: ${state.lootLog.size} sessions${state.lootLogAt ? ` · last read ${fmtTime(state.lootLogAt)}` : ""}${TOOLASHA.sessions ? ` · ${TOOLASHA.sessions} from Toolasha` : ""}`,
+                    `market history: ${state.marketHistory.size} listings merged${[...new Set(marketHistoryRows().map(l => l.src).filter(Boolean))].length ? " from " + [...new Set(marketHistoryRows().map(l => l.src).filter(Boolean))].join(", ") : ""}`,
                     `toolasha history: ${TOOLASHA.status}${TOOLASHA.listings ? ` · ${TOOLASHA.listings} listings · ${TOOLASHA.seeded} items seeded · ${TOOLASHA.imported} fills imported` : ""}${state.meta.toolashaSeeded ? ` · seeded ${fmtTime(state.meta.toolashaSeeded)}` : ""}`,
                     `artisan: ${Object.entries(state.artisan).filter(([, a]) => a.rate > 0).map(([t, a]) => `${t.split("/").pop()} ${(a.rate * 100).toFixed(2)}% (${a.tea ? itemName(a.tea) : "?"})`).join(", ") || "none seen"}`,
                     `prices: ${prices.map ? Object.keys(prices.map).length : 0} items · ${prices.at ? "fetched " + fmtTime(prices.at) : "not fetched this session"}${prices.error ? " · " + prices.error : ""}`,
@@ -1779,7 +1831,7 @@
         if (!state.record) return;
         if (!W.confirm("Delete this character's whole Dungeon Stats record? Export it first if you want to keep it.")) return;
         await state.record.flush(); await state.record.clearAll();
-        state.meta = {}; state.events = []; state.timeline = []; state.timelineRev++; state.consumeTotals.clear(); state.lootLog.clear(); state.lootLogRev++; state.chatSeen.clear(); state.counts.events = 0; state.ledger.clear(); state.keyLots.clear(); keyAverages.clear(); state.run = null;
+        state.meta = {}; state.events = []; state.timeline = []; state.timelineRev++; state.consumeTotals.clear(); state.lootLog.clear(); state.lootLogRev++; state.marketHistory.clear(); state.chatSeen.clear(); state.counts.events = 0; state.ledger.clear(); state.keyLots.clear(); keyAverages.clear(); state.run = null;
         panel.render();
     }
 
