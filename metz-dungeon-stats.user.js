@@ -1589,7 +1589,7 @@
 #mds-root .mds-head .mds-head-btn{margin-left:6px;background:transparent;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:8px;padding:3px 9px;font:500 .857em/1.2 "Inter",system-ui,sans-serif;cursor:pointer}
 #mds-root .mds-head .mds-head-btn:disabled{opacity:.5;cursor:default}
 #mds-root td.mds-acts-plan{width:7.5em;min-width:7.5em;box-sizing:border-box}
-#mds-root tr.mds-flash td{background:rgba(69,200,216,.18)}
+#mds-root tr.mds-flash td,#mds-root .mds-card.mds-flash{background:rgba(69,200,216,.18)}
 #mds-root td.mds-acts .mds-act+.mds-act{margin-left:6px}
 #mds-root .mds-bar .mds-note{color:#c5d4de;font-size:.857em}
 #mds-root table{width:100%;border-collapse:collapse;font-size:1em;font-variant-numeric:tabular-nums}
@@ -1936,14 +1936,25 @@
                     parts.push(i === 0 || !label ? value : `${label} ${value}`);
                 }
                 const line = parts.join(" · "); if (!line) return;
-                e.preventDefault();
+                e.preventDefault(); toChatInput(line, tr);
+            });
+            function toChatInput(line, flashEl) {
                 const input = [...document.querySelectorAll('input[class*="Chat_chatInput"], [class*="Chat_chatInputContainer"] input[type="text"]')].find(el => !root.contains(el) && el.offsetParent !== null) || null;
                 if (input) {
                     const setter = Object.getOwnPropertyDescriptor(W.HTMLInputElement.prototype, "value").set;
                     const prev = input.value; const next = prev && !/\s$/.test(prev) ? `${prev} ${line}` : `${prev}${line}`;
                     setter.call(input, next); input.dispatchEvent(new Event("input", { bubbles: true })); input.focus();
                 } else { try { navigator.clipboard.writeText(line); } catch (_e) { /* fine */ } warn("chat input not found; row copied to the clipboard instead:", line); }
-                tr.classList.add("mds-flash"); setTimeout(() => tr.classList.remove("mds-flash"), 400);
+                if (flashEl) { flashEl.classList.add("mds-flash"); setTimeout(() => flashEl.classList.remove("mds-flash"), 400); }
+            }
+            // Ctrl+click on a card: its label, value and sub-lines as one line.
+            root.addEventListener("click", e => {
+                if (!(e.ctrlKey || e.metaKey) || e.target.closest("button, a, input, select")) return;
+                const cardEl = e.target.closest(".mds-card"); if (!cardEl || !root.contains(cardEl)) return;
+                const label = (cardEl.querySelector(".l") || {}).textContent || "", value = (cardEl.querySelector(".n") || {}).innerText || "";
+                const subs = [...cardEl.querySelectorAll("small")].flatMap(el => el.innerText.split(/\n+/)).map(t => t.trim()).filter(Boolean);
+                const line = [`${label.trim()} ${value.trim()}`.trim(), ...subs].join(" · "); if (!line) return;
+                e.preventDefault(); toChatInput(line, cardEl);
             });
             root.querySelector("#mds-record-input").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importRecordFile(f).then(r => { if (r) W.alert(`Imported ${f.name}: ${r.added} events added, ${r.duplicate} already here, ${r.skipped} record-specific skipped, ${r.conflict} conflicts kept as ours.`); render(); }, err => { warn("record import failed", err); W.alert("Record import failed: " + (err && err.message || err)); }); });
             els["mds-review"].addEventListener("click", e => { const b = e.target.closest("button[data-dismiss]"); if (!b) return; const done = Array.isArray(state.meta.reviewDone) ? state.meta.reviewDone : []; if (!done.includes(b.dataset.dismiss)) done.push(b.dataset.dismiss); state.meta.reviewDone = done; state.record && state.record.queue("meta", { key: "reviewDone", value: done }); render(); });
