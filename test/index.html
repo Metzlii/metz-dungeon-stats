@@ -63,6 +63,8 @@
     setInterval(() => { const b = [...host.querySelectorAll("[role=tab] .MuiBadge-root")].find(x => /^Battle #/.test(x.firstChild && x.firstChild.textContent)); if (b) b.firstChild.textContent = "Battle #" + (Number(b.firstChild.textContent.slice(8)) + 1); }, 4000);
   })();
 </script>
+<!-- The game draws item icons from one hashed SVG sprite; the script reads its URL off a use element like this one. -->
+<svg width="0" height="0" style="position:absolute"><use href="/static/media/items_sprite.0123abcd.svg#coin"></use></svg>
 <div id="log"></div>
 <script>
   // Fake the market feed for the price lookups the script makes.
