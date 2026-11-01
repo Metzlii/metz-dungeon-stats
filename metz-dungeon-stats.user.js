@@ -1267,59 +1267,67 @@
     // screen; a small floating button opens it anywhere else.
     // ---------------------------------------------------------------------------------------------------------------
     const CSS = `
-#mds-toggle{position:fixed;left:10px;bottom:10px;z-index:2147483000;background:rgba(20,16,31,.92);color:#e6ddf5;border:1px solid rgba(190,160,255,.35);border-radius:9px;padding:5px 9px;font:600 11px/1.2 system-ui,sans-serif;letter-spacing:.3px;cursor:pointer;backdrop-filter:blur(6px)}
-#mds-toggle:hover{border-color:rgba(190,160,255,.7)}
-#mds-root{position:fixed;left:10px;bottom:40px;z-index:2147483000;width:min(760px,calc(100vw - 20px));max-height:min(70vh,640px);display:flex;flex-direction:column;background:rgba(15,12,25,.94);color:#e6ddf5;border:1px solid rgba(190,160,255,.3);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);font:12px/1.35 system-ui,sans-serif;backdrop-filter:blur(7px)}
-#mds-root[hidden]{display:none}
-#mds-root *{box-sizing:border-box}
-#mds-root .mds-head{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(190,160,255,.18)}
-#mds-root .mds-head strong{font-size:13px;letter-spacing:.2px}
-#mds-root .mds-head .mds-sub{color:#b9a9d6;font-size:11px}
-#mds-root .mds-head .mds-x{margin-left:auto;background:none;border:0;color:#b9a9d6;font-size:16px;cursor:pointer}
-#mds-root .mds-tabs{display:flex;gap:4px;padding:6px 10px 0}
-#mds-root .mds-tabs button{background:rgba(44,33,64,.6);border:1px solid rgba(190,160,255,.18);border-bottom:0;color:#cdbfe8;border-radius:8px 8px 0 0;padding:5px 10px;cursor:pointer;font:inherit}
-#mds-root .mds-tabs button[aria-selected="true"]{background:rgba(70,52,104,.85);color:#fff}
-#mds-root .mds-body{overflow:auto;padding:10px 12px 12px;border-top:1px solid rgba(190,160,255,.18)}
-#mds-root .mds-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px}
-#mds-root .mds-card{background:linear-gradient(140deg,rgba(44,33,64,.94),rgba(29,23,44,.91));border:1px solid rgba(190,160,255,.18);border-radius:10px;padding:8px 10px}
-#mds-root .mds-card .l{font-size:9px;letter-spacing:.75px;text-transform:uppercase;color:#c0acd9}
-#mds-root .mds-card .n{font-size:17px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px}
-#mds-root .mds-card small{display:block;color:#b9a9d6;font-size:10px;margin-top:2px}
-#mds-root .mds-status{margin:0 0 8px;color:#d9cff0}
-#mds-root .mds-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px}
-#mds-root .mds-bar button,#mds-root .mds-bar select,#mds-root .mds-bar label{background:rgba(44,33,64,.8);border:1px solid rgba(190,160,255,.25);color:#e6ddf5;border-radius:7px;padding:4px 8px;font:inherit;cursor:pointer}
-#mds-root .mds-bar button.danger{border-color:rgba(255,120,120,.5);color:#ffb3b3}
-#mds-root .mds-bar .mds-note{color:#b9a9d6;font-size:11px}
-#mds-root table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-#mds-root th,#mds-root td{text-align:left;padding:4px 6px;border-bottom:1px solid rgba(190,160,255,.12);vertical-align:top}
-#mds-root th{position:sticky;top:0;background:rgba(25,20,38,.98);font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#c0acd9}
-#mds-root td.k{white-space:nowrap;font-weight:600}
-#mds-root td.t{white-space:nowrap;color:#b9a9d6}
-#mds-root td.d{color:#d9cff0;word-break:break-word}
-#mds-root tr.review td.k{color:#ffcf7a}
-#mds-root tr.clear td.k{color:#9be3a4}
-#mds-root tr.fail td.k,#mds-root tr.stop td.k{color:#ff9f9f}
-#mds-root .mds-wrap{max-height:360px;overflow:auto;border:1px solid rgba(190,160,255,.15);border-radius:9px}
-#mds-root .mds-pane[hidden]{display:none}
-#mds-root p.mds-note{color:#b9a9d6;font-size:11px;margin:8px 0 0}
-#mds-root tr.cancelled td.k,#mds-root tr.offline td{color:#b9a9d6}
-#mds-root tr.offline td{font-style:italic}
-#mds-root tr.open td.k{color:#ffcf7a}
-#mds-root h4{margin:12px 0 6px;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#c0acd9}
-#mds-root .mds-pane h4:first-child{margin-top:0}
-#mds-root td small{display:block;color:#b9a9d6;font-size:10px}
-#mds-root button.mds-act{background:rgba(44,33,64,.8);border:1px solid rgba(190,160,255,.25);color:#e6ddf5;border-radius:6px;padding:2px 7px;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
-#mds-root .mds-wrap-chests{max-height:420px}
+/* The simulator site's system (zone-page/spira-theme.css + its design system): sea-slate ground, water accent, gold
+   only for warnings, Inter, 8px radius, hairline dividers at 16% of the text colour. */
+#mds-toggle{position:fixed;left:10px;bottom:10px;z-index:2147483000;background:#1c2a35;color:#e6eff3;border:1px solid rgba(230,239,243,.16);border-radius:8px;padding:7px 12px;font:500 13px/1.2 "Inter",system-ui,sans-serif;cursor:pointer;box-shadow:0 0 0 1px #3f424d}
+#mds-toggle:hover{border-color:#45c8d8;color:#a9e9f1}
 #mds-toggle[hidden]{display:none}
-#mds-root.docked{position:static;z-index:auto;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;backdrop-filter:none;margin:0}
+#mds-root{position:fixed;left:10px;bottom:46px;z-index:2147483000;width:min(840px,calc(100vw - 20px));max-height:min(72vh,700px);display:flex;flex-direction:column;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #595d6c,0 16px 40px rgba(0,0,0,.65);font:400 14px/1.5 "Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+#mds-root[hidden]{display:none}
+#mds-root.docked{position:static;z-index:auto;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;margin:0}
 /* z-index:auto matters: the strip is a flex container, and a flex item's z-index makes a stacking context even when static, which put the docked panel above the game's popups (z 300). */
+#mds-root *{box-sizing:border-box}
+#mds-root .mds-head{display:flex;align-items:center;gap:10px;padding:10px 14px 8px}
+#mds-root .mds-head strong{font-size:17px;font-weight:500;letter-spacing:-.015em}
+#mds-root .mds-head .mds-sub{color:#c5d4de;font-size:12px}
+#mds-root .mds-head .mds-x{margin-left:auto;background:none;border:0;color:#c5d4de;font-size:20px;line-height:1;cursor:pointer}
+#mds-root .mds-head .mds-x:hover{color:#e6eff3}
 #mds-root.docked .mds-head .mds-x{display:none}
+#mds-root .mds-tabs{display:inline-flex;margin:0 14px;border:1px solid rgba(230,239,243,.16);border-radius:8px;overflow:hidden;align-self:flex-start}
+#mds-root .mds-tabs button{background:transparent;border:0;border-left:1px solid rgba(230,239,243,.16);color:#e6eff3;padding:7px 14px;cursor:pointer;font:500 14px/1.2 "Inter",system-ui,sans-serif}
+#mds-root .mds-tabs button:first-child{border-left:0}
+#mds-root .mds-tabs button:hover{background:rgba(230,239,243,.07)}
+#mds-root .mds-tabs button[aria-selected="true"]{color:#45c8d8;box-shadow:inset 0 0 0 1px #45c8d8}
+#mds-root .mds-body{overflow:auto;padding:12px 14px 14px}
 #mds-root.docked .mds-body{overflow:visible}
-#mds-root.docked .mds-cards{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+#mds-root .mds-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px}
+#mds-root .mds-card{display:flex;flex-direction:column;gap:3px;background:#1c2a35;border-radius:8px;padding:10px 12px;box-shadow:0 0 0 1px #3f424d}
+#mds-root .mds-card .l{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#45c8d8}
+#mds-root .mds-card .n{font-size:23px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.2}
+#mds-root .mds-card small{display:block;color:#c5d4de;font-size:12px;line-height:1.4}
+#mds-root .mds-status{margin:0 0 10px;color:#c5d4de;font-size:13px}
+#mds-root .mds-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+#mds-root .mds-bar button,#mds-root .mds-bar select,#mds-root .mds-bar label,#mds-root button.mds-act{background:transparent;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:8px;padding:6px 10px;font:500 13px/1.2 "Inter",system-ui,sans-serif;cursor:pointer}
+#mds-root .mds-bar select{background:#1c2a35}
+#mds-root .mds-bar button:hover,#mds-root button.mds-act:hover{background:rgba(230,239,243,.07)}
+#mds-root .mds-bar button.danger{border-color:#d3a13a;color:#f2d99a}
+#mds-root .mds-bar button.danger:hover{background:rgba(211,161,58,.12)}
+#mds-root button.mds-act{padding:3px 9px;font-size:12px;white-space:nowrap}
+#mds-root .mds-bar .mds-note{color:#c5d4de;font-size:12px}
+#mds-root table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+#mds-root th{position:sticky;top:0;background:#1c2a35;text-align:left;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:7px 9px;border-bottom:1px solid rgba(230,239,243,.16)}
+#mds-root td{padding:6px 9px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top;line-height:1.4}
+#mds-root tbody tr:hover td{background:rgba(230,239,243,.04)}
+#mds-root td.k{white-space:nowrap;font-weight:500}
+#mds-root td.t{white-space:nowrap;color:#c5d4de}
+#mds-root td.d{color:#dee9ef;word-break:break-word}
+#mds-root td small{display:block;color:#c5d4de;font-size:11px;font-weight:400}
+#mds-root tr.review td.k{color:#f2d99a}
+#mds-root tr.clear td.k{color:#a9e9f1}
+#mds-root tr.fail td.k,#mds-root tr.stop td.k{color:#e6be62}
+#mds-root tr.cancelled td.k,#mds-root tr.offline td{color:#c5d4de}
+#mds-root tr.offline td{font-style:italic}
+#mds-root tr.open td.k{color:#45c8d8}
+#mds-root .mds-wrap{max-height:400px;overflow:auto;border-radius:8px;background:#1c2a35;box-shadow:0 0 0 1px #3f424d}
+#mds-root .mds-wrap-chests{max-height:460px}
+#mds-root .mds-pane[hidden]{display:none}
+#mds-root p.mds-note{color:#c5d4de;font-size:12px;margin:8px 0 0;line-height:1.45}
+#mds-root h4{margin:14px 0 6px;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6)}
+#mds-root .mds-pane h4:first-child{margin-top:0}
+#mds-root details{margin:8px 0}
+#mds-root summary{cursor:pointer;color:#a9e9f1}
+#mds-root pre{white-space:pre-wrap;word-break:break-word;background:#1c2a35;padding:8px 10px;border-radius:8px;max-height:220px;overflow:auto;font-size:12px;box-shadow:0 0 0 1px #3f424d}
 #mds-tab{white-space:nowrap}
-#mds-root details{margin:6px 0}
-#mds-root summary{cursor:pointer;color:#cdbfe8}
-#mds-root pre{white-space:pre-wrap;word-break:break-word;background:rgba(0,0,0,.25);padding:6px;border-radius:6px;max-height:200px;overflow:auto;font-size:11px}
 `;
 
     const panel = (() => {
@@ -1351,6 +1359,8 @@
         function ensure() {
             if (root || !document.body) return;
             const style = document.createElement("style"); style.textContent = CSS; document.documentElement.appendChild(style);
+            // Inter, as the simulator site uses it; the panel falls back to the system face if the font does not load.
+            if (!document.querySelector("link[data-mds-font]")) { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap"; l.dataset.mdsFont = "1"; (document.head || document.documentElement).appendChild(l); }
             toggle = document.createElement("button"); toggle.id = "mds-toggle"; toggle.textContent = "Dungeon Stats"; toggle.title = "Metz Dungeon Stats"; toggle.addEventListener("click", () => setOpen(!open));
             root = document.createElement("section"); root.id = "mds-root"; root.hidden = true;
             // Built once. Refreshes touch only text and table rows, so an open dropdown, the scroll position and an
