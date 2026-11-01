@@ -175,7 +175,7 @@
     // The game answers the Loot & XP Log panel with the current session list: the running dungeon and the crafts.
     feed({ type: "loot_log_updated", lootLogs: [
       { startTime: iso(t0 - 60e3), endTime: iso(Date.now()), characterActionId: 555, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, actionCount: 1, partyId: 598592, drops: { "/items/pirate_chest::0": 1, "/items/pirate_refinement_chest::0": 1 }, xpGains: { "/skills/magic": 280000 }, totalActiveMillis: 0 },
-      { startTime: iso(t0 + 30e3), endTime: iso(t0 + 50e3), characterActionId: 556, actionHrid: "/actions/crafting/pirate_entry_key", difficultyTier: 0, actionCount: 1, partyId: 0, drops: { "/items/pirate_entry_key::0": 1 }, xpGains: { "/skills/crafting": 1071 }, totalActiveMillis: 0 },
+      { startTime: iso(t0 - 120e3), endTime: iso(t0 - 100e3), characterActionId: 556, actionHrid: "/actions/crafting/pirate_entry_key", difficultyTier: 0, actionCount: 1, partyId: 0, drops: { "/items/pirate_entry_key::0": 1 }, xpGains: { "/skills/crafting": 1071 }, totalActiveMillis: 0 },
     ] });
     await window.__mds.importToolasha("harness"); log("toolasha:", window.__mds.toolasha, "loot log sessions:", window.__mds.state.lootLog.size);
     // Every tab must render without throwing: a renderer lost in a refactor is caught here, not by the operator.

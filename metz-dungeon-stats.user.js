@@ -237,7 +237,7 @@
         consumeTotals: new Map(),       // itemHrid -> {qty, cost, unknownQty} over every consume event (they stay out of the timeline)
         artisan: {},                    // actionType -> {rate, tea, at}: the game's artisan buff (tea × pouch), from consumableActionTypeBuffsMap
         lootLog: new Map(),             // characterActionId -> session from the game's Loot & XP Log (loot_log_updated) and Toolasha's copy
-        lootLogRev: 0, lootLogAt: 0,
+        lootLogRev: 0, lootLogAt: 0, lootLogReadThisSession: false,
         marketHistory: new Map(),       // listing id -> {id, at, item, level, price, qty, ordered, isSell, src}: this PC's Toolasha store + imported files
         ledger: new Map(),              // itemHrid -> {qty, cost} running purchase ledger (average cost)
         keyLots: new Map(),             // keyItem -> [{qty, unitCost, basis, craftId}]
@@ -732,6 +732,7 @@
         const list = Object.values(m).find(v => Array.isArray(v) && v.some(x => isObj(x) && x.characterActionId != null));
         if (!list) return review("loot_log_updated without a session list", { keys: Object.keys(m) }, "loot_log_updated");
         const changed = mergeLootLog(list, "game");
+        state.lootLogReadThisSession = true;
         emit("note", { text: `Loot & XP Log read: ${list.length} sessions, ${changed} new or updated`, lootLog: { entries: list.length, changed } }, "loot_log_updated");
         panel.touch();
     }
@@ -1320,6 +1321,9 @@
 #mds-root .mds-card .n{font-size:1.643em;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.2}
 #mds-root .mds-card small{display:block;color:#c5d4de;font-size:.857em;line-height:1.4}
 #mds-root .mds-status{margin:0 0 10px;color:#c5d4de;font-size:.929em}
+#mds-root .mds-banner{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:7px 10px;border:1px solid #45c8d8;border-radius:8px;color:#a9e9f1;font-size:.929em}
+#mds-root .mds-banner[hidden]{display:none}
+#mds-root .mds-banner .mds-x{margin-left:auto;background:none;border:0;color:#a9e9f1;font-size:1.3em;line-height:1;cursor:pointer}
 #mds-root .mds-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
 #mds-root .mds-bar button,#mds-root .mds-bar select,#mds-root .mds-bar label,#mds-root button.mds-act{background:transparent;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:8px;padding:6px 10px;font:500 .929em/1.2 "Inter",system-ui,sans-serif;cursor:pointer}
 #mds-root .mds-bar select{background:#1c2a35}
@@ -1366,7 +1370,7 @@
     const panel = (() => {
         let root = null, toggle = null, dirty = false, timer = null, filter = "all", open = false, tab = "overview", rowsHeld = false, runsHeld = false;
         const els = {};
-        let derived = null, derivedAt = 0, derivedRev = -1;
+        let derived = null, derivedAt = 0, derivedRev = -1, bannerDismissed = false;
         const KINDS = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
         const TABS = [["overview", "Overview"], ["runs", "Runs"], ["keys", "Keys"], ["loot", "Loot"], ["chests", "Chests"], ["lifetime", "Lifetime"], ["data", "Data"], ["settings", "Settings"]];
         // Text size: every size in the panel is in em of the root, so one font-size scales it all. Saved per browser.
@@ -1475,6 +1479,7 @@
 <div class="mds-tabs">${TABS.map(([k, label]) => `<button role="tab" data-tab="${k}" aria-selected="${k === tab}">${label}</button>`).join("")}</div>
 <div class="mds-body">
 <p class="mds-status" id="mds-status"></p>
+<div class="mds-banner" id="mds-banner" hidden><span>Open the game's <strong>Loot &amp; XP Log</strong> once this session (Combat → Loot &amp; XP Log) so the record can check its clears and chests against the game's own count.</span><button class="mds-x" title="Dismiss for this session">×</button></div>
 <div class="mds-pane" data-pane="overview">
  <div class="mds-cards" id="mds-cards"></div>
  <p class="mds-note" id="mds-ovnote"></p>
@@ -1560,7 +1565,8 @@
                 render();
             });
             els.wrap = root.querySelector(".mds-pane[data-pane=data] .mds-wrap"); els.runsWrap = root.querySelector(".mds-wrap-runs");
-            root.querySelector(".mds-x").addEventListener("click", () => setOpen(false));
+            root.querySelector(".mds-head .mds-x").addEventListener("click", () => setOpen(false));
+            root.querySelector("#mds-banner .mds-x").addEventListener("click", () => { bannerDismissed = true; render(); });
             root.querySelector(".mds-tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (b) setTab(b.dataset.tab); });
             els["mds-filter"].addEventListener("change", e => { filter = e.target.value; els.wrap.scrollTop = 0; renderRows(true); });
             root.querySelector("#mds-export").addEventListener("click", exportRecord);
@@ -1878,7 +1884,11 @@
         // Sessions the game logged (dungeons and key crafts), newest first, beside what this record counted in the
         // same span: clears from the runs, chests from the clears plus offline blocks inside it.
         const sessionsOf = () => [...state.lootLog.values()].filter(e => ref.dungeons[e.action] || ref.keyActions[e.action] || /\/combat\//.test(e.action)).sort((a, b) => b.start - a.start);
-        const isRunning = e => !!e.readAt && Math.abs(e.end - e.readAt) < 15e3; // the game stamps a running session's end with the time of the read
+        // The game stamps a running session's end with the time of the read. Entries saved before read times were kept
+        // fall back to the latest end among game-sent entries, which is the time of the last read.
+        let lastReadCache = { rev: -1, at: 0 };
+        const lastGameRead = () => { if (lastReadCache.rev !== state.lootLogRev) { let m = 0; for (const x of state.lootLog.values()) if (/game/.test(String(x.source || "")) && x.end > m) m = x.end; lastReadCache = { rev: state.lootLogRev, at: m }; } return lastReadCache.at; };
+        const isRunning = e => (e.readAt ? Math.abs(e.end - e.readAt) < 15e3 : Math.abs(e.end - lastGameRead()) < 15e3);
         const chestDrops = drops => Object.entries(drops || {}).filter(([h]) => ref.chestItems[h.split("::")[0]]).reduce((s, [, q]) => s + q, 0);
         function recordInSpan(d, e) {
             if (e.end <= d.summary.windowStart) return null;
@@ -1948,6 +1958,7 @@
             const used = state.events.filter(e => e.kind === "consume").reduce((s, e) => { s.n += e.qty; s.cost += e.unitCost != null ? e.unitCost * e.qty : 0; return s; }, { n: 0, cost: 0 });
             const runLine = state.run ? `${shortAction(state.run.zone)} T${state.run.tier} · wave ${state.run.waves} · ${fmtDur(serverNow() - state.run.startAt)}` : "between runs";
             els["mds-status"].textContent = `${state.characterName || "waiting for login"}${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}`;
+            root.querySelector("#mds-banner").hidden = bannerDismissed || state.lootLogReadThisSession || !state.ready;
             if (tab === "overview") renderOverview();
             else if (tab === "runs") renderRuns(false);
             else if (tab === "keys") renderKeys();
