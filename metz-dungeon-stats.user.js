@@ -799,8 +799,14 @@
                 default: return esc(JSON.stringify(ev).slice(0, 200));
             }
         }
+        let deferred = false;
         function render() {
             ensure(); if (!body) return;
+            // Never rebuild the feed under a reader: while the list is scrolled down, hold the refresh until they
+            // return to the top (new events arrive at the top anyway).
+            const wrapBefore = body.querySelector(".mds-wrap");
+            if (wrapBefore && wrapBefore.scrollTop > 8) { deferred = true; return; }
+            deferred = false;
             const kinds = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
             // The default feed leaves consumable uses out: they are kept for cost tracking, not for reading.
             const rows = state.events.filter(e => filter === "all" ? e.kind !== "consume" : e.kind === filter).slice(0, 200);
@@ -829,7 +835,8 @@ ${rows.map(ev => `<tr class="${ev.kind}"><td class="t">${fmtTime(ev.at)}</td><td
 </tbody></table></div>
 <details><summary>Message counts this session</summary><pre>${esc(byType || "none yet")}</pre></details>
 <details><summary>Held keys and chests (inventory mirror)</summary><pre>${esc([...state.inventory.values()].filter(r => r.itemLocationHrid === INV && (ref.keyItems.has(r.itemHrid) || ref.chestItems[r.itemHrid])).map(r => `${r.count}× ${itemName(r.itemHrid)}`).join("\n") || "none")}</pre></details>`;
-            body.querySelector("#mds-filter").addEventListener("change", e => { filter = e.target.value; render(); });
+            body.querySelector("#mds-filter").addEventListener("change", e => { filter = e.target.value; const w = body.querySelector(".mds-wrap"); if (w) w.scrollTop = 0; render(); });
+            body.querySelector(".mds-wrap").addEventListener("scroll", e => { if (deferred && e.target.scrollTop <= 8) render(); }, { passive: true });
             body.querySelector("#mds-export").addEventListener("click", exportRecord);
             body.querySelector("#mds-export-frames").addEventListener("click", exportFrames);
             body.querySelector("#mds-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
