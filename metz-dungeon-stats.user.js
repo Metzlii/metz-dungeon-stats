@@ -1456,18 +1456,48 @@
         // hidden and the panel sits in its place; clicking any game tab hands the strip back exactly as it was. React may
         // re-render the strip at any time, so an observer re-applies the selection and re-hides a re-rendered panel.
         // -----------------------------------------------------------------------------------------------------------
-        const dock = { strip: null, tab: null, active: false, saved: null, compMo: null, bodyMo: null, timer: null, worked: false, modalTimer: null, hiddenForModal: false };
-        // The game's popups (quest, task, opened loot) are an 80% translucent backdrop over a card with no background, at
-        // z-index 300 inside the header, so whatever is in the game panel shows through them at 20%. The Battle panel
-        // merely dims; a panel of text reads as clutter. While one is open the docked panel steps aside.
-        const modalOpen = () => { for (const el of document.querySelectorAll('[class*="Modal"]')) { if (el === root || root.contains(el)) continue; const c = getComputedStyle(el); if (c.position === "static" || c.opacity === "0" || c.visibility === "hidden" || !(Number(c.zIndex) > 0)) continue; const r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0) return true; } return false; };
-        function modalWatch() {
-            if (!dock.active || !root) return;
-            const open = modalOpen();
-            if (open !== dock.hiddenForModal) { dock.hiddenForModal = open; root.style.visibility = open ? "hidden" : ""; }
+        const dock = { strip: null, tab: null, active: false, saved: null, compMo: null, bodyMo: null, timer: null, worked: false, modalTimer: null };
+        // The game's popups (quest, task, opened loot) are a container at z-index 300 holding a full-screen 80% backdrop and
+        // a card with no background, so whatever sits in the game panel shows through the card at 20%. While one is open
+        // a black backing the exact shape of the card is kept just below the popup (a sibling at z-index 299), so the
+        // panel neither hides nor bleeds; the backdrop still dims the page around the card as the game intends.
+        const BACKING = "data-mds-backing";
+        const isBackdrop = (el, r) => r.width * r.height >= 0.85 * innerWidth * innerHeight || /background|backdrop|overlay/i.test(String(el.className));
+        function modalCards() {
+            const out = [];
+            for (const el of document.querySelectorAll('[class*="Modal"]')) {
+                if (el.hasAttribute(BACKING) || (root && root.contains(el))) continue;
+                const c = getComputedStyle(el); if (c.position === "static" || c.opacity === "0" || c.visibility === "hidden" || !(Number(c.zIndex) > 0)) continue;
+                if (el.parentElement && el.parentElement.closest('[class*="Modal"]')) continue; // the outermost container only
+                const z = Number(c.zIndex);
+                const walk = (node, depth) => {
+                    for (const ch of node.children) {
+                        if (ch.hasAttribute(BACKING)) continue;
+                        const r = ch.getBoundingClientRect(); if (r.width < 40 || r.height < 40) continue;
+                        if (isBackdrop(ch, r)) { if (depth < 3 && ch.children.length && /rgba(0, 0, 0, 0)|transparent/.test(getComputedStyle(ch).backgroundColor)) walk(ch, depth + 1); continue; }
+                        out.push({ container: el, card: ch, rect: r, radius: getComputedStyle(ch).borderRadius, z });
+                    }
+                };
+                walk(el, 0);
+            }
+            return out;
         }
-        function modalWatchStart() { if (!dock.modalTimer) dock.modalTimer = setInterval(modalWatch, 400); modalWatch(); }
-        function modalWatchStop() { if (dock.modalTimer) { clearInterval(dock.modalTimer); dock.modalTimer = null; } if (dock.hiddenForModal) { dock.hiddenForModal = false; if (root) root.style.visibility = ""; } }
+        const backings = new Map(); // card element -> backing div
+        function modalWatch() {
+            if (!dock.active || !root) { modalWatchStop(); return; }
+            const cards = modalCards(); const live = new Set();
+            for (const k of cards) {
+                live.add(k.card);
+                let b = backings.get(k.card);
+                if (!b) { b = document.createElement("div"); b.setAttribute(BACKING, "1"); b.style.cssText = "position:fixed;pointer-events:none;background:#000;"; backings.set(k.card, b); }
+                if (b.parentNode !== k.container.parentNode || b.nextSibling !== k.container) k.container.parentNode.insertBefore(b, k.container);
+                const st = b.style; const L = k.rect.left + "px", T = k.rect.top + "px", W = k.rect.width + "px", H = k.rect.height + "px", Z = String(k.z - 1);
+                if (st.left !== L) st.left = L; if (st.top !== T) st.top = T; if (st.width !== W) st.width = W; if (st.height !== H) st.height = H; if (st.zIndex !== Z) st.zIndex = Z; if (st.borderRadius !== k.radius) st.borderRadius = k.radius;
+            }
+            for (const [card, b] of backings) if (!live.has(card)) { b.remove(); backings.delete(card); }
+        }
+        function modalWatchStart() { if (!dock.modalTimer) dock.modalTimer = setInterval(modalWatch, 150); modalWatch(); }
+        function modalWatchStop() { if (dock.modalTimer) { clearInterval(dock.modalTimer); dock.modalTimer = null; } for (const b of backings.values()) b.remove(); backings.clear(); }
         const STRIP_TABS = ["Combat Zones", "Find Party", "My Party"];
         const tabText = b => { const sp = b.querySelector(".MuiBadge-root") || b; for (const nd of sp.childNodes) if (nd.nodeType === 3 && nd.textContent.trim()) return nd.textContent.trim(); return (sp.textContent || "").trim(); };
         function findStrip() {
