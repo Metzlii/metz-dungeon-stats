@@ -1820,7 +1820,7 @@
             if (S.unknownMs > 0) cards.push(card("Unaccounted", fmtHm(S.unknownMs), ["Runs whose end the chat ledger does not show"]));
             cards.push(
                 card("Spent", fmtCoins(M.spent.total), [`Buys ${fmtCoins(M.spent.buys)}`, `Craft coins ${fmtCoins(M.spent.craftCoins)}`, `Used in runs ${fmtCoins(M.used.total)} at ledger cost`]),
-                card("Loot at open", fmtCoins(M.loot.atOpen), [`${M.loot.opened} Dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid`, M.loot.nestedOpened ? `${M.loot.nestedOpened} Chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : "", `+ ${fmtCoins(M.loot.coins)} Coins`, M.loot.other.opened ? `${M.loot.other.opened} Other box${M.loot.other.opened === 1 ? "" : "es"} not counted` : ""]),
+                card("Loot at open", fmtCoins(M.loot.atOpen), [`${M.loot.opened} Dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid`, M.loot.nestedOpened ? `${M.loot.nestedOpened} Chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : "", `+ ${fmtCoins(M.loot.coins)} Coins`]),
                 card("Sold", fmtCoins(M.sold.loot.net), [`${M.sold.loot.qty} Items`, `${fmtCoins(M.sold.loot.tax)} Tax (${(M.tax.rate * 100).toFixed(1)}%${assumed})`, M.sold.other.net ? `Other sales ${fmtCoins(M.sold.other.net)} not counted` : ""]),
                 card("Net", fmtCoins(M.net), [`Sold ${fmtCoins(M.sold.loot.net)}`, `+ Chest coins ${fmtCoins(M.loot.coins)}`, `− Spent ${fmtCoins(M.spent.total)}`, `Held loot ${fmtCoins(M.heldLoot)} at bid`, `No longer held ${fmtCoins(M.missingLoot)}`, M.reviewRows ? `${M.reviewRows} To review` : ""]),
             );
