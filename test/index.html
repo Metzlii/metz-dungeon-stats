@@ -178,6 +178,12 @@
       { startTime: iso(t0 + 30e3), endTime: iso(t0 + 50e3), characterActionId: 556, actionHrid: "/actions/crafting/pirate_entry_key", difficultyTier: 0, actionCount: 1, partyId: 0, drops: { "/items/pirate_entry_key::0": 1 }, xpGains: { "/skills/crafting": 1071 }, totalActiveMillis: 0 },
     ] });
     await window.__mds.importToolasha("harness"); log("toolasha:", window.__mds.toolasha, "loot log sessions:", window.__mds.state.lootLog.size);
+    // Every tab must render without throwing: a renderer lost in a refactor is caught here, not by the operator.
+    const tabErrors = []; const onErr = e => tabErrors.push(String(e.message || e.reason || e)); window.addEventListener("error", onErr); window.addEventListener("unhandledrejection", onErr);
+    if (!window.__mds.panel.dock().active) window.__mds.panel.show();
+    for (const b of document.querySelectorAll("#mds-root .mds-tabs button[data-tab]")) { b.click(); await sleep(150); const pane = document.querySelector(`#mds-root .mds-pane[data-pane=${b.dataset.tab}]`); if (!pane || pane.hidden || !pane.textContent.trim()) tabErrors.push(`tab ${b.dataset.tab} rendered nothing`); }
+    window.removeEventListener("error", onErr); window.removeEventListener("unhandledrejection", onErr);
+    log(tabErrors.length ? "TAB ERRORS: " + tabErrors.join(" | ") : "all tabs rendered");
     log("done; status:", window.__mds.status());
     document.getElementById("mds-toggle").click();
   }
