@@ -1376,6 +1376,13 @@
 #mds-root .mds-card.mds-dragging{opacity:.5}
 #mds-root .mds-card.mds-drop{box-shadow:0 0 0 2px #45c8d8}
 #mds-root .mds-icon{width:1.35em;height:1.35em;vertical-align:-.3em;margin-right:5px}
+#mds-root .mds-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;margin-bottom:12px}
+#mds-root .mds-tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 6px;background:#1c2a35;border:0;border-radius:8px;box-shadow:0 0 0 1px #3f424d;color:#e6eff3;font:inherit;cursor:pointer;text-align:center}
+#mds-root .mds-tile:hover{box-shadow:0 0 0 1px #45c8d8}
+#mds-root .mds-tile.slotted{box-shadow:0 0 0 1px #45c8d8,inset 0 2px 0 #45c8d8}
+#mds-root .mds-tile .mds-icon{width:2.2em;height:2.2em;margin:0}
+#mds-root .mds-tile strong{font-size:1.07em;font-weight:500;font-variant-numeric:tabular-nums}
+#mds-root .mds-tile small{color:#c5d4de;font-size:.786em;line-height:1.2}
 #mds-root a.mds-link{color:#a9e9f1;text-decoration:none;border-bottom:1px dotted rgba(169,233,241,.5)}
 #mds-root a.mds-link:hover{color:#45c8d8;border-bottom-color:#45c8d8}
 #mds-root .mds-num{width:7em;background:#1c2a35;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:6px;padding:4px 6px;font:inherit}
@@ -1401,7 +1408,7 @@
         // Column switches, every table: a checkbox per column, grouped by tab in Settings. Keyed by the table (its
         // tbody id) and the column's original index; everything on by default except the Runs table's Seen-by.
         const COLS_KEY = PANEL_KEY + "-cols2";
-        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", tbody: "Capture log", consumables: "Consumables", plan: "Key crafting" };
+        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", tbody: "Capture log", plan: "Key crafting" };
         const DEFAULT_OFF = { runs: ["Seen by"] };
         let colVis = {};
         try { colVis = JSON.parse(localStorage.getItem(COLS_KEY) || "{}") || {}; } catch (_e) { colVis = {}; }
@@ -1504,7 +1511,7 @@
  <div class="mds-cards" id="mds-cards"></div>
  <p class="mds-note" id="mds-ovnote"></p>
  <h4>Consumables</h4>
- <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Used</th><th>Held</th><th>Ledger cost</th><th>Used at cost</th></tr></thead><tbody id="mds-consumables"></tbody></table></div>
+ <div class="mds-tiles" id="mds-consumables"></div>
 </div>
 <div class="mds-pane" data-pane="runs" hidden>
  <div class="mds-wrap mds-wrap-runs"><table><thead><tr><th>Start</th><th>Result</th><th>Dungeon</th><th>Run time</th><th>Waves</th><th>Chests</th><th>Keys</th><th>Deaths</th><th>XP</th><th>Seen by</th></tr></thead><tbody id="mds-runs"></tbody></table></div>
@@ -1847,10 +1854,11 @@
                 card("Net", fmtCoins(M.net), [`Sold ${fmtCoins(M.sold.loot.net)}`, `+ Chest coins ${fmtCoins(M.loot.coins)}`, `− Spent ${fmtCoins(M.spent.total)}`, `Held loot ${fmtCoins(M.heldLoot)} at bid`, `No longer held ${fmtCoins(M.missingLoot)}`, M.reviewRows ? `${M.reviewRows} To review` : ""]),
             );
             els["mds-cards"].innerHTML = sortCards("cards", cards).join("");
-            // Consumables: used in the record, or slotted for the current fight. Names open the marketplace.
+            // Consumables as Insight laid them out: icon, quantity held, name; the tile opens the item in the marketplace.
+            // Those slotted for the current fight come first, then by what was used in the record.
             const slotted = new Set(state.battleItems || []);
-            const cons = Object.entries(M.consumables).filter(([h, c]) => c.used > 0 || slotted.has(h)).sort((a, b) => b[1].usedCost - a[1].usedCost);
-            els["mds-consumables"].innerHTML = cons.map(([h, c]) => `<tr><td class="k">${itemLink(h)}${slotted.has(h) ? `<small>slotted</small>` : ""}</td><td>${fmtQ(c.used)}${c.offline ? `<small>${c.offline} offline</small>` : ""}</td><td>${fmtQ(c.held)}</td><td>${coinsOr(c.avg, "?")}</td><td>${fmtCoins(c.usedCost)}${c.unknown ? `<small>${c.unknown} unpriced</small>` : ""}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No consumables used yet.</td></tr>`;
+            const cons = Object.entries(M.consumables).filter(([h, c]) => c.used > 0 || slotted.has(h) || c.held > 0 && isConsumable(h)).sort((a, b) => (slotted.has(b[0]) - slotted.has(a[0])) || (b[1].usedCost - a[1].usedCost) || (b[1].held - a[1].held));
+            els["mds-consumables"].innerHTML = cons.map(([h, c]) => `<button class="mds-tile${slotted.has(h) ? " slotted" : ""}" data-act="market" data-item="${esc(h)}" title="${esc(itemName(h))}: ${fmtQ(c.held)} held · ${fmtQ(c.used)} used in the record${c.avg != null ? ` · ${fmtCoins(c.avg)} each at purchase price` : ""}${slotted.has(h) ? " · slotted now" : ""}. Click to open in the marketplace.">${icon(h)}<strong>${fmtQ(c.held)}</strong><small>${it(h)}</small></button>`).join("") || `<span class="mds-note">No consumables used yet.</span>`;
             const live = sessionsOf().find(e => (ref.dungeons[e.action] || /\/combat\//.test(e.action)) && isRunning(e) && e.end > S.windowStart);
             const check = live ? (() => { const o = recordInSpan(d, live); const t = compareText(o, live, S.windowStart); return t ? ` Game's Loot & XP Log, session since ${fmtTime(live.start)} (read ${fmtTime(state.lootLogAt)}): ${t}.` : ""; })() : "";
             els["mds-ovnote"].textContent = `${check}Since ${fmtTime(S.windowStart)}. A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.${S.open ? " One run is in progress." : ""}`;
