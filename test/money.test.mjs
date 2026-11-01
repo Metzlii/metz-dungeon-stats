@@ -35,7 +35,7 @@ const t0 = performance.now();
 const M = deriveMoney(timeline, {
     recordStart, reviewPct: 0.5,
     isCounted: h => h === "/items/cowbell", isKey: h => keyItems.has(h), isChest: h => chestItems.has(h), isConsumable: h => consumables.has(h), isToken: h => /_token$/.test(h),
-    isOpenable: h => h === "/items/large_treasure_chest" || chestItems.has(h), isTradable: h => !/_token$/.test(h) && h !== "/items/cowbell",
+    isOpenable: h => h === "/items/large_treasure_chest" || chestItems.has(h), isDungeonChest: h => chestItems.has(h), isDungeonLoot: h => h === "/items/large_treasure_chest", isTradable: h => !/_token$/.test(h) && h !== "/items/cowbell",
     held: h => heldMap[h] || 0, listed: () => 0, bidOf: h => (px(h) && px(h).b > 0 ? px(h).b : null), askOf: h => (px(h) && px(h).a > 0 ? px(h).a : null),
     avgOf: h => (ledger[h] && ledger[h].q > 0 ? ledger[h].c / ledger[h].q : null), keyAvg: h => (keyAvg[h] ? keyAvg[h].c / keyAvg[h].q : null),
     keyOf: () => "/items/pirate_entry_key",

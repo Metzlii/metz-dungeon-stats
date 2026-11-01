@@ -144,11 +144,11 @@
     // ---------------------------------------------------------------------------------------------------------------
     // Static reference: dungeons, key recipes, openables, item facts. From init_client_data (message or cache).
     // ---------------------------------------------------------------------------------------------------------------
-    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), realKeys: new Set(), chestItems: {}, items: {}, version: null, source: null };
+    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), realKeys: new Set(), dungeonLoot: new Set(), chestItems: {}, items: {}, version: null, source: null };
 
     function buildRef(data) {
         if (!isObj(data) || !isObj(data.actionDetailMap) || !isObj(data.itemDetailMap)) return false;
-        ref.dungeons = {}; ref.keyActions = {}; ref.keyItems = new Set(); ref.realKeys = new Set(); ref.chestItems = {}; ref.items = {};
+        ref.dungeons = {}; ref.keyActions = {}; ref.keyItems = new Set(); ref.realKeys = new Set(); ref.dungeonLoot = new Set(); ref.chestItems = {}; ref.items = {};
         for (const [hrid, item] of Object.entries(data.itemDetailMap)) {
             ref.items[hrid] = { name: item.name, category: item.categoryHrid, openable: !!item.isOpenable, openKey: item.openKeyItemHrid || null, tradable: item.isTradable !== false && !(item.isOpenable && item.openKeyItemHrid === undefined && false), sellPrice: num(item.sellPrice) };
             if (item.categoryHrid === "/item_categories/dungeon_key") ref.keyItems.add(hrid);
@@ -167,6 +167,7 @@
         }
         for (const [hrid, item] of Object.entries(data.itemDetailMap)) if (item.isOpenable && item.openKeyItemHrid && !ref.chestItems[hrid]) ref.chestItems[hrid] = { zone: null, key: item.openKeyItemHrid };
         Object.entries(ref.dungeons).sort((a, b) => a[1].sortIndex - b[1].sortIndex).forEach(([, dg], i) => { dg.index = i + 1; });
+        ref.dungeonLoot = new Set(); for (const [chest, c] of Object.entries(ref.chestItems)) if (c.zone) for (const d of ((data.openableLootDropMap || {})[chest] || [])) if (d && d.itemHrid) ref.dungeonLoot.add(d.itemHrid);
         ref.realKeys = new Set([...Object.values(ref.dungeons).map(d => d.keyItem), ...Object.values(ref.chestItems).map(c => c.key)].filter(Boolean));
         ref.version = data.gameVersion || null;
         ref.ready = Object.keys(ref.dungeons).length > 0;
@@ -1159,9 +1160,21 @@
         const lotExact = kc => !!kc && kc.unitCost != null && !/ask|unknown/.test(String(kc.basis || ""));
         // Chests opened: value at bid when opened, coins, the key each opening consumed, items only counted.
         const gained = {}, chestBy = {};
+        // An opening is dungeon loot when it is a dungeon chest or a container a dungeon chest can drop (the game's drop
+        // tables: a Large Treasure Chest counts wherever it was opened, since it is a large part of a Pirate Chest's
+        // value). A box no dungeon chest drops (a task reward and the crates inside it) goes to "other boxes", out of
+        // the loot and the net.
+        const other = { opened: 0, value: 0, coins: 0, kinds: {} }; const otherIds = new Set();
         for (const o of opens) {
-            const cb = bump(chestBy, o.chest, () => ({ opened: 0, value: 0, coins: 0, keyCost: 0, keyBasis: {}, counted: {}, keyItem: o.keyItem || null }));
-            const cnt = n(o.count) || 1; cb.opened += cnt; cb.coins += n(o.coinsGained);
+            const cnt = n(o.count) || 1;
+            const derived = (X.isDungeonChest ? X.isDungeonChest(o.chest) : X.isChest(o.chest)) || (X.isDungeonLoot ? X.isDungeonLoot(o.chest) : false);
+            if (!derived) {
+                other.opened += cnt; other.coins += n(o.coinsGained); other.kinds[o.chest] = (other.kinds[o.chest] || 0) + cnt; otherIds.add(o.id);
+                for (const g of (o.gains || [])) if (g.item !== "/items/coin" && !(g.counted || X.isCounted(g.item)) && n(g.bid) > 0) other.value += g.bid * n(g.qty);
+                continue;
+            }
+            const cb = bump(chestBy, o.chest, () => ({ opened: 0, value: 0, coins: 0, keyCost: 0, keyBasis: {}, counted: {}, keyItem: o.keyItem || null, dungeon: X.isDungeonChest ? X.isDungeonChest(o.chest) : X.isChest(o.chest) }));
+            cb.opened += cnt; cb.coins += n(o.coinsGained);
             if (lotExact(o.keyCost)) { cb.keyCost += o.keyCost.unitCost * cnt; cb.keyExact = (cb.keyExact || 0) + cnt; cb.keyBasis[o.keyCost.basis || "?"] = (cb.keyBasis[o.keyCost.basis || "?"] || 0) + cnt; } else cb.keyPending = (cb.keyPending || 0) + cnt;
             let v = 0;
             for (const g of (o.gains || [])) {
@@ -1178,7 +1191,7 @@
         let revalued = 0;
         for (const [chest, cb] of Object.entries(chestBy)) { const gi = gained[chest]; if (!gi) continue; const avgBid = gi.priced ? gi.value / gi.priced : 0; const opened = Math.min(cb.opened, gi.qty); gi.opened = cb.opened; revalued += avgBid * opened; }
         const chestValue = Object.values(chestBy).reduce((s, c) => s + c.value, 0), chestCoins = Object.values(chestBy).reduce((s, c) => s + c.coins, 0);
-        const loot = { atOpen: chestValue - revalued, atOpenRaw: chestValue, revalued, coins: chestCoins, opened: Object.values(chestBy).reduce((s, c) => s + c.opened, 0) };
+        const loot = { atOpen: chestValue - revalued, atOpenRaw: chestValue, revalued, coins: chestCoins, opened: Object.values(chestBy).filter(c => c.dungeon).reduce((s, c) => s + c.opened, 0), nestedOpened: Object.values(chestBy).filter(c => !c.dungeon).reduce((s, c) => s + c.opened, 0), other, otherIds };
         // Redemptions: tokens out, items in. What came in is dungeon loot too.
         const tokens = {};
         for (const [item, gi] of Object.entries(gained)) if (X.isToken(item)) { const t = bump(tokens, item, () => ({ gained: 0, redeemed: 0, received: {} })); t.gained += gi.qty; }
@@ -1453,7 +1466,7 @@
         const isToken = h => /_token$/.test(h);
         const moneyCtx = () => ({
             recordStart: state.meta.recordStart || 0, reviewPct: 0.5,
-            isCounted, isKey: h => ref.keyItems.has(h), isChest: h => !!ref.chestItems[h], isConsumable, isToken,
+            isCounted, isKey: h => ref.keyItems.has(h), isChest: h => !!ref.chestItems[h], isDungeonChest: h => !!(ref.chestItems[h] && ref.chestItems[h].zone), isDungeonLoot: h => ref.dungeonLoot.has(h), isConsumable, isToken,
             isOpenable: h => !!(ref.items[h] && ref.items[h].openable), isTradable: h => !(ref.items[h] && ref.items[h].tradable === false),
             held: h => held(h, 0), listed: h => listedQty(h, 0), bidOf, askOf, avgOf: ledgerAvg, keyAvg: keyAverage,
             keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, keyRecipes: ref.keyActions, artisanOf, consumeTotals: state.consumeTotals,
@@ -1806,7 +1819,7 @@
             const M = getMoney();
             cards.push(
                 card("Spent", fmtCoins(M.spent.total), `buys ${fmtCoins(M.spent.buys)} · craft coins ${fmtCoins(M.spent.craftCoins)} · used in runs ${fmtCoins(M.used.total)} at ledger cost`),
-                card("Loot at open", fmtCoins(M.loot.atOpen), `${M.loot.opened} chests opened, at bid · + ${fmtCoins(M.loot.coins)} coins from chests${M.loot.revalued ? " · containers re-valued at their contents" : ""}`),
+                card("Loot at open", fmtCoins(M.loot.atOpen), `${M.loot.opened} dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid${M.loot.nestedOpened ? ` · ${M.loot.nestedOpened} chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : ""} · + ${fmtCoins(M.loot.coins)} coins${M.loot.other.opened ? ` · ${M.loot.other.opened} other box${M.loot.other.opened === 1 ? "" : "es"} not counted` : ""}`),
                 card("Sold", fmtCoins(M.sold.loot.net), `${M.sold.loot.qty} items · ${fmtCoins(M.sold.loot.tax)} tax (${(M.tax.rate * 100).toFixed(1)}%${M.tax.measured ? "" : " assumed"})${M.sold.other.net ? ` · other sales ${fmtCoins(M.sold.other.net)} not counted` : ""}`),
                 card("Net", fmtCoins(M.net), `sold + chest coins − spent · held loot ${fmtCoins(M.heldLoot)} at bid · no longer held ${fmtCoins(M.missingLoot)}${M.reviewRows ? ` · ${M.reviewRows} to review` : ""}`),
             );
@@ -1905,11 +1918,12 @@
         }
         function renderChests() {
             const M = getMoney();
-            const cards = Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(it(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`));
+            const otherCard = M.loot.other.opened ? [card("Other boxes (not dungeon loot)", M.loot.other.opened, `${Object.entries(M.loot.other.kinds).map(([h, q]) => `${q} ${it(h)}`).join(" · ")} · value at bid ${fmtCoins(M.loot.other.value)}${M.loot.other.coins ? ` · coins ${fmtCoins(M.loot.other.coins)}` : ""} · kept out of the loot and the net`)] : [];
+            const cards = otherCard.concat(Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(it(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`)));
             const bag = Object.keys(ref.chestItems).map(h => [h, held(h, 0)]).filter(([, q]) => q > 0);
             els["mds-chestcards"].innerHTML = sortCards("chestcards", [...cards, ...(bag.length ? [card("In the bag now", bag.reduce((a, [, q]) => a + q, 0), bag.map(([h, q]) => `${q} ${it(h)}`).join(" · "))] : [])]).join("");
             const opens = state.timeline.filter(e => e.kind === "open" && e.at >= (state.meta.recordStart || 0)).slice(-300).reverse();
-            els["mds-chests"].innerHTML = opens.map(ev => `<tr><td class="t">${fmtTime(ev.at)}</td><td class="k">${it(ev.chest)}</td><td>${ev.count}</td><td class="d">${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}${(g.counted || isCounted(g.item)) ? " (counted)" : (g.item !== "/items/coin" && !g.bid) ? " (no bid)" : ""}`).join(", ")}</td><td>${fmtCoins((ev.gains || []).filter(g => g.item !== "/items/coin" && !g.counted && !isCounted(g.item)).reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0))}</td><td>${ev.coinsGained ? fmtCoins(ev.coinsGained) : "–"}</td><td>${ev.keyCost && ev.keyCost.unitCost != null ? `${fmtCoins(ev.keyCost.unitCost * ev.count)}<small> ${esc(ev.keyCost.basis || "")}</small>` : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">No chest opened yet.</td></tr>`;
+            els["mds-chests"].innerHTML = opens.map(ev => `<tr class="${M.loot.otherIds.has(ev.id) ? "cancelled" : ""}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${it(ev.chest)}${M.loot.otherIds.has(ev.id) ? "<small>not dungeon loot</small>" : ""}</td><td>${ev.count}</td><td class="d">${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}${(g.counted || isCounted(g.item)) ? " (counted)" : (g.item !== "/items/coin" && !g.bid) ? " (no bid)" : ""}`).join(", ")}</td><td>${fmtCoins((ev.gains || []).filter(g => g.item !== "/items/coin" && !g.counted && !isCounted(g.item)).reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0))}</td><td>${ev.coinsGained ? fmtCoins(ev.coinsGained) : "–"}</td><td>${ev.keyCost && ev.keyCost.unitCost != null ? `${fmtCoins(ev.keyCost.unitCost * ev.count)}<small> ${esc(ev.keyCost.basis || "")}</small>` : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">No chest opened yet.</td></tr>`;
             els["mds-chestsnote"].textContent = "Newest first. Value at bid = each item's highest bid when the chest was opened; counted items (cowbells) and unpriced items carry no value. Key cost = the chest key's lot cost; a basis of ask means the key was held before the record began.";
         }
         // Sessions the game logged (dungeons and key crafts), newest first, beside what this record counted in the
