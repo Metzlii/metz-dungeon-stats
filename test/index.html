@@ -64,9 +64,11 @@
     // A buy order fill: 100 arcane lumber at 2000.
     feed({ type: "market_listings_updated", endMarketListings: [{ id: 9001, characterID: CH, status: "/market_listing_status/filled", isSell: false, itemHrid: "/items/arcane_lumber", enhancementLevel: 0, orderQuantity: 100, filledQuantity: 100, price: 2000, taxTaken: 0, unclaimedItemCount: 100, unclaimedCoinCount: 0, createdTimestamp: iso(t0 + 1000) }], endCharacterItems: [add("/items/coin", -200000)] });
     feed({ type: "items_updated", endCharacterItems: [add("/items/arcane_lumber", 100)] });
-    // An instant buy: 50 redwood lumber, paid 76,000 coins.
-    window.__mds.feedOut({ type: "post_market_order", postMarketOrderData: { itemHrid: "/items/redwood_lumber", enhancementLevel: 0, quantity: 50, isSell: false, isInstantOrder: true } });
+    // An instant buy: 50 redwood lumber at 1,520. The game answers an instant order with the item rows and then a
+    // filled listing of its own (confirmed 2026-11-01), so the price comes from the listing.
+    window.__mds.feedOut({ type: "post_market_order", postMarketOrderData: { itemHrid: "/items/redwood_lumber", enhancementLevel: 0, quantity: 50, price: 1520, isSell: false, isInstantOrder: true } });
     feed({ type: "items_updated", endCharacterItems: [add("/items/coin", -76000), add("/items/redwood_lumber", 50)] });
+    feed({ type: "market_listings_updated", endMarketListings: [{ id: 9002, characterID: CH, status: "/market_listing_status/filled", isSell: false, itemHrid: "/items/redwood_lumber", enhancementLevel: 0, orderQuantity: 50, filledQuantity: 50, price: 1520, taxTaken: 0, unclaimedItemCount: 0, unclaimedCoinCount: 0, createdTimestamp: iso(Date.now()) }] });
     // Two key crafts (the first sets the cursor).
     const craft = (count) => ({ type: "action_completed", endCharacterAction: { id: 777, characterID: CH, partyID: 0, actionHrid: "/actions/crafting/pirate_entry_key", currentCount: count, wave: 0, isDone: false, updatedAt: iso(Date.now()) }, endCharacterItems: [add("/items/arcane_lumber", -100), add("/items/redwood_lumber", -100), add("/items/coin", -300000), add("/items/pirate_entry_key", 1)], endCharacterSkills: [{ skillHrid: "/skills/crafting", experience: 500000 + 600 * count, level: 80 }] });
     feed(craft(1)); feed(craft(2));
@@ -83,11 +85,15 @@
     await sleep(200);
     feed(waveDone(65, [add("/items/pirate_chest", 1), set("/items/pirate_refinement_chest", 1), add("/items/pirate_entry_key", -1)], [{ skillHrid: "/skills/attack", experience: 1050000, level: 100 }, { skillHrid: "/skills/magic", experience: 2080000, level: 110 }]));
     log("run 1 fed (clear)");
-    // Run 2: fail on wave 30 (wave 1 again under the same battleId).
+    // Run 2: fail on wave 30 (wave 1 again under the same battleId). The game posts a key count at every run start,
+    // and again when the party restarts after a fail.
+    let chatId = 1000;
+    const keyCount = (n) => feed({ type: "chat_message_received", message: { id: ++chatId, chan: "/chat_channel_types/party", t: iso(Date.now()), m: "systemChatMessage.partyKeyCount", isSystemMessage: true, systemMetadata: JSON.stringify({ keyCountString: `[Metzli - ${n}], [Dripyy - 3]` }) } });
+    keyCount(13);
     feed(party(101, 1)); for (let w = 1; w <= 29; w++) { feed(waveDone(w)); feed(party(101, w + 1)); }
     await sleep(150);
     feed({ type: "chat_message_received", message: { id: 3, chan: "/chat_channel_types/party", t: iso(Date.now()), m: "systemChatMessage.partyWaveFailed", isSystemMessage: true, systemMetadata: JSON.stringify({ wave: 30 }) } });
-    feed(party(101, 1));
+    feed(party(101, 1)); keyCount(13);
     log("run 2 fed (fail)");
     // Chest openings: the captured large treasure chest sample, then two pirate chests.
     const samples = await realFetch("/metz-dungeon-stats/test/fixtures/samples.json").then(r => r.json());

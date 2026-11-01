@@ -14,7 +14,9 @@ The script reads the game's WebSocket and writes to IndexedDB in your browser. I
 
 ## Status
 
-Milestone 1 of [docs/design.md](docs/design.md): capture and record. The panel (button bottom left, "Dungeon Stats") shows every event the script derived, newest first, with the game message it came from, and exports the record and the retained raw frames as JSON.
+Milestones 1 and 2 of [docs/design.md](docs/design.md): capture and record; runs and time. The panel (button bottom left, "Dungeon Stats") has three tabs: **Overview** (clears, fails, average run time, chests, keys charged, time in dungeons and between runs), **Runs** (every run newest first, with offline blocks from the login summary), and **Data** (every event the script derived, with the game message it came from, plus export of the record and the retained raw frames). Runs are timed from one party key-count message to the next, the way Toolasha counts them, so runs made while offline count too.
+
+`node test/derive.test.mjs <record.json>` runs the derivation over an exported record and prints what the two tabs would show.
 
 ## Replay harness
 
