@@ -721,6 +721,7 @@
             if (!e.first && source === "game" && Math.abs(e.end - serverNow()) < 15e3) e.first = { at: serverNow(), count: e.count, drops: { ...e.drops }, xp: { ...e.xp } };
             const fresher = !prev || e.end > prev.end || e.count > prev.count || (e.end === prev.end && JSON.stringify(e.drops) !== JSON.stringify(prev.drops)) || (!prev.first && e.first);
             if (!fresher) continue;
+            e.readAt = serverNow(); // a running session carries the time of the read as its end
             e.source = [...new Set(`${prev ? prev.source + "+" : ""}${source}`.split("+").filter(Boolean))].join("+");
             state.lootLog.set(e.id, e); changed++;
         }
@@ -1812,7 +1813,7 @@
         // Sessions the game logged (dungeons and key crafts), newest first, beside what this record counted in the
         // same span: clears from the runs, chests from the clears plus offline blocks inside it.
         const sessionsOf = () => [...state.lootLog.values()].filter(e => ref.dungeons[e.action] || ref.keyActions[e.action] || /\/combat\//.test(e.action)).sort((a, b) => b.start - a.start);
-        const isRunning = e => Math.abs(e.end - state.lootLogAt) < 15e3; // the game stamps a running session's end with the time of the read
+        const isRunning = e => !!e.readAt && Math.abs(e.end - e.readAt) < 15e3; // the game stamps a running session's end with the time of the read
         const chestDrops = drops => Object.entries(drops || {}).filter(([h]) => ref.chestItems[h.split("::")[0]]).reduce((s, [, q]) => s + q, 0);
         function recordInSpan(d, e) {
             if (e.end <= d.summary.windowStart) return null;
@@ -1828,9 +1829,12 @@
         }
         const compareText = (o, e, windowStart) => {
             if (!o) return null;
-            if (o.sinceRead) return `since read ${fmtClock(o.sinceRead)}: game +${o.gameClears} clears, +${o.gameChests} chests · record +${o.clears} clears, +${o.chests} chests${o.clears === o.gameClears && o.chests === o.gameChests ? "" : " ≠"}`;
-            if (e.start < windowStart) return `${o.clears} clears · ${o.chests} chests from record start (game total ${o.gameClears}; open the log while a session runs for an exact comparison)`;
-            return `${o.clears} clears${o.clears === o.gameClears ? "" : " ≠"} · ${o.chests} chests${o.chests === o.gameChests ? "" : " ≠"}`;
+            const same = o.clears === o.gameClears && o.chests === o.gameChests;
+            const mine = `${o.clears} clears, ${o.chests} chests`;
+            const theirs = same ? " ✓" : ` ≠ game ${o.gameClears}, ${o.gameChests}`;
+            if (o.sinceRead) return `${mine} since ${fmtClock(o.sinceRead)}${theirs}`;
+            if (e.start < windowStart) return `${mine} from record start`;
+            return `${mine}${theirs}`;
         };
         function renderSessions(d) {
             const list = sessionsOf().slice(0, 60);
@@ -1845,7 +1849,7 @@
                 const ours = dungeon ? recordInSpan(d, e) : null;
                 const text = compareText(ours, e, d.summary.windowStart);
                 const off = ours && text && /≠/.test(text) && !isRunning(e);
-                return `<tr class="${off ? "review" : ""}"><td class="t">${fmtTime(e.start)}</td><td class="t">${isRunning(e) ? "running" : fmtTime(e.end)}</td><td class="k">${esc(shortAction(e.action))}${e.tier ? ` T${e.tier}` : ""}</td><td>${e.count}${dungeon ? " clears" : " crafts"}</td><td class="d">${drops}</td><td>${fmtCoins(xpSumAll(e.xp))}</td><td>${text || (dungeon ? "before this record" : "–")}</td><td class="t">${esc(e.source || "")}</td></tr>`;
+                return `<tr class="${off ? "review" : ""}"><td class="t">${fmtTime(e.start)}</td><td class="t">${isRunning(e) ? (serverNow() - e.readAt > 600e3 ? `running at ${fmtClock(e.readAt)}` : "running") : fmtTime(e.end)}</td><td class="k">${esc(shortAction(e.action))}${e.tier ? ` T${e.tier}` : ""}</td><td>${e.count}${dungeon ? " clears" : " crafts"}</td><td class="d">${drops}</td><td>${fmtCoins(xpSumAll(e.xp))}</td><td>${text || (dungeon ? "before this record" : "–")}</td><td class="t">${esc(e.source || "")}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="t">Open the game's Loot &amp; XP Log once (Moo Pass) and its sessions appear here; Toolasha's saved history is merged at login.</td></tr>`;
             els["mds-sessionsnote"].textContent = "The game's own log, one row per action session: its count (dungeon clears, or keys crafted), its drops and XP, offline included. \"This record\" counts the clears and chests this record has for the same span; ≠ marks a difference, highlighted once the session is over. The game's count is the reference; this record only adds times and costs the log does not have.";
         }
