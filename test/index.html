@@ -145,8 +145,10 @@
     const party = (bid, wave) => ({ type: "new_battle", combatStartTime: iso(t0), battleId: bid, wave, players: [
       { character: { id: CH, name: NAME }, deathCount: 0, combatConsumables: [{ itemHrid: "/items/dragon_fruit_yogurt", count: inv.get("/items/dragon_fruit_yogurt") }], totalSkillExperienceMap: { "/skills/attack": 1000 * wave }, totalLootMap: {} },
       { character: { id: 2, name: "Dripyy" }, deathCount: 0 }], monsters: [] });
-    const waveDone = (wave, items, xp) => ({ type: "action_completed", endCharacterAction: { id: 555, characterID: CH, partyID: 1, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, currentCount: wave === 65 ? 1 : 0, wave, isDone: false, updatedAt: iso(Date.now()) }, endCharacterItems: items || [], endCharacterSkills: xp || [], endCharacterAbilities: [] });
+    const waveDone = (wave, items, xp) => ({ type: "action_completed", endCharacterAction: { id: 555, characterID: CH, partyID: 1, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, currentCount: wave === 65 ? 1 : 0, wave, isDone: false, updatedAt: iso(Date.now()) }, endCharacterItems: items || [], endCharacterSkills: xp || [{ skillHrid: "/skills/attack", experience: xpBase + 700 * wave, level: 100 }], endCharacterAbilities: [] });
+    let xpBase = 1000000;
     feed({ type: "chat_message_received", message: { id: 2, chan: "/chat_channel_types/party", t: iso(Date.now()), m: "systemChatMessage.partyKeyCount", isSystemMessage: true, systemMetadata: JSON.stringify({ keyCountString: "[Metzli - 14], [Dripyy - 3]" }) } });
+    window.__mds.xp.start(); log("xp session started");
     feed(party(100, 1));
     for (let w = 1; w <= 64; w++) { if (w % 10 === 0) { feed({ type: "items_updated", endCharacterItems: [add("/items/dragon_fruit_yogurt", -2)] }); } feed(waveDone(w)); feed(party(100, w + 1)); }
     await sleep(200);
@@ -156,7 +158,7 @@
     // and again when the party restarts after a fail.
     let chatId = 1000;
     const keyCount = (n) => feed({ type: "chat_message_received", message: { id: ++chatId, chan: "/chat_channel_types/party", t: iso(Date.now()), m: "systemChatMessage.partyKeyCount", isSystemMessage: true, systemMetadata: JSON.stringify({ keyCountString: `[Metzli - ${n}], [Dripyy - 3]` }) } });
-    keyCount(13);
+    keyCount(13); xpBase = 1060000;
     feed(party(101, 1)); for (let w = 1; w <= 29; w++) { feed(waveDone(w)); feed(party(101, w + 1)); }
     await sleep(150);
     feed({ type: "chat_message_received", message: { id: 3, chan: "/chat_channel_types/party", t: iso(Date.now()), m: "systemChatMessage.partyWaveFailed", isSystemMessage: true, systemMetadata: JSON.stringify({ wave: 30 }) } });
@@ -184,6 +186,7 @@
     ] });
     await window.__mds.importToolasha("harness"); log("toolasha:", window.__mds.toolasha, "loot log sessions:", window.__mds.state.lootLog.size);
     // Every tab must render without throwing: a renderer lost in a refactor is caught here, not by the operator.
+    { const X = window.__mds.xp.state(); const c = X.current; log("xp:", JSON.stringify({ total: c ? window.__mds.xp.total(c) : null, ticks: c && c.ticks, activeMs: c && c.activeMs, skills: c && Object.keys(c.bySkill), past: X.sessions.length, offlineBlocks: X.offline.length })); }
     const tabErrors = []; const onErr = e => tabErrors.push(String(e.message || e.reason || e)); window.addEventListener("error", onErr); window.addEventListener("unhandledrejection", onErr);
     if (!window.__mds.panel.dock().active) window.__mds.panel.show();
     for (const b of document.querySelectorAll("#mds-root .mds-tabs button[data-tab]")) { b.click(); await sleep(150); const pane = document.querySelector(`#mds-root .mds-pane[data-pane=${b.dataset.tab}]`); if (!pane || pane.hidden || !pane.textContent.trim()) tabErrors.push(`tab ${b.dataset.tab} rendered nothing`); }

@@ -144,7 +144,7 @@
     // ---------------------------------------------------------------------------------------------------------------
     // Static reference: dungeons, key recipes, openables, item facts. From init_client_data (message or cache).
     // ---------------------------------------------------------------------------------------------------------------
-    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), realKeys: new Set(), dungeonLoot: new Set(), chestItems: {}, items: {}, tokenShop: {}, version: null, source: null };
+    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), realKeys: new Set(), dungeonLoot: new Set(), chestItems: {}, items: {}, tokenShop: {}, skills: {}, version: null, source: null };
 
     function buildRef(data) {
         if (!isObj(data) || !isObj(data.actionDetailMap) || !isObj(data.itemDetailMap)) return false;
@@ -175,6 +175,7 @@
             const costs = Array.isArray(entry.costs) ? entry.costs : []; if (costs.length !== 1 || !/_token$/.test(costs[0].itemHrid || "") || !(num(costs[0].count) > 0)) continue;
             (ref.tokenShop[costs[0].itemHrid] = ref.tokenShop[costs[0].itemHrid] || []).push({ item: entry.itemHrid, tokens: num(costs[0].count), count: num(entry.count) || 1, shop: entry.hrid, category: entry.category || null });
         }
+        ref.skills = {}; for (const [hrid, sk] of Object.entries(data.skillDetailMap || {})) if (hrid !== "/skills/total_level") ref.skills[hrid] = { name: sk.name || hrid.split("/").pop(), sortIndex: num(sk.sortIndex), combat: !!sk.isCombat };
         ref.version = data.gameVersion || null;
         ref.ready = Object.keys(ref.dungeons).length > 0;
         return ref.ready;
@@ -407,6 +408,49 @@
         return deltas;
     }
     const xpSnapshot = () => ({ ...state.lifetimeXp });
+
+    // XP tracker (milestone 4, modelled on Insight's): one session at a time with Start, Pause, Reset. It is fed by
+    // the lifetime XP deltas the game sends (every combat action_completed carries endCharacterSkills, one per wave,
+    // and every skilling action too), so one source covers everything and nothing is counted twice. Active time
+    // grows between ticks; a gap of more than 15 minutes between ticks does not count. Offline XP from the login
+    // summary joins the session when it was live within 15 minutes of the logout, else it is kept as a block of its
+    // own. The current session and the last 50 past sessions live in the record's meta under "xp".
+    const XP_GAP_MS = 15 * 60e3, XP_KEEP = 50, XP_OFFLINE_KEEP = 30;
+    function xpState() {
+        if (!state.xp) { const m = state.meta && isObj(state.meta.xp) ? state.meta.xp : null; state.xp = { current: m && isObj(m.current) ? m.current : null, sessions: m && Array.isArray(m.sessions) ? m.sessions : [], offline: m && Array.isArray(m.offline) ? m.offline : [] }; }
+        return state.xp;
+    }
+    function xpSave() { if (state.record && state.ready) state.record.queue("meta", { key: "xp", value: xpState() }); }
+    function xpAdvance(sess, at) { if (sess.paused) return; const gap = at - sess.lastTickAt; if (gap > 0 && gap <= XP_GAP_MS) sess.activeMs += gap; if (at > sess.lastTickAt) sess.lastTickAt = at; }
+    function xpTotal(sess) { return Object.values(sess && sess.bySkill || {}).reduce((a, v) => a + v, 0); }
+    function xpElapsed(sess, now) { if (!sess) return 0; if (sess.paused) return sess.activeMs; const gap = now - sess.lastTickAt; return sess.activeMs + (gap > 0 && gap <= XP_GAP_MS ? gap : 0); }
+    function xpStart(at) {
+        const X = xpState(); at = at || serverNow();
+        if (X.current && X.current.paused) { X.current.paused = false; X.current.pausedAt = null; X.current.lastTickAt = at; }
+        else if (!X.current) X.current = { id: newId(), startedAt: at, endedAt: null, paused: false, pausedAt: null, activeMs: 0, lastTickAt: at, bySkill: {}, ticks: 0, offlineMs: 0, offlineXp: 0 };
+        xpSave(); return X.current;
+    }
+    function xpPause(at) { const X = xpState(); const sess = X.current; if (!sess || sess.paused) return sess; at = at || serverNow(); xpAdvance(sess, at); sess.paused = true; sess.pausedAt = at; xpSave(); return sess; }
+    function xpReset(at) {
+        const X = xpState(); const sess = X.current; at = at || serverNow();
+        if (sess) { xpAdvance(sess, at); sess.endedAt = at; if (xpTotal(sess) > 0) { X.sessions.unshift(sess); if (X.sessions.length > XP_KEEP) X.sessions.length = XP_KEEP; } }
+        X.current = null; xpSave();
+    }
+    function xpTick(deltas, at) {
+        const sess = xpState().current; if (!sess || sess.paused) return;
+        let any = false; for (const [k, v] of Object.entries(deltas)) if (v > 0 && k !== "/skills/total_level") { sess.bySkill[k] = (sess.bySkill[k] || 0) + v; any = true; }
+        if (!any) return;
+        xpAdvance(sess, at || serverNow()); sess.ticks++; xpSave();
+    }
+    function xpOffline(from, to, bySkill) {
+        const X = xpState(); const total = Object.values(bySkill || {}).reduce((a, v) => a + v, 0); if (!(total > 0) || !from || !(to > from)) return;
+        const sess = X.current;
+        if (sess && !sess.paused && from - sess.lastTickAt <= XP_GAP_MS) {
+            for (const [k, v] of Object.entries(bySkill)) if (v > 0) sess.bySkill[k] = (sess.bySkill[k] || 0) + v;
+            sess.activeMs += to - from; sess.offlineMs += to - from; sess.offlineXp += total; if (to > sess.lastTickAt) sess.lastTickAt = to;
+        } else { X.offline.unshift({ id: newId(), from, to, bySkill, total }); if (X.offline.length > XP_OFFLINE_KEEP) X.offline.length = XP_OFFLINE_KEEP; }
+        xpSave();
+    }
     function xpDelta(from, to) { const out = {}; for (const [k, v] of Object.entries(to)) { const d = v - (from[k] || 0); if (d > 0) out[k] = Math.round(d * 10) / 10; } return out; }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -471,6 +515,7 @@
         const a = m.endCharacterAction || {};
         const at = parseServerTime(a.updatedAt) || serverNow();
         const xpDeltas = applySkills(m.endCharacterSkills);
+        if (Object.keys(xpDeltas).length) xpTick(xpDeltas, at);
         const diffs = applyRows(m.endCharacterItems, false);
         if (a.id != null) { if (a.isDone) queue.actions.delete(a.id); else queue.actions.set(a.id, a); }
         if (ref.keyActions[a.actionHrid]) return onKeyCraft(m, a, diffs, at);
@@ -678,7 +723,9 @@
         if ((offItems && offItems.length) || (offSkills && offSkills.length && from && to - from >= 60000)) {
             // Consumables used while away leave the purchase ledger here, at the average they were bought at.
             const offRows = offItems ? offItems.map(r => { const row = { item: r.itemHrid, level: num(r.enhancementLevel), delta: num(r.offlineCount), raw: r.count }; if (row.delta < 0 && isConsumable(row.item)) { const t = ledgerTake(row.item, -row.delta); row.unitCost = t.covered === -row.delta ? t.avg : null; row.covered = t.covered; } return row; }) : [];
-            emit("offline", { from, to, loginAt, horizon, items: offRows, xpBySkill: offSkills ? Object.fromEntries(offSkills.map(r => [r.skillHrid, num(r.offlineExperience)])) : {}, keys: Object.keys(m).filter(k => /offline/i.test(k)) }, "init_character_data");
+            const offXp = offSkills ? Object.fromEntries(offSkills.filter(r => isObj(r) && r.skillHrid && r.skillHrid !== "/skills/total_level").map(r => [r.skillHrid, num(r.offlineExperience)])) : {};
+            if (from && Object.keys(offXp).length) xpOffline(from, to, offXp);
+            emit("offline", { from, to, loginAt, horizon, items: offRows, xpBySkill: offXp, keys: Object.keys(m).filter(k => /offline/i.test(k)) }, "init_character_data");
         }
         // Party chat replay.
         const chat = m.partyChatHistory || (m.chatHistoryByChannelMap && m.chatHistoryByChannelMap["/chat_channel_types/party"]);
@@ -868,6 +915,7 @@
             state.meta = {}; for (const r of metaRows) state.meta[r.key] = r.value !== undefined ? r.value : r;
             if (state.meta.ledger) restoreLedger(state.meta.ledger);
             if (isObj(state.meta.artisan)) state.artisan = state.meta.artisan;
+            state.xp = null; xpState();
             state.marketHistory = new Map(); for (const l of (Array.isArray(state.meta.marketHistory) ? state.meta.marketHistory : [])) if (l && l.id != null) state.marketHistory.set(l.id, l);
             state.lootLog = new Map(); for (const e of (Array.isArray(state.meta.lootLog) ? state.meta.lootLog : [])) if (e && e.id != null) { e.source = [...new Set(String(e.source || "").split("+").filter(Boolean))].join("+"); state.lootLog.set(e.id, e); } state.lootLogRev++;
             state.lastChatAt = num(state.meta.lastChatAt);
@@ -904,7 +952,7 @@
                 case "action_completed": onActionCompleted(m); break;
                 case "actions_updated": applyActions(m.endCharacterActions); if (state.run && !currentDungeonZone()) closeRun("stop", { reason: "dungeon action removed from the queue" }, "actions_updated"); break;
                 case "items_updated": { const diffs = applyRows(m.endCharacterItems, false); if (diffs.length) onInventoryDiffs(diffs, "items_updated", m); break; }
-                case "skills_updated": { const d = applySkills(m.endCharacterSkills); if (Object.keys(d).length) noteSkillingXp(d, null, serverNow()); break; }
+                case "skills_updated": { const d = applySkills(m.endCharacterSkills); if (Object.keys(d).length) { xpTick(d, serverNow()); noteSkillingXp(d, null, serverNow()); } break; }
                 case "loot_opened": onLootOpened(m); break;
                 case "loot_log_updated": onLootLog(m); break;
                 case "consumable_buffs_updated": case "action_type_consumable_slots_updated": noteBuffs(m); break;
@@ -1431,7 +1479,7 @@
         const els = {};
         let derived = null, derivedAt = 0, derivedRev = -1, bannerDismissed = false;
         const KINDS = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
-        const TABS = [["overview", "Overview"], ["runs", "Runs"], ["keys", "Keys"], ["loot", "Loot"], ["chests", "Chests"], ["lifetime", "Lifetime"], ["data", "Data"], ["settings", "Settings"]];
+        const TABS = [["overview", "Overview"], ["runs", "Runs"], ["keys", "Keys"], ["loot", "Loot"], ["chests", "Chests"], ["lifetime", "Lifetime"], ["xp", "XP"], ["data", "Data"], ["settings", "Settings"]];
         // Text size: every size in the panel is in em of the root, so one font-size scales it all. Saved per browser.
         const SCALE_KEY = PANEL_KEY + "-scale", BASE_PX = 14;
         let scale = 1;
@@ -1440,7 +1488,7 @@
         // Column switches, every table: a checkbox per column, grouped by tab in Settings. Keyed by the table (its
         // tbody id) and the column's original index; everything on by default except the Runs table's Seen-by.
         const COLS_KEY = PANEL_KEY + "-cols2";
-        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", tbody: "Capture log", plan: "Key crafting" };
+        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", "xp-skills": "Skills this session", "xp-sessions": "Past sessions", "xp-offline": "Offline XP outside a session", tbody: "Capture log", plan: "Key crafting" };
         const DEFAULT_OFF = { runs: ["Seen by"] };
         let colVis = {};
         try { colVis = JSON.parse(localStorage.getItem(COLS_KEY) || "{}") || {}; } catch (_e) { colVis = {}; }
@@ -1622,6 +1670,18 @@
  <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Sessions</th><th>Crafted</th><th>Essence</th><th>First</th><th>Last</th><th>Materials bought on this PC</th><th>Cost per key</th></tr></thead><tbody id="mds-life-keys"></tbody></table></div>
  <p class="mds-note" id="mds-lifenote"></p>
 </div>
+<div class="mds-pane" data-pane="xp" hidden>
+ <h4>Session</h4>
+ <div class="mds-bar"><button id="mds-xp-start">Start</button><button id="mds-xp-pause">Pause</button><button id="mds-xp-reset" title="Ends the session; it moves to Past sessions when it gained any XP">Reset</button><span class="mds-note" id="mds-xp-state"></span></div>
+ <div class="mds-cards" id="mds-xpcards"></div>
+ <h4 data-noun="skills">Skills this session</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Skill</th><th>XP</th><th>XP / h</th><th>Share</th></tr></thead><tbody id="mds-xp-skills"></tbody></table></div>
+ <h4 data-noun="sessions">Past sessions</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Started</th><th>Ended</th><th>Active time</th><th>XP</th><th>XP / h</th><th>Skills</th><th>Offline</th></tr></thead><tbody id="mds-xp-sessions"></tbody></table></div>
+ <h4 data-noun="blocks">Offline XP outside a session</h4>
+ <div class="mds-wrap"><table><thead><tr><th>From</th><th>To</th><th>XP</th><th>XP / h</th><th>Skills</th></tr></thead><tbody id="mds-xp-offline"></tbody></table></div>
+ <p class="mds-note">XP comes from the lifetime totals the game sends with every completed action, combat waves and skilling alike. Active time runs between those messages; a gap of more than 15 minutes does not count. Offline XP joins the session when it was live within 15 minutes of logging out.</p>
+</div>
 <div class="mds-pane" data-pane="settings" hidden>
  <h4>General</h4>
  <div class="mds-set"><span class="mds-set-title">Text size</span>
@@ -1650,7 +1710,7 @@
 <details><summary>Diagnostics</summary><pre id="mds-diag"></pre></details>
 </div>
 </div>`;
-            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
+            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-xpcards", "mds-xp-skills", "mds-xp-sessions", "mds-xp-offline", "mds-xp-state", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
             // Row actions: Keep N (moves loot into supplies), Accept (freezes a valuation of loot no longer held).
             root.addEventListener("click", e => {
                 const b = e.target.closest("button[data-act]"); if (!b) return;
@@ -1682,6 +1742,10 @@
             els["mds-plan-qty"].addEventListener("input", e => { const v = Math.floor(Number(e.target.value)); plan.qty = e.target.value.trim() === "" || !(v > 0) ? null : Math.min(100000, v); savePlan(); renderPlan(); });
             els["mds-plan-budget"].addEventListener("input", e => { const v = Math.floor(Number(e.target.value)); plan.budget = e.target.value.trim() === "" || !(v >= 0) ? null : v; savePlan(); renderPlan(); });
             root.querySelector("#mds-plan-wallet").addEventListener("click", () => { plan.budget = null; savePlan(); renderPlan(); });
+            root.querySelector("#mds-xp-start").addEventListener("click", () => { xpStart(); render(); });
+            root.querySelector("#mds-xp-pause").addEventListener("click", () => { xpPause(); render(); });
+            root.querySelector("#mds-xp-reset").addEventListener("click", () => { const sess = xpState().current; if (sess && xpTotal(sess) > 0 && !W.confirm(`End this session (${fmtCoins(xpTotal(sess))} XP)? It moves to Past sessions.`)) return; xpReset(); render(); });
+            setInterval(() => { const sess = xpState().current; if (open && tab === "xp" && sess && !sess.paused) touch(); }, 1000);
             els["mds-plan-owned"].addEventListener("change", e => { plan.owned = !!e.target.checked; savePlan(); renderPlan(); });
             root.querySelector("#mds-plan-craft").addEventListener("click", () => { const p = plan.key && planRecipe(plan.key); if (p) goToAction(p.action); });
             root.querySelector("#mds-plan-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
@@ -1920,6 +1984,7 @@
             ];
             for (const [h, c] of Object.entries(S.counted || {})) if (c.qty > 0) cards.push(card(icon(h) + it(h) + "s", c.qty, Object.entries(c.byChest).filter(([, b]) => b.qty > 0).map(([chest, b]) => `${b.opened ? (b.qty / b.opened).toFixed(2) : "?"} per ${chestName(chest)}`)));
             if (S.unknownMs > 0) cards.push(card("Unaccounted", fmtHm(S.unknownMs), ["Runs whose end the chat ledger does not show"]));
+            { const sess = xpState().current; if (sess) { const act = xpElapsed(sess, serverNow()), tot = xpTotal(sess); cards.push(card("XP session", fmtCoins(tot), [act > 0 ? `${fmtCoins(tot / (act / 3600e3))} / h` : "", sess.paused ? "Paused" : "Live", `Active ${fmtHm(act)}`])); } }
             cards.push(
                 card("Spent", fmtCoins(M.spent.total), [`Buys ${fmtCoins(M.spent.buys)}`, `Craft coins ${fmtCoins(M.spent.craftCoins)}`, `Used in runs ${fmtCoins(M.used.total)} at ledger cost`]),
                 card("Loot at open", fmtCoins(M.loot.atOpen), [`${M.loot.opened} Dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid`, M.loot.nestedOpened ? `${M.loot.nestedOpened} Chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : "", `+ ${fmtCoins(M.loot.coins)} Coins`]),
@@ -1998,6 +2063,15 @@
             try { const url = new URL(use.getAttribute("href"), document.baseURI); if (url.origin !== location.origin) return null; url.hash = ""; spriteUrl = url.href; } catch (_e) { return null; }
             return spriteUrl;
         }
+        let skillSpriteUrl = null;
+        function skillSpriteBase() {
+            if (skillSpriteUrl) return skillSpriteUrl;
+            const use = [...document.querySelectorAll('use[href*="skills_sprite"]')].find(u => !root || !root.contains(u)); if (!use) return null;
+            try { const url = new URL(use.getAttribute("href"), document.baseURI); if (url.origin !== location.origin) return null; url.hash = ""; skillSpriteUrl = url.href; } catch (_e) { return null; }
+            return skillSpriteUrl;
+        }
+        const skillName = h => (ref.skills[h] && ref.skills[h].name) || h.split("/").pop().replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+        const skillIcon = h => { const b = skillSpriteBase(); return b ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${h.split("/").pop()}"></use></svg>` : ""; };
         const icon = h => { const b = spriteBase(); return b && /^\/items\/[a-z0-9_]+$/.test(h) ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${h.split("/").pop()}"></use></svg>` : ""; };
         const itIcon = h => icon(h) + it(h);
         const itemLink = h => (ref.items[h] && ref.items[h].tradable === false) || h === "/items/coin" ? itIcon(h) : `${icon(h)}<a href="#" class="mds-link" data-market="${esc(h)}" title="Open in the marketplace">${it(h)}</a>`;
@@ -2094,6 +2168,25 @@
         // Chests held before the record began (the baseline stock), shown as their own block.
         const holdover = () => { const base = state.timeline.find(e => e.kind === "baseline"); const rows = ((base && base.chests) || []).filter(c => c.qty > 0); return { rows, total: rows.reduce((a, c) => a + c.qty, 0) }; };
         const lifetimeCrafted = key => [...state.lootLog.values()].filter(e => ref.keyActions[e.action] && ref.keyActions[e.action].outputs.some(o => o.item === key)).reduce((s, e) => s + (e.drops[key] || e.count), 0);
+        function renderXp() {
+            const X = xpState(); const sess = X.current; const now = serverNow();
+            const active = xpElapsed(sess, now), total = xpTotal(sess), perH = active > 0 ? total / (active / 3600e3) : null;
+            const live = !!sess && !sess.paused;
+            root.querySelector("#mds-xp-start").disabled = live; root.querySelector("#mds-xp-pause").disabled = !live; root.querySelector("#mds-xp-reset").disabled = !sess;
+            root.querySelector("#mds-xp-start").textContent = sess && sess.paused ? "Resume" : "Start";
+            els["mds-xp-state"].textContent = !sess ? "No session. Start one and play; XP counts from the next completed action." : sess.paused ? `Paused since ${fmtTime(sess.pausedAt)}, started ${fmtTime(sess.startedAt)}` : `Live since ${fmtTime(sess.startedAt)}${now - sess.lastTickAt > XP_GAP_MS ? ", idle: the clock stopped 15 minutes after the last XP" : ""}`;
+            const cards = sess ? [
+                card("Session XP", fmtCoins(total), [`${sess.ticks.toLocaleString()} Actions`, sess.offlineXp ? `${fmtCoins(sess.offlineXp)} Offline` : ""]),
+                card("XP / h", perH != null ? fmtCoins(perH) : "–", ["Over active time"]),
+                card("Active time", fmtHm(active), [sess.offlineMs ? `Offline ${fmtHm(sess.offlineMs)}` : "", `Since ${fmtTime(sess.startedAt)}`]),
+            ] : [];
+            els["mds-xpcards"].innerHTML = sortCards("xpcards", cards).join("");
+            const skills = Object.entries(sess ? sess.bySkill : {}).sort((a, b) => b[1] - a[1]);
+            els["mds-xp-skills"].innerHTML = skills.map(([h, v]) => `<tr><td class="k">${skillIcon(h)}${esc(skillName(h))}</td><td>${fmtCoins(v)}</td><td>${active > 0 ? fmtCoins(v / (active / 3600e3)) : "–"}</td><td>${pct(v, total)}</td></tr>`).join("") || `<tr><td colspan="4" class="t">${sess ? "No XP yet in this session." : "No session running."}</td></tr>`;
+            const skillList = by => Object.entries(by || {}).sort((a, b) => b[1] - a[1]).map(([h, v]) => `${fmtCoins(v)} ${esc(skillName(h))}`).join(", ") || "–";
+            els["mds-xp-sessions"].innerHTML = X.sessions.map(p => { const t = xpTotal(p); return `<tr><td class="t">${fmtTime(p.startedAt)}</td><td class="t">${p.endedAt ? fmtTime(p.endedAt) : "–"}</td><td>${fmtHm(p.activeMs)}</td><td>${fmtCoins(t)}</td><td>${p.activeMs > 0 ? fmtCoins(t / (p.activeMs / 3600e3)) : "–"}</td><td class="d">${skillList(p.bySkill)}</td><td>${p.offlineXp ? `${fmtCoins(p.offlineXp)} in ${fmtHm(p.offlineMs)}` : "–"}</td></tr>`; }).join("") || `<tr><td colspan="7" class="t">No past sessions.</td></tr>`;
+            els["mds-xp-offline"].innerHTML = X.offline.map(b => `<tr><td class="t">${fmtTime(b.from)}</td><td class="t">${fmtTime(b.to)}</td><td>${fmtCoins(b.total)}</td><td>${b.to > b.from ? fmtCoins(b.total / ((b.to - b.from) / 3600e3)) : "–"}</td><td class="d">${skillList(b.bySkill)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">None. Offline XP lands here when no session was live at logout.</td></tr>`;
+        }
         function renderLifetime() {
             const all = [...state.lootLog.values()];
             const endOf = e => isRunning(e) ? serverNow() : e.end;
@@ -2243,6 +2336,7 @@
             else if (tab === "loot") renderLoot();
             else if (tab === "chests") renderChests();
             else if (tab === "lifetime") renderLifetime();
+            else if (tab === "xp") renderXp();
             else {
                 renderRows(false);
                 const byType = [...state.counts.byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t} ${n}`).join(" · ");
@@ -2293,6 +2387,6 @@
     const boot = () => { panel.refresh(); };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { state, ref, prices, version: VERSION, panel, toolasha: TOOLASHA, importToolasha, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { state, ref, prices, version: VERSION, panel, toolasha: TOOLASHA, importToolasha, xp: { start: xpStart, pause: xpPause, reset: xpReset, state: xpState, elapsed: xpElapsed, total: xpTotal }, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();

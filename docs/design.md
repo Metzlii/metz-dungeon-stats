@@ -162,8 +162,10 @@ From the game's Loot & XP Log alone, which is server-side and therefore complete
 
 Reconciliation rules built the same day: a session the game reports as running at a read gets a snapshot (count, drops, XP at that moment), and from then on the game's increase and the record's clears and chests are compared exactly; a session that began before the record is only compared from the record start, with the game's total shown. The Chests card shows chests awarded since the record started and, plainly, how many are in the bag now; a reconciliation line (start + awarded − opened against the bag) was tried on 2026-11-01 and removed the same day at the operator's request: no accounting on the tracking tabs.
 
-### 5.7 XP
+### 5.7 XP (built 2026-11-01)
 The tracker, modelled on Insight's: a session with Start, Pause, Reset. Per skill: XP gained, XP per hour, share of total. Sources: the self player's cumulative `totalSkillExperienceMap` from each `new_battle` while in combat (works outside dungeons too), and `action_completed.endCharacterSkills` lifetime totals for everything else, so skilling XP counts as well. Offline XP from `init_character_data.offlineSkills` attaches to the open session when the session was live within 15 minutes of going offline, else it is shown as a separate offline block. Gaps of more than 15 minutes between messages do not count toward elapsed time. Sessions are kept (last 50) and exported with the record.
+
+**As built (2026-11-01):** one source only, the lifetime skill totals (`endCharacterSkills`) that every `action_completed` carries, combat waves and skilling alike, plus `skills_updated`; `new_battle`'s per-battle `totalSkillExperienceMap` is not used, since the same XP arrives per wave in the lifetime totals and using both would count it twice. A session is `{startedAt, paused, pausedAt, activeMs, lastTickAt, bySkill, ticks, offlineMs, offlineXp}`; active time grows by the gap between ticks when the gap is 15 minutes or less, and the live clock on the tab runs the same way (so an idle session stops counting 15 minutes after its last XP). Offline XP joins the open session when the logout came within 15 minutes of the session's last tick; otherwise it is listed under Offline XP outside a session (last 30 blocks). Current session plus the last 50 past ones live in meta `xp` and so travel with the record export. Tab XP: Start / Pause (Resume) / Reset with confirmation, three cards (session XP with action count, XP per hour over active time, active time), skills table with share, past sessions, offline blocks; the Overview shows an XP session card while one exists.
 
 ### 5.8 Data
 - Capture log: newest events first, with kind, time, source message and the fields. Filter by kind. This is the verification surface.
@@ -189,7 +191,7 @@ Everything else Insight does: combat simulator, planet sessions, skilling ledger
 1. **Capture and record** (first deliverable). Socket hook, inventory mirror, event derivation for all kinds, IndexedDB stores, the Data tab with the capture log and export. Run it for a day of dungeons and compare the log against what the game showed. Resolve every "to confirm" row in section 2 from the captured frames.
 2. **Runs and time.** Runs table, clear and fail detection, run time and time-not-dungeoning accounting, Overview cards for clears and time.
 3. **Cash flow** (built 2026-11-01). Purchase ledger, baseline, keys, consumes, opens with prices, sales, Loot & supplies with the automatic no-longer-held section and review flags, Chests tab, Overview money cards.
-4. **XP tracker.**
+4. **XP tracker** (built 2026-11-01).
 5. **Import** and the review list, then interface polish and the release to Greasy Fork, synced from this repository.
 
 Version numbers: one bump per release, never per iteration.
