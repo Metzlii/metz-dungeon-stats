@@ -1967,12 +1967,22 @@
             }
             return null;
         }
+        // The shop: the game's top component keeps the open page as navTarget and exposes handleGoToNavTarget; the
+        // shop's name is NavConsts.Shop = "shop" (read from main.8add56c3.chunk.js, 2026-11-01). The shop page then
+        // renders its category tabs (General, Dungeon); the Dungeon tab is clicked once it is there, like a player would.
         const goToShop = () => {
-            const h = gameHandlerLike(/^handleGoTow*Shopw*$/i); if (h) { try { h.call(); return true; } catch (e) { warn("shop navigation failed", h.name, e); } }
-            // Fallback: the game's own Shop entry in its navigation, clicked.
-            const nav = [...document.querySelectorAll('#root [class*="NavigationBar"] *, #root nav *')].find(el => el.children.length === 0 && /^Shop$/i.test(el.textContent.trim()));
-            if (nav) { nav.click(); return true; }
-            W.alert("The game's shop navigation was not found; open the shop yourself."); return false;
+            let f = gameHandler("handleGoToNavTarget"); let via = "handleGoToNavTarget";
+            if (!f) { const h = gameHandlerLike(/^handleGoTow*Shopw*$/i); if (h) { f = h.call; via = h.name; } }
+            if (!f) { W.alert("The game's shop navigation was not found; open the shop yourself."); return false; }
+            try { f("shop"); } catch (e) { warn("shop navigation failed", via, e); W.alert("The game's shop navigation failed; open the shop yourself."); return false; }
+            let tries = 0;
+            const pick = () => {
+                const tab = [...document.querySelectorAll('[class*="tabsComponentContainer"] [role="tab"], [class*="tabsComponentContainer"] button')].find(el => !root.contains(el) && /^Dungeon$/i.test(el.textContent.trim()));
+                if (tab) { if (tab.getAttribute("aria-selected") !== "true") tab.click(); return; }
+                if (++tries < 20) setTimeout(pick, 100);
+            };
+            setTimeout(pick, 50);
+            return true;
         };
         const goToAction = action => { const f = gameHandler("handleGoToAction"); if (f) { try { f(action); return true; } catch (e) { warn("action navigation failed", e); } } W.alert("The game's action navigation was not found; open the crafting page yourself."); return false; };
         let spriteUrl = null;
