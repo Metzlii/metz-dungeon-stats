@@ -848,6 +848,85 @@
         }
         return rows;
     }
+    // Record import (milestone 5): another device's export of the same character, merged into this record. Events
+    // merge by id (ids carry the device, so two devices never collide); what both devices capture independently is
+    // matched by a natural key instead: replayed party chat (chat id, or time + message), the runs derived from it
+    // and anything else time-stamped by the game (same kind and subject within 3 s), and listing fills (listing id,
+    // quantity, price). Record-specific events (baseline, reprice, note) stay with their own record. Meta merges:
+    // record start to the earlier one, Loot & XP Log sessions by id, market history by listing id, XP sessions by id.
+    const IMPORT_SKIP = new Set(["baseline", "reprice", "note"]);
+    function naturalKey(e) {
+        switch (e.kind) {
+            case "chat": return e.chatId != null ? `chat|id:${e.chatId}` : `chat|tm:${e.at}|${e.m}`;
+            case "buy": case "sell": return e.listingId != null ? `${e.kind}|l:${e.listingId}|${num(e.qty)}|${num(e.unitPrice)}` : null;
+            case "offline": return `offline|${num(e.from)}|${num(e.to)}`;
+            default: return null;
+        }
+    }
+    // Subject + time keys: a run start/end by zone, an open by chest and count, a craft by action, a consume by item
+    // and quantity, a redeem by token and quantity. Two events of one subject within 3 s are the same event.
+    function timedSubject(e) {
+        switch (e.kind) {
+            case "start": case "clear": case "fail": case "stop": return `${e.kind}|${e.zone || ""}`;
+            case "open": return `open|${e.chest}|${num(e.count)}`;
+            case "craft": return `craft|${e.action}`;
+            case "consume": return `consume|${e.item}|${num(e.qty)}`;
+            case "redeem": return `redeem|${e.token}|${num(e.qty)}`;
+            default: return null;
+        }
+    }
+    function parseRecordFile(text) {
+        let d = null; try { d = JSON.parse(text); } catch (_e) { return { error: "not JSON" }; }
+        if (!isObj(d) || !/^metz-dungeon-stats\//.test(String(d.schema || "")) || !Array.isArray(d.events)) return { error: "not a Metz Dungeon Stats record export" };
+        return { data: d };
+    }
+    async function importRecordData(d, label) {
+        if (!state.record || !state.ready) throw new Error("no record open");
+        const theirs = d.character && d.character.id != null ? String(d.character.id) : null;
+        if (theirs && theirs !== String(state.characterId)) return { error: `that export is for character ${d.character.name || theirs}, this record is ${state.characterName || state.characterId}` };
+        await state.record.flush();
+        const local = await state.record.getAll("events");
+        const ids = new Map(local.map(e => [e.id, e]));
+        const nat = new Set(); const timed = new Map();
+        const noteTimed = e => { const k = timedSubject(e); if (!k) return; let arr = timed.get(k); if (!arr) timed.set(k, arr = []); arr.push(num(e.at)); };
+        for (const e of local) { const k = naturalKey(e); if (k) nat.add(k); noteTimed(e); }
+        const sameTimed = e => { const k = timedSubject(e); if (!k) return false; const arr = timed.get(k); if (!arr) return false; const at = num(e.at); return arr.some(t => Math.abs(t - at) <= 3000); };
+        const out = { added: 0, duplicate: 0, skipped: 0, conflict: 0, byKind: {} };
+        const sorted = d.events.filter(isObj).slice().sort((a, b) => num(a.at) - num(b.at));
+        for (const e of sorted) {
+            if (!e.id || !e.kind || !(num(e.at) > 0)) { out.skipped++; continue; }
+            const mine = ids.get(e.id);
+            if (mine) { if (JSON.stringify(mine) === JSON.stringify(e)) out.duplicate++; else out.conflict++; continue; }
+            if (IMPORT_SKIP.has(e.kind)) { out.skipped++; continue; }
+            const k = naturalKey(e);
+            if ((k && nat.has(k)) || sameTimed(e)) { out.duplicate++; continue; }
+            const ev = { ...e, fromRecord: d.device || label || "import" };
+            state.record.queue("events", ev); ids.set(ev.id, ev); if (k) nat.add(k); noteTimed(ev);
+            if (ev.kind === "consume") addConsume(ev); else state.timeline.push(ev);
+            out.added++; out.byKind[ev.kind] = (out.byKind[ev.kind] || 0) + 1; state.counts.events++;
+        }
+        // Meta.
+        const metaOf = key => { const r = (Array.isArray(d.meta) ? d.meta : []).find(m => m && m.key === key); return r ? (r.value !== undefined ? r.value : r) : undefined; };
+        const rs = num(metaOf("recordStart"));
+        if (rs > 0 && (!state.meta.recordStart || rs < state.meta.recordStart)) { state.meta.recordStart = rs; state.record.queue("meta", { key: "recordStart", value: rs }); out.recordStart = rs; }
+        const ll = metaOf("lootLog"); if (Array.isArray(ll)) { let n = 0; for (const e of ll) { if (!isObj(e) || e.id == null) continue; const prev = state.lootLog.get(e.id); if (!prev || num(e.end) > num(prev.end) || num(e.count) > num(prev.count)) { if (prev && prev.first && !e.first) e.first = prev.first; state.lootLog.set(e.id, e); n++; } } if (n) { state.lootLogRev++; state.record.queue("meta", { key: "lootLog", value: [...state.lootLog.values()] }); } out.lootLog = n; }
+        const mh = metaOf("marketHistory"); if (Array.isArray(mh) && mh.length) out.marketHistory = addMarketHistory(mh, `record:${d.device || label || "import"}`);
+        const xp = metaOf("xp"); if (isObj(xp)) { const X = xpState(); const have = new Set(X.sessions.map(p => p.id)); let n = 0; for (const p of (Array.isArray(xp.sessions) ? xp.sessions : [])) if (isObj(p) && p.id && !have.has(p.id)) { X.sessions.push(p); have.add(p.id); n++; } if (isObj(xp.current) && xp.current.id && !have.has(xp.current.id) && xpTotal(xp.current) > 0) { X.sessions.push({ ...xp.current, endedAt: xp.current.endedAt || xp.current.lastTickAt }); n++; } X.sessions.sort((a, b) => num(b.startedAt) - num(a.startedAt)); if (X.sessions.length > XP_KEEP) X.sessions.length = XP_KEEP; const haveOff = new Set(X.offline.map(b => b.id)); for (const b of (Array.isArray(xp.offline) ? xp.offline : [])) if (isObj(b) && b.id && !haveOff.has(b.id)) { X.offline.push(b); n++; } X.offline.sort((a, b) => num(b.from) - num(a.from)); if (n) xpSave(); out.xp = n; }
+        const cs = metaOf("chatSeen"); if (Array.isArray(cs)) { for (const k of cs) state.chatSeen.add(k); if (state.chatSeen.size > 1200) { const old = [...state.chatSeen].slice(0, state.chatSeen.size - 1200); for (const k of old) state.chatSeen.delete(k); } state.record.queue("meta", { key: "chatSeen", value: [...state.chatSeen] }); }
+        state.timeline.sort((a, b) => a.at - b.at); state.timelineRev++;
+        await state.record.flush();
+        state.events = await state.record.getAll("events", "at", null, "prev", 200);
+        emit("note", { text: `Record import ${label || ""} from ${d.device || "another device"}: ${out.added} events added${Object.keys(out.byKind).length ? ` (${Object.entries(out.byKind).map(([k, v]) => `${v} ${k}`).join(", ")})` : ""}, ${out.duplicate} already here, ${out.skipped} record-specific skipped, ${out.conflict} conflicts kept as ours${out.lootLog ? `; ${out.lootLog} loot log sessions` : ""}${out.marketHistory ? `; ${out.marketHistory} market listings` : ""}${out.xp ? `; ${out.xp} XP sessions` : ""}${out.recordStart ? `; record start moved to ${new Date(out.recordStart).toISOString()}` : ""}`, import: out }, "import");
+        panel.touch();
+        return out;
+    }
+    async function importRecordFile(file) {
+        const { data, error } = parseRecordFile(await file.text());
+        if (error) { W.alert(`Could not import ${file.name}: ${error}.`); return null; }
+        const r = await importRecordData(data, file.name);
+        if (r && r.error) { W.alert(`Not imported: ${r.error}.`); return null; }
+        return r;
+    }
     async function importMarketHistoryFile(file) {
         const text = await file.text(); const rows = parseMarketHistoryFile(text);
         if (!rows.length) { W.alert("No listings recognised in that file. Expected Toolasha's listing array (JSON) or its Market History CSV."); return 0; }
@@ -1488,7 +1567,7 @@
         // Column switches, every table: a checkbox per column, grouped by tab in Settings. Keyed by the table (its
         // tbody id) and the column's original index; everything on by default except the Runs table's Seen-by.
         const COLS_KEY = PANEL_KEY + "-cols2";
-        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", "xp-skills": "Skills this session", "xp-sessions": "Past sessions", "xp-offline": "Offline XP outside a session", tbody: "Capture log", plan: "Key crafting" };
+        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", "xp-skills": "Skills this session", "xp-sessions": "Past sessions", "xp-offline": "Offline XP outside a session", review: "Review", tbody: "Capture log", plan: "Key crafting" };
         const DEFAULT_OFF = { runs: ["Seen by"] };
         let colVis = {};
         try { colVis = JSON.parse(localStorage.getItem(COLS_KEY) || "{}") || {}; } catch (_e) { colVis = {}; }
@@ -1695,6 +1774,8 @@
 </div>
 <style id="mds-cols-style"></style>
 <div class="mds-pane" data-pane="data" hidden>
+<h4 data-noun="items">Review</h4>
+<div class="mds-wrap"><table><thead><tr><th>Time</th><th>What the script could not settle</th><th>Details</th><th></th></tr></thead><tbody id="mds-review"></tbody></table></div>
 <h4 data-noun="events">Capture log</h4>
 <div class="mds-bar">
  <label>Show <select id="mds-filter">${KINDS.map(k => `<option value="${k}">${k}</option>`).join("")}</select></label>
@@ -1703,6 +1784,7 @@
  <button id="mds-prices">Refresh prices</button>
  <button id="mds-history-file" title="Merge a market history file from another PC: Toolasha's listing array (JSON) or its Market History CSV">Merge market history file…</button><input type="file" id="mds-history-input" accept=".json,.csv,application/json,text/csv" hidden>
  <button id="mds-toolasha" title="Re-price stock held at record start from your own purchases and catch up fills the script did not see">Import Toolasha history</button>
+ <button id="mds-record-file" title="Merge this character's record exported on another PC: events by id, replayed chat and listing fills matched so nothing counts twice">Import record file…</button><input type="file" id="mds-record-input" accept=".json,application/json" hidden>
  <button id="mds-reset" class="danger">Reset record</button>
  <span class="mds-note">Newest first. Source = the game message the event came from. Consumable uses are recorded but shown only under "consume".</span>
 </div>
@@ -1710,7 +1792,7 @@
 <details><summary>Diagnostics</summary><pre id="mds-diag"></pre></details>
 </div>
 </div>`;
-            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-xpcards", "mds-xp-skills", "mds-xp-sessions", "mds-xp-offline", "mds-xp-state", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
+            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-xpcards", "mds-xp-skills", "mds-xp-sessions", "mds-xp-offline", "mds-xp-state", "mds-review", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
             // Row actions: Keep N (moves loot into supplies), Accept (freezes a valuation of loot no longer held).
             root.addEventListener("click", e => {
                 const b = e.target.closest("button[data-act]"); if (!b) return;
@@ -1738,6 +1820,9 @@
             root.querySelector("#mds-reset").addEventListener("click", resetRecord);
             root.querySelector("#mds-toolasha").addEventListener("click", () => importToolasha("manual").then(() => render()));
             root.querySelector("#mds-history-file").addEventListener("click", () => root.querySelector("#mds-history-input").click());
+            root.querySelector("#mds-record-file").addEventListener("click", () => root.querySelector("#mds-record-input").click());
+            root.querySelector("#mds-record-input").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importRecordFile(f).then(r => { if (r) W.alert(`Imported ${f.name}: ${r.added} events added, ${r.duplicate} already here, ${r.skipped} record-specific skipped, ${r.conflict} conflicts kept as ours.`); render(); }, err => { warn("record import failed", err); W.alert("Record import failed: " + (err && err.message || err)); }); });
+            els["mds-review"].addEventListener("click", e => { const b = e.target.closest("button[data-dismiss]"); if (!b) return; const done = Array.isArray(state.meta.reviewDone) ? state.meta.reviewDone : []; if (!done.includes(b.dataset.dismiss)) done.push(b.dataset.dismiss); state.meta.reviewDone = done; state.record && state.record.queue("meta", { key: "reviewDone", value: done }); render(); });
             els["mds-plan-key"].addEventListener("change", e => { plan.key = e.target.value; savePlan(); renderPlan(); });
             els["mds-plan-qty"].addEventListener("input", e => { const v = Math.floor(Number(e.target.value)); plan.qty = e.target.value.trim() === "" || !(v > 0) ? null : Math.min(100000, v); savePlan(); renderPlan(); });
             els["mds-plan-budget"].addEventListener("input", e => { const v = Math.floor(Number(e.target.value)); plan.budget = e.target.value.trim() === "" || !(v >= 0) ? null : v; savePlan(); renderPlan(); });
@@ -1929,6 +2014,7 @@
             if (!force && els.wrap.scrollTop > 8) { rowsHeld = true; return; }
             rowsHeld = false;
             // The default feed leaves consumable uses out: they are kept for cost tracking, not for reading.
+            renderReview();
             const rows = state.events.filter(e => filter === "all" ? e.kind !== "consume" : e.kind === filter).slice(0, 200);
             els["mds-tbody"].innerHTML = rows.map(ev => `<tr class="${ev.kind}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${ev.kind}</td><td class="d">${describe(ev)}</td><td class="t">${esc(ev.src || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="t">Nothing recorded yet.</td></tr>`;
         }
@@ -2168,6 +2254,17 @@
         // Chests held before the record began (the baseline stock), shown as their own block.
         const holdover = () => { const base = state.timeline.find(e => e.kind === "baseline"); const rows = ((base && base.chests) || []).filter(c => c.qty > 0); return { rows, total: rows.reduce((a, c) => a + c.qty, 0) }; };
         const lifetimeCrafted = key => [...state.lootLog.values()].filter(e => ref.keyActions[e.action] && ref.keyActions[e.action].outputs.some(o => o.item === key)).reduce((s, e) => s + (e.drops[key] || e.count), 0);
+        // The review list: review events not yet dismissed, plus the loot rows whose value needs a decision.
+        function renderReview() {
+            const done = new Set(Array.isArray(state.meta.reviewDone) ? state.meta.reviewDone : []);
+            const evs = state.timeline.filter(e => e.kind === "review" && !done.has(e.id)).slice(-100).reverse();
+            const M = getMoney(); const lootReview = M.rows.filter(r => r.review);
+            const detail = e => { const o = {}; for (const [k, v] of Object.entries(e)) if (!["id", "kind", "at", "clock", "src", "v", "reason", "fromRecord"].includes(k)) o[k] = v; const t = JSON.stringify(o); return t.length > 160 ? t.slice(0, 157) + "…" : t; };
+            const rows = [];
+            if (lootReview.length) rows.push(`<tr><td class="t">now</td><td>${lootReview.length} loot item${lootReview.length === 1 ? "" : "s"} no longer held with a bid that moved more than 50% since the open: value ${lootReview.length === 1 ? "it" : "them"} on the Loot tab</td><td class="d">${lootReview.map(r => itIcon(r.item) + " ×" + fmtQ(r.remaining)).join(", ")}</td><td></td></tr>`);
+            for (const e of evs) rows.push(`<tr><td class="t">${fmtTime(e.at)}</td><td>${esc(e.reason || "")}${e.fromRecord ? ` <small>from ${esc(String(e.fromRecord))}</small>` : ""}</td><td class="d"><code title="${esc(JSON.stringify(e))}">${esc(detail(e))}</code></td><td><button class="mds-act" data-dismiss="${esc(e.id)}" title="Hide this item">Done</button></td></tr>`);
+            els["mds-review"].innerHTML = rows.join("") || `<tr><td colspan="4" class="t">Nothing to review.</td></tr>`;
+        }
         function renderXp() {
             const X = xpState(); const sess = X.current; const now = serverNow();
             const active = xpElapsed(sess, now), total = xpTotal(sess), perH = active > 0 ? total / (active / 3600e3) : null;
@@ -2387,6 +2484,6 @@
     const boot = () => { panel.refresh(); };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { state, ref, prices, version: VERSION, panel, toolasha: TOOLASHA, importToolasha, xp: { start: xpStart, pause: xpPause, reset: xpReset, state: xpState, elapsed: xpElapsed, total: xpTotal }, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { state, ref, prices, version: VERSION, panel, toolasha: TOOLASHA, importToolasha, xp: { start: xpStart, pause: xpPause, reset: xpReset, state: xpState, elapsed: xpElapsed, total: xpTotal }, importRecordData, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();

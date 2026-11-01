@@ -170,8 +170,10 @@ The tracker, modelled on Insight's: a session with Start, Pause, Reset. Per skil
 ### 5.8 Data
 - Capture log: newest events first, with kind, time, source message and the fields. Filter by kind. This is the verification surface.
 - Review list: anything the script could not resolve on its own (ambiguous instant buy, an open whose inventory diff did not match, a run with no end).
+  **Built 2026-11-01**: the Review section at the top of the Data tab lists every `review` event not yet marked Done (meta `reviewDone` holds the dismissed ids) plus one line for the loot rows whose value needs a decision on the Loot tab.
 - Export: one JSON file `metz-dungeon-stats-<character>-<date>.json` with meta, events and XP sessions.
 - Import: merge by event id; report counts added, skipped as duplicate, and conflicts. Toolasha history import (4.1) is built and runs on login.
+  **Built 2026-11-01** (`importRecordData`, Data tab "Import record file…"): the other PC's export of the same character (character id checked). Events merge by id (ids carry the device). What both devices capture on their own is matched by a natural key so nothing counts twice: replayed party chat by chat id or time + message; a run start or end, an open, a craft, a consume or a redeem by kind, subject and a time within 3 s; a listing fill by listing id, quantity and price. Baseline, reprice and note events belong to their own record and are skipped. Same id with different content counts as a conflict and ours is kept. Meta merges: record start to the earlier of the two, Loot & XP Log sessions by id (the later or larger entry wins, the earlier running snapshot kept), market history by listing id (through the same path as a Toolasha file, which re-prices), XP sessions and offline blocks by id, chat-seen keys unioned. The capture-time purchase ledger is not rebuilt from imported buys: derived money reads the merged events, past consume costs stay as they were charged. Imported events carry `fromRecord: <device>`.
 - Record start, prices last fetched, refresh prices, review threshold, panel settings. Merge market history file (4.1), Import Toolasha history (re-run).
 
 ## 6. Performance
@@ -192,7 +194,7 @@ Everything else Insight does: combat simulator, planet sessions, skilling ledger
 2. **Runs and time.** Runs table, clear and fail detection, run time and time-not-dungeoning accounting, Overview cards for clears and time.
 3. **Cash flow** (built 2026-11-01). Purchase ledger, baseline, keys, consumes, opens with prices, sales, Loot & supplies with the automatic no-longer-held section and review flags, Chests tab, Overview money cards.
 4. **XP tracker** (built 2026-11-01).
-5. **Import** and the review list, then interface polish and the release to Greasy Fork, synced from this repository.
+5. **Import** and the review list (built 2026-11-01), then interface polish and the release to Greasy Fork, synced from this repository.
 
 Version numbers: one bump per release, never per iteration.
 

@@ -187,6 +187,14 @@
     await window.__mds.importToolasha("harness"); log("toolasha:", window.__mds.toolasha, "loot log sessions:", window.__mds.state.lootLog.size);
     // Every tab must render without throwing: a renderer lost in a refactor is caught here, not by the operator.
     { const X = window.__mds.xp.state(); const c = X.current; log("xp:", JSON.stringify({ total: c ? window.__mds.xp.total(c) : null, ticks: c && c.ticks, activeMs: c && c.activeMs, skills: c && Object.keys(c.bySkill), past: X.sessions.length, offlineBlocks: X.offline.length })); }
+    // Record import from "another PC": a replayed chat event (natural key), a clear 1.5 s off (timed subject), an event
+    // with the same id, a baseline (record-specific) and one genuinely new buy. Expect 1 added, 3 duplicates, 1 skipped.
+    { const evs = await window.__mds.state.record.getAll("events"); const chat = evs.find(e => e.kind === "chat"); const clear = evs.find(e => e.kind === "clear");
+      const other = { schema: "metz-dungeon-stats/1", device: "otherpc", character: { id: CH, name: NAME }, meta: [{ key: "recordStart", value: t0 - 3600e3 }], events: [
+        { ...chat, id: "otherpc-1-1" }, { ...clear, id: "otherpc-1-2", at: clear.at + 1500 },
+        { id: "otherpc-1-3", kind: "buy", at: t0 - 1800e3, clock: "server", src: "market_listings_updated", v: 1, listingId: 999001, item: "/items/arcane_lumber", level: 0, qty: 10, unitPrice: 2000, coins: 20000, instant: false },
+        { id: "otherpc-1-4", kind: "baseline", at: t0 - 1700e3, clock: "server", src: "init", v: 1, items: [] }, { ...evs[0] } ] };
+      const r = await window.__mds.importRecordData(other, "harness"); log("import:", JSON.stringify(r)); }
     const tabErrors = []; const onErr = e => tabErrors.push(String(e.message || e.reason || e)); window.addEventListener("error", onErr); window.addEventListener("unhandledrejection", onErr);
     if (!window.__mds.panel.dock().active) window.__mds.panel.show();
     for (const b of document.querySelectorAll("#mds-root .mds-tabs button[data-tab]")) { b.click(); await sleep(150); const pane = document.querySelector(`#mds-root .mds-pane[data-pane=${b.dataset.tab}]`); if (!pane || pane.hidden || !pane.textContent.trim()) tabErrors.push(`tab ${b.dataset.tab} rendered nothing`); }
