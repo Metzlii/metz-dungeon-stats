@@ -1388,7 +1388,7 @@
 #mds-root .mds-tile small{color:#c5d4de;font-size:.786em;line-height:1.2}
 #mds-root a.mds-link{color:#a9e9f1;text-decoration:none;border-bottom:1px dotted rgba(169,233,241,.5)}
 #mds-root a.mds-link:hover{color:#45c8d8;border-bottom-color:#45c8d8}
-#mds-root .mds-num-wide{width:14em}
+#mds-root .mds-num-wide{width:16em}
 #mds-root .mds-num{width:7em;background:#1c2a35;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:6px;padding:4px 6px;font:inherit}
 #mds-root th.mds-dragging{opacity:.5}
 #mds-root th.mds-drop{box-shadow:inset 2px 0 0 #45c8d8}
