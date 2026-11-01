@@ -1581,6 +1581,8 @@
 #mds-root .mds-bar button.danger:hover{background:rgba(211,161,58,.12)}
 #mds-root button.mds-act{padding:3px 9px;font-size:.857em;white-space:nowrap}
 #mds-root td.mds-acts{white-space:nowrap}
+#mds-root .mds-head .mds-head-btn{margin-left:6px;background:transparent;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:8px;padding:3px 9px;font:500 .857em/1.2 "Inter",system-ui,sans-serif;cursor:pointer}
+#mds-root .mds-head .mds-head-btn:disabled{opacity:.5;cursor:default}
 #mds-root td.mds-acts-plan{width:7.5em;min-width:7.5em;box-sizing:border-box}
 #mds-root tr.mds-flash td{background:rgba(69,200,216,.18)}
 #mds-root td.mds-acts .mds-act+.mds-act{margin-left:6px}
@@ -1779,7 +1781,7 @@
             root = document.createElement("section"); root.id = "mds-root"; root.hidden = true;
             // Built once. Refreshes touch only text and table rows, so an open dropdown, the scroll position and an
             // expanded section are never torn down.
-            root.innerHTML = `<div class="mds-head"><strong>Metz Dungeon Stats</strong><span class="mds-sub">v${VERSION}</span><button class="mds-x" title="Close">×</button></div>
+            root.innerHTML = `<div class="mds-head"><strong>Metz Dungeon Stats</strong><span class="mds-sub">v${VERSION}</span><button class="mds-refresh-prices mds-head-btn" title="Fetch the marketplace prices again now">Refresh prices</button><span class="mds-sub mds-prices-note"></span><button class="mds-x" title="Close">×</button></div>
 <div class="mds-tabs">${TABS.map(([k, label]) => `<button role="tab" data-tab="${k}" aria-selected="${k === tab}">${label}</button>`).join("")}</div>
 <div class="mds-body">
 <p class="mds-status" id="mds-status"></p>
@@ -1907,6 +1909,7 @@
             root.querySelector("#mds-export").addEventListener("click", exportRecord);
             root.querySelector("#mds-export-frames").addEventListener("click", exportFrames);
             root.querySelector("#mds-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
+            for (const b of root.querySelectorAll("button.mds-refresh-prices")) b.addEventListener("click", () => { for (const x of root.querySelectorAll("button.mds-refresh-prices")) x.disabled = true; fetchPrices(true).then(() => render(), () => render()).then(() => { for (const x of root.querySelectorAll("button.mds-refresh-prices")) x.disabled = false; }); });
             root.querySelector("#mds-reset").addEventListener("click", resetRecord);
             root.querySelector("#mds-toolasha").addEventListener("click", () => importToolasha("manual").then(() => render()));
             root.querySelector("#mds-history-file").addEventListener("click", () => root.querySelector("#mds-history-input").click());
@@ -2567,6 +2570,7 @@
             els["mds-status"].textContent = `${state.characterName || "waiting for login"}${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}`;
             root.querySelector("#mds-banner").hidden = bannerDismissed || state.lootLogReadThisSession || !state.ready;
             setTimeout(foldSummaries, 0);
+            for (const n of root.querySelectorAll(".mds-prices-note")) n.textContent = prices.fetching ? "fetching…" : prices.at ? `prices as of ${fmtTime(prices.at)}` : prices.error ? `prices: ${prices.error}` : "prices not fetched yet";
             if (tab === "overview") renderOverview();
             else if (tab === "runs") renderRuns(false);
             else if (tab === "keys") renderKeys();
