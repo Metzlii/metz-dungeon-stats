@@ -155,10 +155,15 @@ The runs table, newest first: start time, result (clear, fail, cancelled, in pro
 ### 5.5 Chests
 **Built 2026-11-01.** The opening history: time, chest, how many, contents with quantities, value at open (bid), coins gained. Totals per chest type. Nothing expected, nothing lucky.
 
-### 5.6 XP
+### 5.6 Lifetime (built 2026-11-01)
+From the game's Loot & XP Log alone, which is server-side and therefore complete across devices: per dungeon and tier the sessions, clears, chests, time in sessions (start to end as the log has it, a running session to now), time per clear, XP per skill and XP per hour of the action running, offline included; per key the craft sessions and keys crafted, with the recipe materials this PC's Toolasha history shows bought and the spend per key as a floor (market history is per device, so materials bought on the other PC are missing). No lifetime income is shown until the records from both PCs are merged by import (milestone 5): the operator's sales happen mostly at home.
+
+Reconciliation rules built the same day: a session the game reports as running at a read gets a snapshot (count, drops, XP at that moment), and from then on the game's increase and the record's clears and chests are compared exactly; a session that began before the record is only compared from the record start, with the game's total shown. Chests are checked against the bag: held at record start + awarded (clears and offline blocks) − opened must equal held now, and the Chests card names any difference.
+
+### 5.7 XP
 The tracker, modelled on Insight's: a session with Start, Pause, Reset. Per skill: XP gained, XP per hour, share of total. Sources: the self player's cumulative `totalSkillExperienceMap` from each `new_battle` while in combat (works outside dungeons too), and `action_completed.endCharacterSkills` lifetime totals for everything else, so skilling XP counts as well. Offline XP from `init_character_data.offlineSkills` attaches to the open session when the session was live within 15 minutes of going offline, else it is shown as a separate offline block. Gaps of more than 15 minutes between messages do not count toward elapsed time. Sessions are kept (last 50) and exported with the record.
 
-### 5.7 Data
+### 5.8 Data
 - Capture log: newest events first, with kind, time, source message and the fields. Filter by kind. This is the verification surface.
 - Review list: anything the script could not resolve on its own (ambiguous instant buy, an open whose inventory diff did not match, a run with no end).
 - Export: one JSON file `metz-dungeon-stats-<character>-<date>.json` with meta, events and XP sessions.
