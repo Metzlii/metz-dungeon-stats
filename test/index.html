@@ -148,7 +148,6 @@
     const waveDone = (wave, items, xp) => ({ type: "action_completed", endCharacterAction: { id: 555, characterID: CH, partyID: 1, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, currentCount: wave === 65 ? 1 : 0, wave, isDone: false, updatedAt: iso(Date.now()) }, endCharacterItems: items || [], endCharacterSkills: xp || [{ skillHrid: "/skills/attack", experience: xpBase + 700 * wave, level: 100 }], endCharacterAbilities: [] });
     let xpBase = 1000000;
     feed({ type: "chat_message_received", message: { id: 2, chan: "/chat_channel_types/party", t: iso(Date.now()), m: "systemChatMessage.partyKeyCount", isSystemMessage: true, systemMetadata: JSON.stringify({ keyCountString: "[Metzli - 14], [Dripyy - 3]" }) } });
-    window.__mds.xp.start(); log("xp session started");
     feed(party(100, 1));
     for (let w = 1; w <= 64; w++) { if (w % 10 === 0) { feed({ type: "items_updated", endCharacterItems: [add("/items/dragon_fruit_yogurt", -2)] }); } feed(waveDone(w)); feed(party(100, w + 1)); }
     await sleep(200);
@@ -186,7 +185,7 @@
     ] });
     await window.__mds.importToolasha("harness"); log("toolasha:", window.__mds.toolasha, "loot log sessions:", window.__mds.state.lootLog.size);
     // Every tab must render without throwing: a renderer lost in a refactor is caught here, not by the operator.
-    { const X = window.__mds.xp.state(); const c = X.current; log("xp:", JSON.stringify({ total: c ? window.__mds.xp.total(c) : null, ticks: c && c.ticks, activeMs: c && c.activeMs, skills: c && Object.keys(c.bySkill), past: X.sessions.length, offlineBlocks: X.offline.length })); }
+    { const S = window.__mds.xp.summary(); log("xp:", JSON.stringify(S && { total: S.total, activeMs: S.activeMs, offlineMs: S.offlineMs, skills: S.since, days: S.days.map(d => [d.day, d.total, d.activeMs]) })); }
     // Record import from "another PC": a replayed chat event (natural key), a clear 1.5 s off (timed subject), an event
     // with the same id, a baseline (record-specific) and one genuinely new buy. Expect 1 added, 3 duplicates, 1 skipped.
     { const evs = await window.__mds.state.record.getAll("events"); const chat = evs.find(e => e.kind === "chat"); const clear = evs.find(e => e.kind === "clear");
