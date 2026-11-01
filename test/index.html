@@ -99,6 +99,8 @@
     const items = [set("/items/coin", 50000000), set("/items/pirate_entry_key", 12), set("/items/pirate_chest", 2), set("/items/dragon_fruit_yogurt", 500), set("/items/arcane_lumber", 1000), set("/items/redwood_lumber", 1000), set("/items/pirate_chest_key", 1)];
     feed({ type: "init_character_data", currentTimestamp: iso(t0), character: { id: CH, name: NAME, lastOfflineTime: iso(t0 - 3 * 3600e3), inactiveTime: iso(t0 - 5 * 60e3) },
       characterItems: items,
+      consumableActionTypeBuffsMap: { "/action_types/crafting": [{ uniqueHrid: "/buff_uniques/artisan_tea", typeHrid: "/buff_types/artisan", flatBoost: 0.11384 }, { uniqueHrid: "/buff_uniques/efficiency_tea", typeHrid: "/buff_types/efficiency", flatBoost: 0.11384 }] },
+      actionTypeDrinkSlotsMap: { "/action_types/crafting": [{ slotIndex: 0, itemHrid: "/items/artisan_tea", isActive: true }] },
       characterSkills: [{ skillHrid: "/skills/attack", experience: 1000000, level: 100 }, { skillHrid: "/skills/magic", experience: 2000000, level: 110 }, { skillHrid: "/skills/crafting", experience: 500000, level: 80 }],
       characterActions: [{ id: 555, characterID: CH, partyID: 1, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, currentCount: 0, wave: 0, isDone: false, ordinal: 0 }],
       myMarketListings: [],
