@@ -426,14 +426,43 @@
     function xpSave() { if (state.record && state.ready) state.record.queue("meta", { key: "xpRecord", value: xpRec() }); }
     // The start snapshot: taken when the record starts. A record from before this build takes the earliest lifetime
     // snapshot a clear left in its timeline (xpEnd), else the totals at the moment this build first saw them.
+    // XP the game's Loot & XP Log puts between two times: exact for a session inside the window, split by time for a
+    // session that straddles an edge (its XP runs with the action, so the split is close; it is labelled).
+    function xpFromLootLog(from, to) {
+        const xp = {}; let coveredMs = 0, split = false, sessions = 0;
+        for (const e of state.lootLog.values()) {
+            const s0 = num(e.start), s1 = num(e.end) || s0; if (!(s1 > from) || !(s0 < to) || !(s1 > s0)) continue;
+            const lo = Math.max(s0, from), hi = Math.min(s1, to); const f = (hi - lo) / (s1 - s0); if (f < 0.999) split = true;
+            coveredMs += hi - lo; sessions++;
+            for (const [k, v] of Object.entries(e.xp || {})) if (v > 0 && k !== "/skills/total_level") xp[k] = (xp[k] || 0) + v * f;
+        }
+        return { xp, coveredMs, split, sessions };
+    }
+    // The start snapshot. A new record takes it when it starts. A record from before this build: the earliest lifetime
+    // snapshot a clear left in its timeline (xpEnd), backed to the record start with the Loot & XP Log's XP for the
+    // time between, and active time backfilled from the log's session time; else the totals when first seen.
     function xpEnsureStart(at) {
-        const R = xpRec(); if (R.startSnap) return R;
-        let snap = null, when = null, e0 = false;
-        for (const e of state.timeline) if ((e.kind === "clear" || e.kind === "fail") && isObj(e.xpEnd) && Object.keys(e.xpEnd).length) { snap = { ...e.xpEnd }; when = e.at; e0 = true; break; }
-        if (!snap && Object.keys(state.lifetimeXp).length) { snap = { ...state.lifetimeXp }; when = at || serverNow(); }
+        const R = xpRec(); if (R.startSnap && R.basis) return R;
+        const now = at || serverNow();
+        let snap = null, when = null, basis = null;
+        for (const e of state.timeline) if ((e.kind === "clear" || e.kind === "fail") && isObj(e.xpEnd) && Object.keys(e.xpEnd).length) { snap = { ...e.xpEnd }; when = e.at; basis = "earliest clear snapshot"; break; }
+        if (!snap && Object.keys(state.lifetimeXp).length) { snap = { ...state.lifetimeXp }; when = now; basis = "totals when first seen"; }
         if (!snap) return R;
-        delete snap["/skills/total_level"]; R.startSnap = snap; R.startAt = when; if (!R.lastTickAt) R.lastTickAt = when; xpSave();
-        info(`XP record start snapshot taken at ${new Date(when).toISOString()} (${e0 ? "earliest clear in the record" : "totals when first seen"})`);
+        delete snap["/skills/total_level"];
+        const rs = num(state.meta.recordStart);
+        if (rs > 0 && rs < when - 60e3) {
+            const back = xpFromLootLog(rs, when);
+            if (back.coveredMs > 0) { for (const [k, v] of Object.entries(back.xp)) snap[k] = Math.max(0, (snap[k] != null ? snap[k] : 0) - v); basis = `${basis}, then the Loot & XP Log back to the record start${back.split ? ", one session split by time" : ""}`; when = rs; }
+            else basis += " (nothing in the Loot & XP Log before it)";
+        }
+        R.startSnap = snap; R.startAt = when; R.basis = basis;
+        // Active time before this build ran: the log's session time from the start to now, once.
+        const fill = xpFromLootLog(when, now); const prior = R.activeMs;
+        if (fill.coveredMs > prior) R.activeMs = fill.coveredMs;
+        R.lastTickAt = now;
+        const k = xpDayKey(when); if (R.days[k]) { R.days[k].snap = { ...snap }; if (k === xpDayKey(now) && R.activeMs > R.days[k].activeMs) R.days[k].activeMs = R.activeMs; }
+        xpSave();
+        info(`XP record start ${new Date(when).toISOString()}: ${basis}; active time backfilled ${Math.round(fill.coveredMs / 60000)} min from ${fill.sessions} log sessions`);
         return R;
     }
     function xpDay(R, at, snapBefore) { const k = xpDayKey(at); let d = R.days[k]; if (!d) { const sameDayStart = R.startSnap && R.startAt && xpDayKey(R.startAt) === k; d = R.days[k] = { snap: { ...(sameDayStart ? R.startSnap : snapBefore) }, activeMs: 0, offlineMs: 0 }; delete d.snap["/skills/total_level"]; const keys = Object.keys(R.days).sort(); while (keys.length > XP_DAYS_KEEP) delete R.days[keys.shift()]; } return d; }
@@ -474,7 +503,7 @@
             days.push({ day: k, bySkill: by, total: Object.values(by).reduce((a, v) => a + v, 0), activeMs: active, offlineMs: d.offlineMs });
         }
         const today = days.find(d => d.day === xpDayKey(now)) || null;
-        return { startAt: R.startAt, since, total, activeMs: active, offlineMs: R.offlineMs, perHour: active > 0 ? total / (active / 3600e3) : null, days, today };
+        return { startAt: R.startAt, basis: R.basis || null, since, total, activeMs: active, offlineMs: R.offlineMs, perHour: active > 0 ? total / (active / 3600e3) : null, days, today };
     }
     function xpDelta(from, to) { const out = {}; for (const [k, v] of Object.entries(to)) { const d = v - (from[k] || 0); if (d > 0) out[k] = Math.round(d * 10) / 10; } return out; }
 
@@ -2289,7 +2318,7 @@
             const now = serverNow(); const S = xpSummary(now);
             if (!S) { els["mds-xpcards"].innerHTML = ""; els["mds-xp-skills"].innerHTML = `<tr><td colspan="5" class="t">Waiting for the game's skill totals.</td></tr>`; els["mds-xp-days"].innerHTML = ""; return; }
             const cards = [
-                card("XP since record", fmtCoins(S.total), [`Since ${fmtTime(S.startAt)}`, S.today ? `Today ${fmtCoins(S.today.total)}` : ""]),
+                card("XP since record", fmtCoins(S.total), [`Since ${fmtTime(S.startAt)}`, S.today ? `Today ${fmtCoins(S.today.total)}` : "", S.basis && /Loot & XP Log/.test(S.basis) ? `Start: ${esc(S.basis)}` : ""]),
                 card("XP / h", S.perHour != null ? fmtCoins(S.perHour) : "–", ["Over active time", S.today && S.today.activeMs > 0 ? `Today ${fmtCoins(S.today.total / (S.today.activeMs / 3600e3))}` : ""]),
                 card("Active time", fmtHm(S.activeMs), [S.offlineMs ? `Offline ${fmtHm(S.offlineMs)}` : "", S.today ? `Today ${fmtHm(S.today.activeMs)}` : ""]),
             ];
