@@ -1359,6 +1359,9 @@
 #mds-root summary{cursor:pointer;color:#a9e9f1}
 #mds-root pre{white-space:pre-wrap;word-break:break-word;background:#1c2a35;padding:8px 10px;border-radius:8px;max-height:220px;overflow:auto;font-size:.857em;box-shadow:0 0 0 1px #3f424d}
 #mds-root .mds-flag{border-bottom:1px dotted rgba(230,239,243,.5);cursor:help;white-space:nowrap}
+#mds-root .mds-card{cursor:grab}
+#mds-root .mds-card.mds-dragging{opacity:.5}
+#mds-root .mds-card.mds-drop{box-shadow:0 0 0 2px #45c8d8}
 #mds-root th.mds-dragging{opacity:.5}
 #mds-root th.mds-drop{box-shadow:inset 2px 0 0 #45c8d8}
 #mds-root .mds-set{margin:4px 0 10px;padding:8px 10px;background:#1c2a35;border-radius:8px;box-shadow:0 0 0 1px #3f424d}
@@ -1525,8 +1528,8 @@
  <div class="mds-set"><span class="mds-set-title">Text size</span>
   <div class="mds-bar"><button id="mds-fs-down" title="Smaller">A −</button><span id="mds-fs-val" class="mds-note"></span><button id="mds-fs-up" title="Larger">A +</button><button id="mds-fs-reset">Reset</button><span class="mds-note">Scales every size in the panel, 70% to 180% in steps of 5%.</span></div>
  </div>
- <div class="mds-set"><span class="mds-set-title">Column order</span>
-  <div class="mds-bar"><button id="mds-order-reset">Reset column order</button><span class="mds-note">Drag any column header onto another to move it. Every table remembers its own order.</span></div>
+ <div class="mds-set"><span class="mds-set-title">Column and card order</span>
+  <div class="mds-bar"><button id="mds-order-reset">Reset column order</button><button id="mds-cards-reset">Reset card order</button><span class="mds-note">Drag a column header onto another, or a card onto another, to move it. Every table and the card grids remember their own order.</span></div>
  </div>
  <p class="mds-note">Everything here is saved in this browser only. Below, untick a column to hide it in that table; the Runs table's Seen by (sources and notes) is off by default, and a run with a note then shows a small flag next to its result.</p>
  <div id="mds-settings-tables"></div>
@@ -1583,6 +1586,8 @@
             buildColumnSettings();
             applyCols();
             wireColumnDrag();
+            wireCardDrag();
+            root.querySelector("#mds-cards-reset").addEventListener("click", () => { cardOrders = {}; try { localStorage.removeItem(CARDS_KEY); } catch (_e) { /* fine */ } render(); });
             root.querySelector("#mds-order-reset").addEventListener("click", () => { orders = {}; try { localStorage.removeItem(ORDER_KEY); } catch (_e) { /* fine */ } for (const tr of root.querySelectorAll("tr")) { const cells = [...tr.children].sort((a, b) => Number(a.dataset.oi) - Number(b.dataset.oi)); for (const c of cells) tr.appendChild(c); } });
             root.querySelector("#mds-history-input").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importMarketHistoryFile(f).then(() => render(), err => warn("history import failed", err)); });
             // Rows are held while the reader is scrolled down; they catch up at the top.
@@ -1749,7 +1754,33 @@
             const rows = state.events.filter(e => filter === "all" ? e.kind !== "consume" : e.kind === filter).slice(0, 200);
             els["mds-tbody"].innerHTML = rows.map(ev => `<tr class="${ev.kind}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${ev.kind}</td><td class="d">${describe(ev)}</td><td class="t">${esc(ev.src || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="t">Nothing recorded yet.</td></tr>`;
         }
-        function card(label, value, sub) { return `<div class="mds-card"><div class="l">${label}</div><div class="n">${value}</div>${sub ? `<small>${sub}</small>` : ""}</div>`; }
+        const cardKey = label => String(label).replace(/<[^>]*>/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+        function card(label, value, sub) { return `<div class="mds-card" data-card="${cardKey(label)}" draggable="true"><div class="l">${label}</div><div class="n">${value}</div>${sub ? `<small>${sub}</small>` : ""}</div>`; }
+        // Card order per container (Overview, Chests), saved per browser: drag a card onto another to move it there.
+        const CARDS_KEY = PANEL_KEY + "-cards";
+        let cardOrders = {};
+        try { cardOrders = JSON.parse(localStorage.getItem(CARDS_KEY) || "{}") || {}; } catch (_e) { cardOrders = {}; }
+        function sortCards(container, htmls) {
+            const order = cardOrders[container] || []; const keyOf = h => (h.match(/data-card="([^"]*)"/) || [])[1] || "";
+            return htmls.map((h, i) => ({ h, i, pos: order.indexOf(keyOf(h)) })).sort((a, b) => (a.pos < 0 ? 1e9 + a.i : a.pos) - (b.pos < 0 ? 1e9 + b.i : b.pos)).map(x => x.h);
+        }
+        function setCardOrder(container, order) { cardOrders[container] = order; try { localStorage.setItem(CARDS_KEY, JSON.stringify(cardOrders)); } catch (_e) { /* fine */ } render(); }
+        let cardDrag = null;
+        function wireCardDrag() {
+            const containerOf = el => { const c = el.closest(".mds-cards"); return c ? c.id.replace(/^mds-/, "") : null; };
+            root.addEventListener("dragstart", e => { if (e.target.closest("th")) return; const c = e.target.closest(".mds-card"); if (!c) return; cardDrag = { container: containerOf(c), key: c.dataset.card }; c.classList.add("mds-dragging"); try { e.dataTransfer.setData("text/plain", c.dataset.card); e.dataTransfer.effectAllowed = "move"; } catch (_e) { /* fine */ } });
+            root.addEventListener("dragend", e => { const c = e.target.closest && e.target.closest(".mds-card"); if (c) c.classList.remove("mds-dragging"); for (const x of root.querySelectorAll(".mds-card.mds-drop")) x.classList.remove("mds-drop"); cardDrag = null; });
+            root.addEventListener("dragover", e => { if (!cardDrag) return; const c = e.target.closest(".mds-card"); if (!c || containerOf(c) !== cardDrag.container) return; e.preventDefault(); for (const x of root.querySelectorAll(".mds-card.mds-drop")) x.classList.remove("mds-drop"); if (c.dataset.card !== cardDrag.key) c.classList.add("mds-drop"); });
+            root.addEventListener("drop", e => {
+                if (!cardDrag) return; const c = e.target.closest(".mds-card"); if (!c || containerOf(c) !== cardDrag.container) return;
+                e.preventDefault();
+                const keys = [...c.parentElement.children].map(x => x.dataset.card).filter(k => k !== cardDrag.key);
+                const at = keys.indexOf(c.dataset.card); const r = c.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2;
+                keys.splice(at < 0 ? keys.length : at + (after ? 1 : 0), 0, cardDrag.key);
+                const container = cardDrag.container; cardDrag = null;
+                setCardOrder(container, keys);
+            });
+        }
         function renderOverview() {
             const d = getDerived(), S = d.summary;
             const offChests = d.offline.reduce((s, b) => s + b.chestTotal, 0);
@@ -1779,7 +1810,7 @@
                 card("Sold", fmtCoins(M.sold.loot.net), `${M.sold.loot.qty} items · ${fmtCoins(M.sold.loot.tax)} tax (${(M.tax.rate * 100).toFixed(1)}%${M.tax.measured ? "" : " assumed"})${M.sold.other.net ? ` · other sales ${fmtCoins(M.sold.other.net)} not counted` : ""}`),
                 card("Net", fmtCoins(M.net), `sold + chest coins − spent · held loot ${fmtCoins(M.heldLoot)} at bid · no longer held ${fmtCoins(M.missingLoot)}${M.reviewRows ? ` · ${M.reviewRows} to review` : ""}`),
             );
-            els["mds-cards"].innerHTML = cards.join("");
+            els["mds-cards"].innerHTML = sortCards("cards", cards).join("");
             const live = sessionsOf().find(e => (ref.dungeons[e.action] || /\/combat\//.test(e.action)) && isRunning(e) && e.end > S.windowStart);
             const check = live ? (() => { const o = recordInSpan(d, live); const t = compareText(o, live, S.windowStart); return t ? ` Game's Loot & XP Log, session since ${fmtTime(live.start)} (read ${fmtTime(state.lootLogAt)}): ${t}.` : ""; })() : "";
             els["mds-ovnote"].textContent = `${check}Since ${fmtTime(S.windowStart)}. A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.${S.open ? " One run is in progress." : ""}`;
@@ -1876,7 +1907,7 @@
             const M = getMoney();
             const cards = Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(it(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`));
             const bag = Object.keys(ref.chestItems).map(h => [h, held(h, 0)]).filter(([, q]) => q > 0);
-            els["mds-chestcards"].innerHTML = cards.join("") + (bag.length ? card("In the bag now", bag.reduce((a, [, q]) => a + q, 0), bag.map(([h, q]) => `${q} ${it(h)}`).join(" · ")) : "");
+            els["mds-chestcards"].innerHTML = sortCards("chestcards", [...cards, ...(bag.length ? [card("In the bag now", bag.reduce((a, [, q]) => a + q, 0), bag.map(([h, q]) => `${q} ${it(h)}`).join(" · "))] : [])]).join("");
             const opens = state.timeline.filter(e => e.kind === "open" && e.at >= (state.meta.recordStart || 0)).slice(-300).reverse();
             els["mds-chests"].innerHTML = opens.map(ev => `<tr><td class="t">${fmtTime(ev.at)}</td><td class="k">${it(ev.chest)}</td><td>${ev.count}</td><td class="d">${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}${(g.counted || isCounted(g.item)) ? " (counted)" : (g.item !== "/items/coin" && !g.bid) ? " (no bid)" : ""}`).join(", ")}</td><td>${fmtCoins((ev.gains || []).filter(g => g.item !== "/items/coin" && !g.counted && !isCounted(g.item)).reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0))}</td><td>${ev.coinsGained ? fmtCoins(ev.coinsGained) : "–"}</td><td>${ev.keyCost && ev.keyCost.unitCost != null ? `${fmtCoins(ev.keyCost.unitCost * ev.count)}<small> ${esc(ev.keyCost.basis || "")}</small>` : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">No chest opened yet.</td></tr>`;
             els["mds-chestsnote"].textContent = "Newest first. Value at bid = each item's highest bid when the chest was opened; counted items (cowbells) and unpriced items carry no value. Key cost = the chest key's lot cost; a basis of ask means the key was held before the record began.";
