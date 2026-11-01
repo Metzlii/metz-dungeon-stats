@@ -29,7 +29,7 @@ All data comes from the game's own WebSocket (wss api.milkywayidle.com/ws). Mess
 | Consumable used in combat | `battle_consumable_ability_updated.consumable` | `itemHrid`, `availableTime`; `count` present per Insight | exact keys to confirm; the authoritative count is the `items_updated` row |
 | Key crafted | `action_completed` with `actionHrid` under dungeon_keys | `currentCount` delta = crafts; inputs and outputs from the same message's item rows and the recipe | confirmed shape, efficiency batches to confirm |
 | Market buy or sell filled | `market_listings_updated.endMarketListings[]` | `id`, `isSell`, `itemHrid`, `enhancementLevel`, `price`, `orderQuantity`, `filledQuantity`, `taxTaken`, `unclaimedCoinCount`, `unclaimedItemCount`, `status` | confirmed (sell sample: taxTaken 5% of gross) |
-| Instant buy | no listing row of its own; the coin and item rows arrive in `items_updated` | | the outgoing `post_market_order` names the item; Insight patches `ws.send` to see it, we would rather not. See 4.3 |
+| Instant buy | no listing row of its own; the coin and item rows arrive in `items_updated`; the outgoing `post_market_order` names item, level, quantity and `isInstantOrder` | read-only wrap of the socket's `send` to see the outgoing frame | see 4.3 |
 | Dungeon shop redemption | `items_updated`: token count down, shop item up | | to confirm |
 | Prices | `GET https://www.milkywayidle.com/game_data/marketplace.json` | `marketData[itemHrid]["0"].a` lowest ask (instant buy price), `.b` highest bid (instant sell price), `timestamp` | confirmed (Toolasha and Insight) |
 
@@ -82,16 +82,21 @@ Nothing is ever rewritten wholesale. Aggregates (totals, averages, cost averages
 Each item has a running weighted average cost: `avg = (avgQtyHeld × avg + boughtQty × unitPrice) / (avgQtyHeld + boughtQty)` on every `buy`. A `consume`, a `craft` input or a key used at a clear is charged at the item's average at that moment and the held quantity in the ledger goes down. Items the script has never seen bought and that were in the bag when the record started are entered by the `baseline` event at the lowest instant buy price at that moment (marketplace.json `a`), once. After the baseline, only observed buys feed the average. The user never crafts consumables, so there is no crafted-consumable case.
 
 ### 4.2 Keys
-A crafted key costs its recipe inputs at their running average plus the recipe's coins, divided by keys produced in that craft. A bought key costs its purchase price. Keys charged at a clear cost the key's running average. Keys held at record start enter via the baseline at the key's own ask price.
+A key's cost is exactly what its own craft consumed: the material quantities the game reported as leaving the bag in that craft's `action_completed` rows (so an Artisan Tea or gear saving shows up as fewer materials consumed, automatically), each at the material's purchase ledger average, plus the recipe's coins, divided by the keys that craft produced. Each `craft` event stores those quantities and that cost, and each key carries the cost of the craft it came from (first crafted, first used). A bought key costs its purchase price. Only a key whose craft the script never saw (held at record start, or crafted while the script was off) is priced at the average cost of the keys it has seen crafted, or at the key's ask price if it has seen none; such keys are marked `basis: "average"` or `"ask"` and are listed separately in the Keys tab.
 
 ### 4.3 Instant buys
-An instant buy produces no listing row, only coin and item rows in the same `items_updated`. The script pairs a coin decrease with an item increase in the same message (or within 2 s) and records a `buy` with `unitPrice = coins / qty`, marked `instant: true`. If a message pairs ambiguously (two items up, one coin row), the event is written as `buy` with `unitPrice: null` and surfaces in the Review list for a one-click split. No patching of `ws.send`.
+A normal buy order shows up in `market_listings_updated` with the item, quantity and unit price, so recording it is direct. An instant buy (you click buy and it fills at the current asks immediately) does not produce a listing row of your own; the game only sends `items_updated` with your new coin total and the item's new count. Two ways to recover the price paid:
+
+- **Watch what the client sends.** When you place any order, the game client sends `post_market_order` to the server naming the item, enhancement level, quantity and whether it is instant. Reading those outgoing frames tells us exactly which item and how many were bought; the coin drop in the following `items_updated` gives the total paid. Reading requires wrapping the socket's `send` function so the script sees the frame on its way out. The wrapper only reads and passes the frame through unchanged; it never alters or adds messages.
+- **Pair the rows.** Without the outgoing frame, the script pairs a coin decrease with an item increase in the same `items_updated`. That works when the message holds one coin row and one item row. It cannot be split when two different items increased in the same message (an instant buy landing together with a chest opening, say).
+
+The design uses both: the outgoing order names the purchase, the rows price it. If the rows arrive without a matching order (script started after the click), the pairing fallback applies, and an unsplittable message goes to the Review list with the coins and the candidate items shown, for a one-click split instead of a silent guess.
 
 ### 4.4 Chest value
 An `open` records each gained item's bid and ask at the time of opening. The tracked "loot value at open" is the sum of quantity × bid, because bid is what an instant sell would have fetched. Coins gained from the chest are cash, not loot. Tokens are counted, not valued.
 
-### 4.5 Sales
-A `sell` records the real gross, the real tax the game reported (`taxTaken`) and the net. No tax constant is assumed.
+### 4.5 Sales and the tax rate
+A `sell` records the real gross, the real tax the game reported (`taxTaken`) and the net. For valuations that have no sale behind them (held loot, loot no longer held) the script needs a rate: it uses the rate measured from your own recorded sales (`taxTaken / gross`, latest sale wins) and 4% until a sale has been recorded. The one sale in our September capture shows 5%, so the measured rate takes precedence over any constant, and the Data tab shows which rate is in force.
 
 ### 4.6 Cash flow
 Spent = buys (materials, keys, consumables) + craft coins. Loot sold = Σ sell.net. Loot held = loot quantity still in the bag or on sell orders, shown at current bid as a separate line. Loot no longer held = section 5.4. Net = sold + cash from chests − spent, with held and valued lines shown beside it, never added into it without saying so.
@@ -107,7 +112,7 @@ Cards, each clickable for its detail table:
 
 - **Clears** (fails and stops in the sub-line). Detail: clears, fails, stops, fail rate, chests dropped per clear.
 - **Average run time** as m:ss, fails counted in, with the last run in the sub-line. Detail: last 100 runs with start, duration, result, waves.
-- **Time not dungeoning** since the record started, split into crafting keys, other actions, waiting between runs, away. Detail: by day.
+- **Time not dungeoning** since the record started, split into crafting keys, other actions, waiting between runs (the dungeon action queued but no run in progress), and away (no game connection: logged out or the tab closed). Away will rarely be more than a sliver and is kept so the four parts add up to the clock. Detail: by day.
 - **Spent** (keys and consumables used, at ledger cost). Detail: by item.
 - **Loot value at open**. Detail: by item.
 - **Sold** (net). Detail: by item.
@@ -125,7 +130,7 @@ Four sections, as in Insight's tab but tracked only:
 - **Loot to sell**: items gained from chests that are tradable and not keys or chests: gained, sold, held (bag + listed), held value at current bid. Row actions: "Keep N" moves quantity into Supplies kept.
 - **Dungeon tokens**: per token, gained, redeemed (with what was received), held. No valuation.
 - **Supplies kept for future runs**: entry keys, chest keys, consumables, and any item marked kept. Belt and talisman items will join this list by item category when they exist.
-- **Loot no longer held**: automatic. For each loot item, `gained − sold − held − listed − kept`. When positive, the missing quantity is valued at the current bid and shown with its open-time value beside it. If current bid differs from the open-time value by more than the review threshold (default 50%), the row is marked "review" and excluded from totals until accepted. Accepting writes a `value` event so it stops changing. An import that brings the real sale replaces the valuation automatically.
+- **Loot no longer held**: automatic. For each loot item, `gained − sold − held − listed − kept`. When positive, the missing quantity is valued at the current bid less the tax rate in force (4.5), as the net an instant sell would have paid, and shown with its open-time value beside it. If current bid differs from the open-time value by more than the review threshold (default 50%), the row is marked "review" and excluded from totals until accepted. Accepting writes a `value` event so it stops changing. An import that brings the real sale replaces the valuation automatically.
 
 ### 5.5 Chests
 The opening history: time, chest, how many, contents with quantities, value at open (bid), coins gained. Totals per chest type. Nothing expected, nothing lucky.
