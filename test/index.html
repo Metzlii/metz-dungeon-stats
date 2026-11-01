@@ -1,0 +1,110 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Metz Dungeon Stats replay harness</title>
+<style>
+  body { font: 13px/1.4 system-ui, sans-serif; background: #1a1526; color: #e6ddf5; margin: 0; padding: 16px 16px 420px; }
+  h1 { font-size: 16px; margin: 0 0 8px; }
+  button { font: inherit; padding: 5px 10px; margin: 0 6px 6px 0; }
+  #log { white-space: pre-wrap; background: rgba(0,0,0,.3); padding: 8px; border-radius: 8px; max-height: 300px; overflow: auto; }
+</style>
+<h1>Metz Dungeon Stats replay harness</h1>
+<p>Feeds a synthetic dungeon session through the script's message path. Serve F:\Claude on a local port and open /metz-dungeon-stats/test/index.html. The script is loaded as a plain script; nothing here talks to the game.</p>
+<div>
+  <button id="run">Run the scenario</button>
+  <button id="status">Status</button>
+  <button id="reset">Reset record (IndexedDB)</button>
+</div>
+<div id="log"></div>
+<script>
+  // Fake the market feed for the price lookups the script makes.
+  const FAKE_MARKET = { timestamp: Math.floor(Date.now() / 1000), marketData: {
+    "/items/dragon_fruit_yogurt": { "0": { a: 1200, b: 1100 } },
+    "/items/arcane_lumber": { "0": { a: 2100, b: 1900 } },
+    "/items/redwood_lumber": { "0": { a: 1500, b: 1400 } },
+    "/items/pirate_entry_key": { "0": { a: 800000, b: 700000 } },
+    "/items/pirate_chest_key": { "0": { a: 2000000, b: 1800000 } },
+    "/items/cowbell": { "0": { a: 400000, b: 380000 } },
+    "/items/holy_cheese": { "0": { a: 300, b: 280 } },
+    "/items/blooming_trident": { "0": { a: 260000000, b: 240000000 } },
+    "/items/pearl": { "0": { a: 50000, b: 45000 } }, "/items/amber": { "0": { a: 60000, b: 55000 } }, "/items/garnet": { "0": { a: 70000, b: 65000 } }, "/items/jade": { "0": { a: 80000, b: 75000 } }, "/items/amethyst": { "0": { a: 90000, b: 85000 } }, "/items/moonstone": { "0": { a: 100000, b: 95000 } },
+  } };
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (url, opts) => /marketplace\.json/.test(String(url)) ? Promise.resolve(new Response(JSON.stringify(FAKE_MARKET), { status: 200, headers: { "Content-Type": "application/json" } })) : realFetch(url, opts);
+</script>
+<script src="/metz-dungeon-stats/metz-dungeon-stats.user.js"></script>
+<script>
+  const logEl = document.getElementById("log");
+  const log = (...a) => { logEl.textContent += a.map(x => typeof x === "string" ? x : JSON.stringify(x)).join(" ") + "\n"; logEl.scrollTop = logEl.scrollHeight; };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const CH = 163042, NAME = "Metzli";
+  const iso = ms => new Date(ms).toISOString();
+  const inv = new Map(); // itemHrid -> count, the harness's own truth
+  const row = (item, count, loc = "/item_locations/inventory") => ({ id: Math.floor(Math.random() * 1e8), characterID: CH, itemLocationHrid: loc, itemHrid: item, enhancementLevel: 0, count, offlineCount: 0, hash: `${CH}::${loc}::${item}::0`, createdAt: iso(Date.now() - 1e9), updatedAt: iso(Date.now()) });
+  const set = (item, count) => { inv.set(item, count); return row(item, count); };
+  const add = (item, d) => set(item, (inv.get(item) || 0) + d);
+  const feed = f => window.__mds.feed(f);
+
+  async function scenario() {
+    const t0 = Date.now();
+    log("loading init_client_data ...");
+    const icd = await realFetch("/scratch/design-export-0919/init_client_data.json").then(r => r.json());
+    feed(icd); log("init_client_data fed; dungeons:", Object.keys(window.__mds.ref.dungeons).length);
+    const items = [set("/items/coin", 50000000), set("/items/pirate_entry_key", 12), set("/items/pirate_chest", 2), set("/items/dragon_fruit_yogurt", 500), set("/items/arcane_lumber", 1000), set("/items/redwood_lumber", 1000), set("/items/pirate_chest_key", 1)];
+    feed({ type: "init_character_data", currentTimestamp: iso(t0), character: { id: CH, name: NAME, lastOfflineTime: iso(t0 - 3 * 3600e3), inactiveTime: iso(t0 - 5 * 60e3) },
+      characterItems: items,
+      characterSkills: [{ skillHrid: "/skills/attack", experience: 1000000, level: 100 }, { skillHrid: "/skills/magic", experience: 2000000, level: 110 }, { skillHrid: "/skills/crafting", experience: 500000, level: 80 }],
+      characterActions: [{ id: 555, characterID: CH, partyID: 1, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, currentCount: 0, wave: 0, isDone: false, ordinal: 0 }],
+      myMarketListings: [],
+      offlineItems: [{ itemHrid: "/items/pirate_chest", enhancementLevel: 0, count: 2, offlineCount: 3 }],
+      offlineSkills: [{ skillHrid: "/skills/attack", offlineExperience: 12345 }],
+      partyChatHistory: [{ id: 1, chan: "/chat_channel_types/party", t: iso(t0 - 2 * 3600e3), m: "systemChatMessage.partyKeyCount", isSystemMessage: true, systemMetadata: JSON.stringify({ keyCountString: "[Metzli - 12], [Dripyy - 3]" }) }],
+    });
+    await sleep(600); log("login fed; status:", window.__mds.status());
+
+    // A buy order fill: 100 arcane lumber at 2000.
+    feed({ type: "market_listings_updated", endMarketListings: [{ id: 9001, characterID: CH, status: "/market_listing_status/filled", isSell: false, itemHrid: "/items/arcane_lumber", enhancementLevel: 0, orderQuantity: 100, filledQuantity: 100, price: 2000, taxTaken: 0, unclaimedItemCount: 100, unclaimedCoinCount: 0, createdTimestamp: iso(t0 + 1000) }], endCharacterItems: [add("/items/coin", -200000)] });
+    feed({ type: "items_updated", endCharacterItems: [add("/items/arcane_lumber", 100)] });
+    // An instant buy: 50 redwood lumber, paid 76,000 coins.
+    window.__mds.feedOut({ type: "post_market_order", postMarketOrderData: { itemHrid: "/items/redwood_lumber", enhancementLevel: 0, quantity: 50, isSell: false, isInstantOrder: true } });
+    feed({ type: "items_updated", endCharacterItems: [add("/items/coin", -76000), add("/items/redwood_lumber", 50)] });
+    // Two key crafts (the first sets the cursor).
+    const craft = (count) => ({ type: "action_completed", endCharacterAction: { id: 777, characterID: CH, partyID: 0, actionHrid: "/actions/crafting/pirate_entry_key", currentCount: count, wave: 0, isDone: false, updatedAt: iso(Date.now()) }, endCharacterItems: [add("/items/arcane_lumber", -100), add("/items/redwood_lumber", -100), add("/items/coin", -300000), add("/items/pirate_entry_key", 1)], endCharacterSkills: [{ skillHrid: "/skills/crafting", experience: 500000 + 600 * count, level: 80 }] });
+    feed(craft(1)); feed(craft(2));
+    log("market and crafts fed");
+
+    // Run 1: clear.
+    const party = (bid, wave) => ({ type: "new_battle", combatStartTime: iso(t0), battleId: bid, wave, players: [
+      { character: { id: CH, name: NAME }, deathCount: 0, combatConsumables: [{ itemHrid: "/items/dragon_fruit_yogurt", count: inv.get("/items/dragon_fruit_yogurt") }], totalSkillExperienceMap: { "/skills/attack": 1000 * wave }, totalLootMap: {} },
+      { character: { id: 2, name: "Dripyy" }, deathCount: 0 }], monsters: [] });
+    const waveDone = (wave, items, xp) => ({ type: "action_completed", endCharacterAction: { id: 555, characterID: CH, partyID: 1, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, currentCount: wave === 65 ? 1 : 0, wave, isDone: false, updatedAt: iso(Date.now()) }, endCharacterItems: items || [], endCharacterSkills: xp || [], endCharacterAbilities: [] });
+    feed({ type: "chat_message_received", message: { id: 2, chan: "/chat_channel_types/party", t: iso(Date.now()), m: "systemChatMessage.partyKeyCount", isSystemMessage: true, systemMetadata: JSON.stringify({ keyCountString: "[Metzli - 14], [Dripyy - 3]" }) } });
+    feed(party(100, 1));
+    for (let w = 1; w <= 64; w++) { if (w % 10 === 0) { feed({ type: "items_updated", endCharacterItems: [add("/items/dragon_fruit_yogurt", -2)] }); } feed(waveDone(w)); feed(party(100, w + 1)); }
+    await sleep(200);
+    feed(waveDone(65, [add("/items/pirate_chest", 1), set("/items/pirate_refinement_chest", 1), add("/items/pirate_entry_key", -1)], [{ skillHrid: "/skills/attack", experience: 1050000, level: 100 }, { skillHrid: "/skills/magic", experience: 2080000, level: 110 }]));
+    log("run 1 fed (clear)");
+    // Run 2: fail on wave 30 (wave 1 again under the same battleId).
+    feed(party(101, 1)); for (let w = 1; w <= 29; w++) { feed(waveDone(w)); feed(party(101, w + 1)); }
+    await sleep(150);
+    feed({ type: "chat_message_received", message: { id: 3, chan: "/chat_channel_types/party", t: iso(Date.now()), m: "systemChatMessage.partyWaveFailed", isSystemMessage: true, systemMetadata: JSON.stringify({ wave: 30 }) } });
+    feed(party(101, 1));
+    log("run 2 fed (fail)");
+    // Chest openings: the captured large treasure chest sample, then two pirate chests.
+    const samples = await realFetch("/metz-dungeon-stats/test/fixtures/samples.json").then(r => r.json());
+    feed(samples.loot_opened[0]);
+    feed({ type: "loot_opened", openedItem: row("/items/pirate_chest", 2), gainedItems: [{ id: 0, characterID: CH, itemLocationHrid: "/item_locations/inventory", itemHrid: "/items/coin", count: 150000 }, { id: 0, characterID: CH, itemLocationHrid: "/item_locations/inventory", itemHrid: "/items/cowbell", count: 3 }, { id: 0, characterID: CH, itemLocationHrid: "/item_locations/inventory", itemHrid: "/items/holy_cheese", count: 40 }, { id: 0, characterID: CH, itemLocationHrid: "/item_locations/inventory", itemHrid: "/items/pirate_token", count: 25 }] });
+    feed({ type: "items_updated", endCharacterItems: [add("/items/pirate_chest", -2), add("/items/pirate_chest_key", -1), add("/items/coin", 150000), set("/items/cowbell", 3), set("/items/holy_cheese", 40), set("/items/pirate_token", 25)] });
+    // Shop redemption.
+    feed({ type: "items_updated", endCharacterItems: [add("/items/pirate_token", -20), set("/items/pirate_shop_thing", 1)] });
+    // A sale: the captured blooming trident fill with a fresh timestamp.
+    const sale = JSON.parse(JSON.stringify(samples.market_listings_updated[0])); for (const l of sale.endMarketListings) l.createdTimestamp = iso(t0 + 2000);
+    feed(sale);
+    await sleep(1500);
+    await window.__mds.flush();
+    log("done; status:", window.__mds.status());
+    document.getElementById("mds-toggle").click();
+  }
+  document.getElementById("run").addEventListener("click", () => scenario().catch(e => log("scenario failed:", String(e), e.stack)));
+  document.getElementById("status").addEventListener("click", () => log(window.__mds.status()));
+  document.getElementById("reset").addEventListener("click", async () => { const dbs = await indexedDB.databases(); for (const d of dbs) if (d.name && d.name.startsWith("metz-dungeon-stats-")) { indexedDB.deleteDatabase(d.name); log("deleted", d.name); } });
+</script>
