@@ -154,7 +154,7 @@
             if (zone && zone.isDungeon && zone.dungeonInfo) {
                 const d = zone.dungeonInfo;
                 const chests = (d.rewardDropTable || []).map(r => r.itemHrid).filter(Boolean);
-                ref.dungeons[hrid] = { name: action.name, maxWaves: num(d.maxWaves), keyItem: d.keyItemHrid || null, chests };
+                ref.dungeons[hrid] = { name: action.name, sortIndex: num(action.sortIndex), maxWaves: num(d.maxWaves), keyItem: d.keyItemHrid || null, chests };
                 for (const c of chests) ref.chestItems[c] = { zone: hrid, key: ref.items[c] ? ref.items[c].openKey : null };
             }
             if (action.category === "/action_categories/crafting/dungeon_keys") {
@@ -162,6 +162,7 @@
             }
         }
         for (const [hrid, item] of Object.entries(data.itemDetailMap)) if (item.isOpenable && item.openKeyItemHrid && !ref.chestItems[hrid]) ref.chestItems[hrid] = { zone: null, key: item.openKeyItemHrid };
+        Object.entries(ref.dungeons).sort((a, b) => a[1].sortIndex - b[1].sortIndex).forEach(([, dg], i) => { dg.index = i + 1; });
         ref.realKeys = new Set([...Object.values(ref.dungeons).map(d => d.keyItem), ...Object.values(ref.chestItems).map(c => c.key)].filter(Boolean));
         ref.version = data.gameVersion || null;
         ref.ready = Object.keys(ref.dungeons).length > 0;
@@ -1020,7 +1021,7 @@
             if (liveStart) usedLive.add(liveStart.id); if (liveEnd) usedLive.add(liveEnd.id);
             for (const e of liveStarts) if (e.partial && e.at > s.t && e.at < limit) usedLive.add(e.id); // a join mid-run is not a run
             const zone = (liveEnd && liveEnd.zone) || (liveStart && liveStart.zone) || s.zone || zoneSeen;
-            const run = { zone, startAt: s.t, endAt: null, durationMs: null, result: null, waves: null, chests: null, keysCharged: null, keysSrc: null, deaths: null, xpBySkill: null, xpPartial: !liveStart || !!liveStart.partial, battleId: liveStart ? liveStart.battleId : (liveEnd ? liveEnd.battleId : null), source: liveEnd ? "chat+live" : "chat", keysBefore: s.keys, keysAfter: null, clearAt: null, note: null };
+            const run = { zone, startAt: s.t, endAt: null, durationMs: null, result: null, waves: null, chests: null, keysCharged: null, keysSrc: null, deaths: null, xpBySkill: null, xpPartial: !liveStart || !!liveStart.partial, battleId: liveStart ? liveStart.battleId : (liveEnd ? liveEnd.battleId : null), tier: liveStart && liveStart.tier != null ? liveStart.tier : (liveEnd && liveEnd.tier != null ? liveEnd.tier : null), source: liveEnd ? "chat+live" : "chat", keysBefore: s.keys, keysAfter: null, clearAt: null, note: null };
             if (end && end.type === "start") {
                 run.keysAfter = end.keys;
                 if (end.t - s.t > C.maxRunMs && !(liveEnd && liveEnd.kind === "clear")) { run.result = "unknown"; run.gapTo = end.t; run.note = "no end in the chat ledger and the next start is more than an hour later"; }
@@ -1056,12 +1057,12 @@
             if (inside(ls.at, 0)) continue;
             const le = liveEnds.find(e => !usedLive.has(e.id) && e.runId && e.runId === ls.runId) || null; if (le) usedLive.add(le.id);
             const result = le ? (le.kind === "stop" ? "cancelled" : le.kind) : (nowMs - ls.at <= C.maxRunMs ? "open" : "unknown");
-            runs.push({ zone: ls.zone, startAt: ls.at, endAt: le ? le.at : null, durationMs: le ? le.at - ls.at : null, result, waves: le ? le.waves : null, chests: le && Array.isArray(le.chests) ? le.chests : null, keysCharged: le && le.keysCharged != null ? n(le.keysCharged) : null, keysSrc: le && le.keysCharged != null ? "clear message" : null, deaths: le ? deathsOf.get(le.id) ?? null : null, xpBySkill: le ? le.xpBySkill || null : null, xpPartial: !!ls.partial, battleId: ls.battleId, source: "live", partial: !!ls.partial, clearAt: le && le.kind === "clear" ? le.at : null, note: ls.partial ? "seen from a join, start time is the join" : null });
+            runs.push({ zone: ls.zone, tier: ls.tier != null ? ls.tier : (le ? le.tier : null), startAt: ls.at, endAt: le ? le.at : null, durationMs: le ? le.at - ls.at : null, result, waves: le ? le.waves : null, chests: le && Array.isArray(le.chests) ? le.chests : null, keysCharged: le && le.keysCharged != null ? n(le.keysCharged) : null, keysSrc: le && le.keysCharged != null ? "clear message" : null, deaths: le ? deathsOf.get(le.id) ?? null : null, xpBySkill: le ? le.xpBySkill || null : null, xpPartial: !!ls.partial, battleId: ls.battleId, source: "live", partial: !!ls.partial, clearAt: le && le.kind === "clear" ? le.at : null, note: ls.partial ? "seen from a join, start time is the join" : null });
         }
         for (const le of liveEnds) {
             if (usedLive.has(le.id) || inside(le.at, 5e3)) continue; usedLive.add(le.id);
             const startAt = le.at - (n(le.durationMs) || 0);
-            runs.push({ zone: le.zone, startAt, endAt: le.at, durationMs: n(le.durationMs) || null, result: le.kind === "stop" ? "cancelled" : le.kind, waves: le.waves, chests: Array.isArray(le.chests) ? le.chests : null, keysCharged: le.keysCharged != null ? n(le.keysCharged) : null, keysSrc: le.keysCharged != null ? "clear message" : null, deaths: deathsOf.get(le.id) ?? null, xpBySkill: le.xpBySkill || null, xpPartial: true, battleId: le.battleId, source: "live", clearAt: le.kind === "clear" ? le.at : null, note: "end seen without its start" });
+            runs.push({ zone: le.zone, tier: le.tier != null ? le.tier : null, startAt, endAt: le.at, durationMs: n(le.durationMs) || null, result: le.kind === "stop" ? "cancelled" : le.kind, waves: le.waves, chests: Array.isArray(le.chests) ? le.chests : null, keysCharged: le.keysCharged != null ? n(le.keysCharged) : null, keysSrc: le.keysCharged != null ? "clear message" : null, deaths: deathsOf.get(le.id) ?? null, xpBySkill: le.xpBySkill || null, xpPartial: true, battleId: le.battleId, source: "live", clearAt: le.kind === "clear" ? le.at : null, note: "end seen without its start" });
         }
         runs.sort((a, b) => a.startAt - b.startAt);
         // The record window. Runs that began before it count only if they were still going when it began.
@@ -1317,6 +1318,8 @@
 #mds-root .mds-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
 #mds-root .mds-bar button,#mds-root .mds-bar select,#mds-root .mds-bar label,#mds-root button.mds-act{background:transparent;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:8px;padding:6px 10px;font:500 .929em/1.2 "Inter",system-ui,sans-serif;cursor:pointer}
 #mds-root .mds-bar select{background:#1c2a35}
+#mds-root .mds-bar label{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+#mds-root .mds-bar label input{accent-color:#45c8d8;margin:0}
 #mds-root .mds-bar button:hover,#mds-root button.mds-act:hover{background:rgba(230,239,243,.07)}
 #mds-root .mds-bar button.danger{border-color:#d3a13a;color:#f2d99a}
 #mds-root .mds-bar button.danger:hover{background:rgba(211,161,58,.12)}
@@ -1360,6 +1363,18 @@
         let scale = 1;
         try { const v = Number(localStorage.getItem(SCALE_KEY)); if (v >= 0.7 && v <= 1.8) scale = v; } catch (_e) { /* fine */ }
         function applyScale() { if (!root) return; root.style.fontSize = `${Math.round(BASE_PX * scale * 10) / 10}px`; const el = root.querySelector("#mds-fs-val"); if (el) el.textContent = `${Math.round(scale * 100)}%`; }
+        // Runs table columns. Seen-by is diagnostic and off by default. Saved per browser.
+        const RUN_COLS = [["start", "Start"], ["result", "Result"], ["dungeon", "Dungeon"], ["time", "Run time"], ["waves", "Waves"], ["chests", "Chests"], ["keys", "Keys"], ["deaths", "Deaths"], ["xp", "XP"], ["seen", "Seen by"]];
+        const COLS_KEY = PANEL_KEY + "-cols";
+        let cols = Object.fromEntries(RUN_COLS.map(([k]) => [k, k !== "seen"]));
+        try { const saved = JSON.parse(localStorage.getItem(COLS_KEY) || "null"); if (saved && typeof saved === "object") for (const [k] of RUN_COLS) if (typeof saved[k] === "boolean") cols[k] = saved[k]; } catch (_e) { /* fine */ }
+        function applyCols() {
+            if (!root) return;
+            const hidden = RUN_COLS.map(([k], i) => (cols[k] ? null : i + 1)).filter(Boolean);
+            root.querySelector("#mds-cols-style").textContent = hidden.map(i => `#mds-root .mds-wrap-runs th:nth-child(${i}),#mds-root .mds-wrap-runs td:nth-child(${i}){display:none}`).join("");
+            for (const inp of root.querySelectorAll("#mds-cols-bar input")) inp.checked = !!cols[inp.dataset.col];
+        }
+        function setCol(k, v) { cols[k] = !!v; try { localStorage.setItem(COLS_KEY, JSON.stringify(cols)); } catch (_e) { /* fine */ } applyCols(); if (tab === "runs") renderRuns(true); }
         function setScale(v) { scale = Math.max(0.7, Math.min(1.8, Math.round(v * 20) / 20)); try { localStorage.setItem(SCALE_KEY, String(scale)); } catch (_e) { /* fine */ } applyScale(); }
         let money = null, moneyAt = 0, moneyRev = -1, moneyPrices = 0;
         const isToken = h => /_token$/.test(h);
@@ -1399,7 +1414,7 @@
  <p class="mds-note" id="mds-ovnote"></p>
 </div>
 <div class="mds-pane" data-pane="runs" hidden>
- <div class="mds-wrap mds-wrap-runs"><table><thead><tr><th>Start</th><th>Result</th><th>Run time</th><th>Waves</th><th>Chests</th><th>Keys</th><th>Deaths</th><th>XP</th><th>Seen by</th></tr></thead><tbody id="mds-runs"></tbody></table></div>
+ <div class="mds-wrap mds-wrap-runs"><table><thead><tr><th>Start</th><th>Result</th><th>Dungeon</th><th>Run time</th><th>Waves</th><th>Chests</th><th>Keys</th><th>Deaths</th><th>XP</th><th>Seen by</th></tr></thead><tbody id="mds-runs"></tbody></table></div>
  <p class="mds-note" id="mds-runsnote"></p>
  <h4>Sessions in the game's Loot &amp; XP Log</h4>
  <div class="mds-wrap"><table><thead><tr><th>Start</th><th>End</th><th>Action</th><th>Game: count</th><th>Game: drops</th><th>Game: XP</th><th>This record</th><th>Seen by</th></tr></thead><tbody id="mds-sessions"></tbody></table></div>
@@ -1438,7 +1453,11 @@
  <h4>Text size</h4>
  <div class="mds-bar"><button id="mds-fs-down" title="Smaller">A −</button><span id="mds-fs-val" class="mds-note"></span><button id="mds-fs-up" title="Larger">A +</button><button id="mds-fs-reset">Reset</button></div>
  <p class="mds-note">Scales every size in the panel, from 70% to 180% in steps of 5%. Saved in this browser only.</p>
+ <h4>Runs table columns</h4>
+ <div class="mds-bar" id="mds-cols-bar"></div>
+ <p class="mds-note">Seen by says which sources a run came from (chat, live, or both) and carries the notes; it is off by default, and a run with a note then shows a small flag next to its result instead.</p>
 </div>
+<style id="mds-cols-style"></style>
 <div class="mds-pane" data-pane="data" hidden>
 <div class="mds-bar">
  <label>Show <select id="mds-filter">${KINDS.map(k => `<option value="${k}">${k}</option>`).join("")}</select></label>
@@ -1485,6 +1504,10 @@
             root.querySelector("#mds-fs-up").addEventListener("click", () => setScale(scale + 0.05));
             root.querySelector("#mds-fs-reset").addEventListener("click", () => setScale(1));
             applyScale();
+            const bar = root.querySelector("#mds-cols-bar");
+            bar.innerHTML = RUN_COLS.map(([k, label]) => `<label><input type="checkbox" data-col="${k}"> ${label}</label>`).join("");
+            bar.addEventListener("change", e => { const inp = e.target.closest("input[data-col]"); if (inp) setCol(inp.dataset.col, inp.checked); });
+            applyCols();
             root.querySelector("#mds-history-input").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importMarketHistoryFile(f).then(() => render(), err => warn("history import failed", err)); });
             // Rows are held while the reader is scrolled down; they catch up at the top.
             els.wrap.addEventListener("scroll", () => { if (rowsHeld && els.wrap.scrollTop <= 8) renderRows(true); }, { passive: true });
@@ -1771,14 +1794,19 @@
             runsHeld = false;
             const d = getDerived(); const now = serverNow();
             const items = [...d.runs.map(r => ({ t: r.startAt, run: r })), ...d.offline.map(b => ({ t: b.to, block: b }))].sort((a, b) => b.t - a.t).slice(0, 300);
-            const chestText = r => (r.chests ? (r.chests.length ? r.chests.map(c => `${c.qty} ${it(c.item)}`).join(", ") : "none") : "–");
+            // "1 Chest, 1 Refine": the dungeon is in its own column, and a refinement chest is the only other kind.
+            const chestWord = h => (/refinement/.test(h) ? "Refine" : ref.chestItems[h] ? "Chest" : it(h));
+            const chestText = r => (r.chests ? (r.chests.length ? r.chests.map(c => `${c.qty} ${chestWord(c.item)}`).join(", ") : "none") : "–");
+            // T2D4: tier from the run, else from the game's loot log session that covers it; D from the game's dungeon order.
+            const sessionTier = t => { const e = [...state.lootLog.values()].find(x => ref.dungeons[x.action] && x.start <= t && t <= (isRunning(x) ? serverNow() : x.end) + 5000); return e ? e.tier : null; };
+            const dungeonCode = (zone, tier, at) => { const dg = ref.dungeons[zone]; const tr = tier != null ? tier : sessionTier(at); return `<span title="${esc(dg ? dg.name : shortAction(zone || ""))}">${tr != null ? `T${tr}` : ""}${dg && dg.index ? `D${dg.index}` : esc(shortAction(zone || "?"))}</span>`; };
             els["mds-runs"].innerHTML = items.map(x => {
-                if (x.block) { const b = x.block; return `<tr class="offline"><td class="t">${fmtTime(b.from)}</td><td class="k">offline</td><td>${fmtDur(b.ms)}</td><td>–</td><td>${b.chestTotal ? Object.entries(b.chests).map(([h, q]) => `${q} ${it(h)}`).join(", ") : "none"}</td><td>${Object.values(b.keys).reduce((s, v) => s + -v, 0) || "–"}</td><td>–</td><td>${fmtCoins(xpSum(b.xp))}</td><td class="t">login summary · ${b.runsInLedger} runs in the chat ledger</td></tr>`; }
+                if (x.block) { const b = x.block; return `<tr class="offline"><td class="t">${fmtTime(b.from)}</td><td class="k">offline</td><td class="t">–</td><td>${fmtDur(b.ms)}</td><td>–</td><td>${b.chestTotal ? Object.entries(b.chests).map(([h, q]) => `${q} ${chestWord(h)}`).join(", ") : "none"}</td><td>${Object.values(b.keys).reduce((s, v) => s + -v, 0) || "–"}</td><td>–</td><td>${fmtCoins(xpSum(b.xp))}</td><td class="t">login summary · ${b.runsInLedger} runs in the chat ledger</td></tr>`; }
                 const r = x.run;
                 const dur = r.result === "open" ? `${fmtDur(now - r.startAt)} so far` : (r.durationMs != null ? fmtDur(r.durationMs) : "–");
                 const result = r.result === "open" ? "in progress" : r.result;
-                return `<tr class="${r.result}"><td class="t">${fmtTime(r.startAt)}${r.spansRecordStart ? " ↰" : ""}</td><td class="k">${result}</td><td>${dur}</td><td>${r.waves ?? "–"}</td><td>${chestText(r)}</td><td>${r.keysCharged ?? "–"}${r.keysSrc === "key count" ? "*" : ""}</td><td>${r.deaths ?? "–"}</td><td>${r.xpBySkill ? fmtCoins(xpSum(r.xpBySkill)) + (r.xpPartial ? "†" : "") : "–"}</td><td class="t">${r.source}${r.note ? ` · <span class="mds-flag" title="${esc(r.note)}">${esc(noteLabel(r.note))}</span>` : ""}</td></tr>`;
-            }).join("") || `<tr><td colspan="9" class="t">No runs yet.</td></tr>`;
+                return `<tr class="${r.result}"><td class="t">${fmtTime(r.startAt)}${r.spansRecordStart ? " ↰" : ""}</td><td class="k">${result}${!cols.seen && r.note ? ` <span class="mds-flag" title="${esc(r.note)}">?</span>` : ""}</td><td class="t">${dungeonCode(r.zone, r.tier, r.startAt)}</td><td>${dur}</td><td>${r.waves ?? "–"}</td><td>${chestText(r)}</td><td>${r.keysCharged ?? "–"}${r.keysSrc === "key count" ? "*" : ""}</td><td>${r.deaths ?? "–"}</td><td>${r.xpBySkill ? fmtCoins(xpSum(r.xpBySkill)) + (r.xpPartial ? "†" : "") : "–"}</td><td class="t">${r.source}${r.note ? ` · <span class="mds-flag" title="${esc(r.note)}">${esc(noteLabel(r.note))}</span>` : ""}</td></tr>`;
+            }).join("") || `<tr><td colspan="10" class="t">No runs yet.</td></tr>`;
             renderSessions(d);
             els["mds-runsnote"].textContent = "Newest first. * keys charged read from the party key counts (no clear message seen). † XP counted from when the script joined the run. ↰ the run was under way when the record started.";
         }
