@@ -65,10 +65,11 @@ Event kinds, and only these:
 | `consume` | item, qty, unitCost | `battle_consumable_ability_updated` count drop, confirmed by the `items_updated` row |
 | `redeem` | token, qty, item, itemQty | `items_updated` diff |
 | `baseline` | items[{item,qty,unitCost,basis:"ask-at-start"}], keys[], chests[] | once, when the record starts |
+| `offline` | from, to, items[{item,delta}], xpBySkill, runIds[] | `init_character_data` offline summary on login (4.7) |
 | `value` | item, qty, unitPrice, basis:"bid-now", flagged | the no-longer-held valuation (section 5.4), written when accepted |
 | `note` | text | manual |
 
-**runs**: one row per run, keyed by `zone:battleId:startAt`, updated in place as the run progresses: start, end, result (`clear`, `fail`, `stop`, `open` while running), waves, party, chests, xpBySkill, deaths, consumesDuring. This is the table the Runs tab shows; `events` is the audit trail behind it.
+**runs**: one row per run, keyed by `zone:startAt`, updated in place as the run progresses: start, end, result (`clear`, `fail`, `stop`, `open` while running), waves, party, keysUsed, chests, xpBySkill, deaths, consumesDuring, `source` (`live` or `chat` for runs rebuilt from the party ledger after being offline), `clock` (`server` or `local`). This is the table the Runs tab shows; `events` is the audit trail behind it.
 
 **inventory**: the mirror of `characterItems`, keyed by row hash, used only to diff incoming rows. Not exported.
 
@@ -98,6 +99,14 @@ An `open` records each gained item's bid and ask at the time of opening. The tra
 ### 4.5 Sales and the tax rate
 A `sell` records the real gross, the real tax the game reported (`taxTaken`) and the net. For valuations that have no sale behind them (held loot, loot no longer held) the script needs a rate: it uses the rate measured from your own recorded sales (`taxTaken / gross`, latest sale wins) and 4% until a sale has been recorded. The one sale in our September capture shows 5%, so the measured rate takes precedence over any constant, and the Data tab shows which rate is in force.
 
+### 4.7 Offline play
+The game keeps running dungeons while logged out, so offline time is ordinary time, not a gap. Two login sources rebuild it:
+
+- **The party chat ledger.** The game's own system messages in the party channel carry server timestamps: `partyKeyCount` at each run's start (and again at completion) with every member's key count, `partyWaveFailed` with the wave, `partyBattleEnded` on a stop. On login the script replays the party chat history the server sends (`init_character_data.partyChatHistory`, shape to confirm) and derives every run that happened while away: start, end, duration, result, and keys used per member from consecutive key counts. These runs enter the `runs` store with `source: "chat"` and server clocks, and the same messages drive run timing while online, so online and offline runs are measured the same way.
+- **The offline summary.** `init_character_data` carries what changed while away: `offlineItems` (chests gained, consumables and keys used, as deltas per item) and `offlineSkills` (XP per skill), with `lastOfflineTime` and `inactiveTime` bounding the window. The script writes one `offline` event per login holding that window, its item deltas and XP, and attributes it to the runs the chat ledger found inside the window. Chests and XP gained offline are therefore counted once, as a block over those runs, not invented per run.
+
+What offline cannot give: per-run chest counts (the block covers them), consumable use per run, and deaths. The Runs table marks offline runs so the difference is visible. Whether a solo dungeon produces the same system messages is one of the open questions; if it does not, solo offline runs are counted from `offlineItems` chests and timed as a block.
+
 ### 4.6 Cash flow
 Spent = buys (materials, keys, consumables) + craft coins. Loot sold = Σ sell.net. Loot held = loot quantity still in the bag or on sell orders, shown at current bid as a separate line. Loot no longer held = section 5.4. Net = sold + cash from chests − spent, with held and valued lines shown beside it, never added into it without saying so.
 
@@ -112,7 +121,7 @@ Cards, each clickable for its detail table:
 
 - **Clears** (fails and stops in the sub-line). Detail: clears, fails, stops, fail rate, chests dropped per clear.
 - **Average run time** as m:ss, fails counted in, with the last run in the sub-line. Detail: last 100 runs with start, duration, result, waves.
-- **Time not dungeoning** since the record started, split into crafting keys, other actions, waiting between runs (the dungeon action queued but no run in progress), and away (no game connection: logged out or the tab closed). Away will rarely be more than a sliver and is kept so the four parts add up to the clock. Detail: by day.
+- **Time not dungeoning** since the record started: the clock minus time inside runs, whether those runs happened with the game open or offline (4.7). Split into crafting keys, other actions, and between runs (the dungeon action queued but no run in progress, which is where offline gaps land too). Detail: by day.
 - **Spent** (keys and consumables used, at ledger cost). Detail: by item.
 - **Loot value at open**. Detail: by item.
 - **Sold** (net). Detail: by item.
@@ -173,5 +182,6 @@ Version numbers: one bump per release, never per iteration.
 - Is the entry key deducted in the clear's `action_completed` item rows, and is the refinement chest in the same rows?
 - Exact keys of `battle_consumable_ability_updated.consumable`.
 - Whether solo dungeons produce party-style system chat messages.
-- Whether `init_character_data` carries `partyChatHistory` and in what shape.
+- Whether `init_character_data` carries `partyChatHistory` and in what shape, and how far back it reaches (Insight replays the last 400 entries; a long offline stretch of 45-second clears could exceed that).
+- The sign convention of `offlineItems` for consumed items and keys, and whether `offlineSkills` is per skill delta.
 - Whether efficiency procs on key crafting produce one message with several output rows or several messages.
