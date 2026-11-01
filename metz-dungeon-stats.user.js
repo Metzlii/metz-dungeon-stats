@@ -1610,13 +1610,19 @@
         function renderOverview() {
             const d = getDerived(), S = d.summary;
             const offChests = d.offline.reduce((s, b) => s + b.chestTotal, 0);
+            // Chests earned since the record started and chests held before it, with openings taken out of the holdover
+            // first, then out of the earned ones, so the two blocks add up to what the bag holds.
             const perType = { ...S.chests }; for (const b of d.offline) for (const [h, q] of Object.entries(b.chests)) perType[h] = (perType[h] || 0) + q;
-            const chestLines = Object.entries(perType).map(([h, q]) => `${q} ${it(h)}`).join(" · ");
+            const Mc = getMoney().chests; const baseRows = holdover().rows; const earnedNow = {}, holdNow = {};
+            for (const h of new Set([...Object.keys(perType), ...baseRows.map(c => c.item)])) { const base = (baseRows.find(c => c.item === h) || {}).qty || 0; const opened = Mc[h] ? Mc[h].opened : 0; holdNow[h] = Math.max(0, base - opened); earnedNow[h] = Math.max(0, (perType[h] || 0) - Math.max(0, opened - base)); }
+            const chestLines = Object.entries(earnedNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${it(h)}`).join(" · ");
+            const holdLines = Object.entries(holdNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${it(h)}`).join(" · ");
+            const holdTotal = Object.values(holdNow).reduce((a, b) => a + b, 0), earnedTotal = Object.values(earnedNow).reduce((a, b) => a + b, 0);
             const cards = [
                 card("Clears", S.clears, `${S.fails} failed${S.failRate != null ? ` (${(S.failRate * 100).toFixed(1)}%)` : ""} · ${S.cancelled} cancelled${S.unknown ? ` · ${S.unknown} end unknown` : ""}`),
                 card("Average run", S.avgClearMs != null ? fmtDur(S.avgClearMs) : "–", S.clearMs.length ? `${S.avgRunMs != null && S.fails ? `${fmtDur(S.avgRunMs)} counting fails · ` : ""}fastest ${fmtDur(S.fastestMs)} · slowest ${fmtDur(S.slowestMs)}` : "no completed run yet"),
-                card("Chests earned", S.chestTotal + offChests, chestLines || "none yet"),
-                ...(holdover().total ? [card("Holdover chests", holdover().total, holdover().lines)] : []),
+                card("Chests earned", earnedTotal, chestLines || "none yet"),
+                ...(holdTotal ? [card("Holdover chests", holdTotal, holdLines)] : []),
                 card("Keys charged", S.keysCharged, `${S.keysCrafted} crafted in the record`),
                 card("In dungeons", fmtHm(S.dungeonMs), `${pct(S.dungeonMs, S.totalMs)} of ${fmtHm(S.totalMs)} recorded`),
                 card("Between runs", fmtHm(S.betweenMs), `crafting ${fmtHm(S.craftingMs)} · offline ${fmtHm(S.offlineBetweenMs)} · other ${fmtHm(S.otherMs)}`),
@@ -1667,7 +1673,7 @@
             els["mds-lootnote"].textContent = `Loot = what this record saw come out of a chest or a token redemption. Held = in the bag now; Listed = on your sell orders. No longer held = gained − sold − opened − held − listed − kept, valued at the current bid less ${(M.tax.rate * 100).toFixed(1)}% tax; a bid that moved more than 50% since opening (or no bid) is marked for review and left out of the totals until accepted. Accepting freezes that value as a recorded event.`;
         }
         // Chests held before the record began (the baseline stock), shown as their own block.
-        const holdover = () => { const base = state.timeline.find(e => e.kind === "baseline"); const rows = ((base && base.chests) || []).filter(c => c.qty > 0); return { total: rows.reduce((a, c) => a + c.qty, 0), lines: rows.map(c => `${c.qty} ${it(c.item)}`).join(" · ") }; };
+        const holdover = () => { const base = state.timeline.find(e => e.kind === "baseline"); const rows = ((base && base.chests) || []).filter(c => c.qty > 0); return { rows, total: rows.reduce((a, c) => a + c.qty, 0) }; };
         function renderChests() {
             const M = getMoney();
             const cards = Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(it(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`));
