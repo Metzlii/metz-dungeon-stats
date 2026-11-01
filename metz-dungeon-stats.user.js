@@ -1233,6 +1233,9 @@
         const consUsed = {};
         for (const [item, t] of (X.consumeTotals || new Map())) { const r = bump(consUsed, item, () => ({ qty: 0, cost: 0, unknown: 0, offline: 0 })); r.qty += t.qty; r.cost += t.cost; r.unknown += t.unknownQty; }
         for (const o of offline) for (const it of (o.items || [])) if (X.isConsumable(it.item) && n(it.delta) < 0) { const r = bump(consUsed, it.item, () => ({ qty: 0, cost: 0, unknown: 0, offline: 0 })); const q = -it.delta; r.qty += q; r.offline += q; const u = it.unitCost != null ? it.unitCost : X.avgOf(it.item); if (u != null) r.cost += u * q; else r.unknown += q; }
+        // Teas drunk while crafting keys: counted with the consumables, costed inside the key (the craft's cost already
+        // includes them), so they do not enter the used-in-runs total twice.
+        for (const c of crafts) for (const t of (c.teas || [])) { const r = bump(consUsed, t.item, () => ({ qty: 0, cost: 0, unknown: 0, offline: 0 })); r.qty += n(t.qty); r.craftQty = (r.craftQty || 0) + n(t.qty); if (t.unitCost != null) r.craftCost = (r.craftCost || 0) + t.unitCost * n(t.qty); }
         const used = { keys: keysUsed, consumables: consUsed, keyCost: Object.values(keysUsed).reduce((s, r) => s + r.cost, 0), consumableCost: Object.values(consUsed).reduce((s, r) => s + r.cost, 0) };
         used.total = used.keyCost + used.consumableCost;
         // Per-item loot rows: what came in, what left, what is still here, what is unaccounted for.
@@ -1291,7 +1294,7 @@
         for (const c of crafts) for (const i of (c.inputs || [])) { const m = materials[i.item]; if (!m) continue; m.consumed += n(i.qty); if (i.unitCost != null) m.consumedCost += i.unitCost * n(i.covered != null ? i.covered : i.qty); }
         const consumables = {};
         const consNames = new Set([...Object.keys(consUsed), ...((baseline && baseline.items) || []).filter(b => b.kind === "consumable").map(b => b.item), ...Object.keys(buyBy).filter(X.isConsumable)]);
-        for (const item of consNames) { const u = consUsed[item] || { qty: 0, cost: 0, unknown: 0, offline: 0 }; consumables[item] = { used: u.qty, usedCost: u.cost, unknown: u.unknown, offline: u.offline, held: X.held(item), avg: X.avgOf(item), bought: buyBy[item] ? buyBy[item].qty : 0 }; }
+        for (const item of consNames) { const u = consUsed[item] || { qty: 0, cost: 0, unknown: 0, offline: 0 }; consumables[item] = { used: u.qty, usedCost: u.cost + (u.craftCost || 0), unknown: u.unknown, offline: u.offline, crafting: u.craftQty || 0, held: X.held(item), avg: X.avgOf(item), bought: buyBy[item] ? buyBy[item].qty : 0 }; }
         const keptRows = Object.entries(keptBy).filter(([, q]) => q > 0).map(([item, qty]) => ({ item, qty, held: X.held(item), bidNow: X.bidOf(item) }));
         const net = sold.loot.net + loot.coins - spent.total;
         return { tax, spent, loot, sold, sellBy, used, net, heldLoot, missingLoot, reviewRows, rows, tokens, chests: chestBy, keys, materials, consumables, kept: keptRows, counts: { buys: buys.length, sells: sells.length, crafts: crafts.length, opens: opens.length, redeems: redeems.length, dropped: events.filter(dup).length } };
@@ -1858,7 +1861,7 @@
             // Those slotted for the current fight come first, then by what was used in the record.
             const slotted = new Set(state.battleItems || []);
             const cons = Object.entries(M.consumables).filter(([h, c]) => c.used > 0 || slotted.has(h) || c.held > 0 && isConsumable(h)).sort((a, b) => (slotted.has(b[0]) - slotted.has(a[0])) || (b[1].usedCost - a[1].usedCost) || (b[1].held - a[1].held));
-            els["mds-consumables"].innerHTML = cons.map(([h, c]) => `<button class="mds-tile${slotted.has(h) ? " slotted" : ""}" data-act="market" data-item="${esc(h)}" title="${esc(itemName(h))}: ${fmtQ(c.held)} held · ${fmtQ(c.used)} used in the record${c.avg != null ? ` · ${fmtCoins(c.avg)} each at purchase price` : ""}${slotted.has(h) ? " · slotted now" : ""}. Click to open in the marketplace.">${icon(h)}<strong>${fmtQ(c.held)}</strong><small>${it(h)}</small></button>`).join("") || `<span class="mds-note">No consumables used yet.</span>`;
+            els["mds-consumables"].innerHTML = cons.map(([h, c]) => `<button class="mds-tile${slotted.has(h) ? " slotted" : ""}" data-act="market" data-item="${esc(h)}" title="${esc(itemName(h))}: ${fmtQ(c.held)} held · ${fmtQ(c.used)} used in the record${c.crafting ? ` (${fmtQ(c.crafting)} in key crafts)` : ""}${c.avg != null ? ` · ${fmtCoins(c.avg)} each at purchase price` : ""}${slotted.has(h) ? " · slotted now" : ""}. Click to open in the marketplace.">${icon(h)}<strong>${fmtQ(c.held)}</strong><small>${it(h)}</small></button>`).join("") || `<span class="mds-note">No consumables used yet.</span>`;
             const live = sessionsOf().find(e => (ref.dungeons[e.action] || /\/combat\//.test(e.action)) && isRunning(e) && e.end > S.windowStart);
             const check = live ? (() => { const o = recordInSpan(d, live); const t = compareText(o, live, S.windowStart); return t ? ` Game's Loot & XP Log, session since ${fmtTime(live.start)} (read ${fmtTime(state.lootLogAt)}): ${t}.` : ""; })() : "";
             els["mds-ovnote"].textContent = `${check}Since ${fmtTime(S.windowStart)}. A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.${S.open ? " One run is in progress." : ""}`;
