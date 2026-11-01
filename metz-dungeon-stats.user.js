@@ -1646,7 +1646,7 @@
         const els = {};
         let derived = null, derivedAt = 0, derivedRev = -1, bannerDismissed = false;
         const KINDS = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
-        const TABS = [["overview", "Overview"], ["runs", "Runs"], ["keys", "Keys"], ["loot", "Loot"], ["chests", "Chests"], ["lifetime", "Lifetime"], ["xp", "XP"], ["abilities", "Abilities"], ["data", "Data"], ["settings", "Settings"]];
+        const TABS = [["overview", "Overview"], ["runs", "Runs"], ["keys", "Keys"], ["loot", "Loot"], ["chests", "Chests"], ["lifetime", "Lifetime"], ["xp", "XP"], ["data", "Data"], ["settings", "Settings"]];
         // Text size: every size in the panel is in em of the root, so one font-size scales it all. Saved per browser.
         const SCALE_KEY = PANEL_KEY + "-scale", BASE_PX = 14;
         let scale = 1;
@@ -1655,7 +1655,7 @@
         // Column switches, every table: a checkbox per column, grouped by tab in Settings. Keyed by the table (its
         // tbody id) and the column's original index; everything on by default except the Runs table's Seen-by.
         const COLS_KEY = PANEL_KEY + "-cols2";
-        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", "xp-skills": "Skills", "xp-days": "Days", "xp-abilities": "Abilities", books: "Books to the next level", "life-skills": "Combat skills", review: "Review", tbody: "Capture log", plan: "Key crafting" };
+        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", "xp-skills": "Skills", "xp-days": "Days", "xp-abilities": "Abilities", "life-skills": "Combat skills", review: "Review", tbody: "Capture log", plan: "Key crafting" };
         const DEFAULT_OFF = { runs: ["Seen by"] };
         let colVis = {};
         try { colVis = JSON.parse(localStorage.getItem(COLS_KEY) || "{}") || {}; } catch (_e) { colVis = {}; }
@@ -1847,7 +1847,7 @@
  <h4 data-noun="days">Days</h4>
  <div class="mds-wrap"><table><thead><tr><th>Day</th><th>XP</th><th>Active time</th><th>XP / h</th><th>Skills</th></tr></thead><tbody id="mds-xp-days"></tbody></table></div>
  <h4 data-noun="abilities">Abilities</h4>
- <div class="mds-wrap"><table><thead><tr><th>Ability</th><th>Level</th><th>Since record</th><th>XP / h</th><th>Share</th></tr></thead><tbody id="mds-xp-abilities"></tbody></table></div>
+ <div class="mds-wrap"><table><thead><tr><th>Ability</th><th>Level</th><th>Since record</th><th>XP / h</th><th>Share</th><th>XP to next</th><th title="Books the next level takes at the game's XP per book, and how many are in the bag">Books to next</th><th title="The books still to buy at the book's marketplace ask">Cost at ask</th><th></th></tr></thead><tbody id="mds-xp-abilities"></tbody></table></div>
  <p class="mds-note">XP since the record began is the game's lifetime total now less the total when the record started, so it is exact whether or not the script was running, offline play included. XP per hour runs over active time: the time between XP messages when the gap is 15 minutes or less, plus offline time that earned XP. Days are on the server clock (UTC).</p>
 </div>
 <div class="mds-pane" data-pane="settings" hidden>
@@ -1862,11 +1862,6 @@
  <div id="mds-settings-tables" data-sections></div>
 </div>
 <style id="mds-cols-style"></style>
-<div class="mds-pane" data-pane="abilities" hidden>
- <h4 data-noun="abilities">Books to the next level</h4>
- <div class="mds-wrap"><table><thead><tr><th>Ability</th><th>Level</th><th>XP to next</th><th>Book</th><th>XP per book</th><th>Books needed</th><th>Held</th><th>To buy</th><th>Ask</th><th>Cost</th><th></th></tr></thead><tbody id="mds-books"></tbody></table></div>
- <p class="mds-note">Every ability the character has, with the books its next level takes at the game's XP per book, the books in the bag, and what the rest cost at the marketplace ask. Cheapest level first. Levels and XP are the game's own figures, sent at login and with every completed action.</p>
-</div>
 <div class="mds-pane" data-pane="data" hidden>
 <h4 data-noun="items">Review</h4>
 <div class="mds-wrap"><table><thead><tr><th>Time</th><th>What the script could not settle</th><th>Details</th><th></th></tr></thead><tbody id="mds-review"></tbody></table></div>
@@ -1886,7 +1881,7 @@
 <details><summary>Diagnostics</summary><pre id="mds-diag"></pre></details>
 </div>
 </div>`;
-            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-xpcards", "mds-xp-skills", "mds-xp-days", "mds-xp-abilities", "mds-books", "mds-life-skills", "mds-review", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
+            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-xpcards", "mds-xp-skills", "mds-xp-days", "mds-xp-abilities", "mds-life-skills", "mds-review", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
             // Row actions: Keep N (moves loot into supplies), Accept (freezes a valuation of loot no longer held).
             root.addEventListener("click", e => {
                 const b = e.target.closest("button[data-act]"); if (!b) return;
@@ -2396,20 +2391,13 @@
             els["mds-xpcards"].innerHTML = sortCards("xpcards", cards).join("");
             const skills = Object.entries(S.since).sort((a, b) => b[1] - a[1]);
             els["mds-xp-skills"].innerHTML = skills.map(([h, v]) => `<tr><td class="k">${skillIcon(h)}${esc(skillName(h))}</td><td>${fmtCoins(v)}</td><td>${S.today && S.today.bySkill[h] ? fmtCoins(S.today.bySkill[h]) : "–"}</td><td>${S.activeMs > 0 ? fmtCoins(v / (S.activeMs / 3600e3)) : "–"}</td><td>${pct(v, S.total)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No XP since the record began.</td></tr>`;
-            const abSince = S.abilities.filter(a => a.since > 0); const abTotal = abSince.reduce((t, a) => t + a.since, 0);
-            els["mds-xp-abilities"].innerHTML = abSince.map(a => `<tr><td class="k">${abilityIcon(a.hrid)}${esc(abilityName(a.hrid))}</td><td>${a.level != null ? a.level : "–"}</td><td>${fmtCoins(a.since)}</td><td>${S.activeMs > 0 ? fmtCoins(a.since / (S.activeMs / 3600e3)) : "–"}</td><td>${pct(a.since, abTotal)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">${S.abilStartAt ? `No ability XP since ${fmtTime(S.abilStartAt)}.` : "Waiting for the game's ability totals."}</td></tr>`;
-            if (S.abilStartAt && S.startAt && S.abilStartAt - S.startAt > 60e3) els["mds-xp-abilities"].insertAdjacentHTML("beforeend", `<tr><td colspan="5" class="t">Abilities counted since ${fmtTime(S.abilStartAt)}, when this build first saw them; the Loot &amp; XP Log has no ability XP to back that to the record start.</td></tr>`);
+            // Every ability the character has: XP since the record, and the books its next level takes.
+            const abRows = S.abilities.map(a => { const toNext = toNextLevel(a.xp, a.level); const book = ref.books[a.hrid] || null; const need = book && toNext != null ? Math.ceil(toNext / book.xp) : null; const have = book ? held(book.item, 0) : 0; const buy = need != null ? Math.max(0, need - have) : null; const ask = book ? askOf(book.item) : null; return { ...a, toNext, book, need, have, buy, ask, cost: buy != null && ask != null ? buy * ask : null, sort: ref.abilities[a.hrid] ? ref.abilities[a.hrid].sortIndex : 999 }; }).sort((a, b) => (b.since || 0) - (a.since || 0) || a.sort - b.sort);
+            const abTotal = abRows.reduce((t, a) => t + (a.since || 0), 0);
+            els["mds-xp-abilities"].innerHTML = abRows.map(a => `<tr><td class="k">${abilityIcon(a.hrid)}${esc(abilityName(a.hrid))}</td><td>${a.level != null ? a.level : "–"}</td><td>${a.since ? fmtCoins(a.since) : "–"}</td><td>${a.since && S.activeMs > 0 ? fmtCoins(a.since / (S.activeMs / 3600e3)) : "–"}</td><td>${a.since ? pct(a.since, abTotal) : "–"}</td><td>${a.toNext != null ? fmtCoins(a.toNext) : "–"}</td><td>${a.need != null ? `${fmtQ(a.need)} ${a.book ? itemLink(a.book.item) : ""}${a.have ? `<small> ${fmtQ(a.have)} held</small>` : ""}` : "–"}</td><td>${a.cost != null ? fmtCoins(a.cost) : a.buy === 0 && a.need != null ? "<small>enough held</small>" : a.book && a.buy > 0 ? "<small>no ask</small>" : "–"}</td><td class="mds-acts">${a.book && a.buy > 0 ? `<button class="mds-act" data-act="market" data-item="${esc(a.book.item)}">Buy</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="9" class="t">Waiting for the game's ability totals (sent at login and with every completed action).</td></tr>`;
+            if (S.abilStartAt && S.startAt && S.abilStartAt - S.startAt > 60e3) els["mds-xp-abilities"].insertAdjacentHTML("beforeend", `<tr><td colspan="9" class="t">Ability XP counted since ${fmtTime(S.abilStartAt)}, when this build first saw the abilities; the Loot &amp; XP Log has no ability XP to back that to the record start.</td></tr>`);
             const skillList = by => Object.entries(by || {}).sort((a, b) => b[1] - a[1]).map(([h, v]) => `${fmtCoins(v)} ${esc(skillName(h))}`).join(", ") || "–";
             els["mds-xp-days"].innerHTML = S.days.map(d => `<tr><td class="t">${fmtDate(Date.parse(d.day + "T12:00:00Z"))}</td><td>${fmtCoins(d.total)}</td><td>${fmtHm(d.activeMs)}${d.offlineMs ? `<small> ${fmtHm(d.offlineMs)} offline</small>` : ""}</td><td>${d.activeMs > 0 ? fmtCoins(d.total / (d.activeMs / 3600e3)) : "–"}</td><td class="d">${skillList(d.bySkill)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No days yet.</td></tr>`;
-        }
-        function renderAbilities() {
-            const rows = Object.entries(state.lifetimeAbilityXp).map(([h, xp]) => {
-                const level = state.levels[h] != null ? state.levels[h] : levelOf(xp); const toNext = toNextLevel(xp, level); const book = ref.books[h] || null;
-                const need = book && toNext != null ? Math.ceil(toNext / book.xp) : null; const have = book ? held(book.item, 0) : 0; const buy = need != null ? Math.max(0, need - have) : null;
-                const ask = book ? askOf(book.item) : null; const cost = buy != null && ask != null ? buy * ask : null;
-                return { h, xp, level, toNext, book, need, have, buy, ask, cost, sort: ref.abilities[h] ? ref.abilities[h].sortIndex : 999 };
-            }).sort((a, b) => (a.cost != null ? a.cost : Infinity) - (b.cost != null ? b.cost : Infinity) || a.sort - b.sort);
-            els["mds-books"].innerHTML = rows.map(r => `<tr><td class="k">${abilityIcon(r.h)}${esc(abilityName(r.h))}</td><td>${r.level != null ? r.level : "–"}</td><td>${r.toNext != null ? fmtCoins(r.toNext) : "–"}</td><td class="k">${r.book ? itemLink(r.book.item) : "–"}</td><td>${r.book ? fmtQ(r.book.xp) : "–"}</td><td>${r.need != null ? fmtQ(r.need) : "–"}</td><td>${r.book ? fmtQ(r.have) : "–"}</td><td>${r.buy != null ? (r.buy ? fmtQ(r.buy) : "–") : "–"}</td><td>${r.book ? coinsOr(r.ask, "no ask") : "–"}</td><td>${r.cost != null ? fmtCoins(r.cost) : (r.buy === 0 ? "<small>enough held</small>" : "–")}</td><td class="mds-acts">${r.book && r.buy > 0 ? `<button class="mds-act" data-act="market" data-item="${esc(r.book.item)}">Buy</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="11" class="t">Waiting for the game's ability totals (sent at login and with every completed action).</td></tr>`;
         }
         function renderLifetime() {
             const all = [...state.lootLog.values()];
@@ -2581,7 +2569,6 @@
             else if (tab === "chests") renderChests();
             else if (tab === "lifetime") renderLifetime();
             else if (tab === "xp") renderXp();
-            else if (tab === "abilities") renderAbilities();
             else {
                 renderRows(false);
                 const byType = [...state.counts.byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t} ${n}`).join(" · ");
