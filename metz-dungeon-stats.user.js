@@ -616,8 +616,11 @@
         // Offline summary.
         const offItems = Array.isArray(m.offlineItems) ? m.offlineItems : null, offSkills = Array.isArray(m.offlineSkills) ? m.offlineSkills : null;
         if ((offItems && offItems.length) || (offSkills && offSkills.length)) {
-            const from = parseServerTime(ch.lastOfflineTime), to = parseServerTime(ch.inactiveTime) || serverTs;
-            emit("offline", { from, to, items: offItems ? offItems.map(r => ({ item: r.itemHrid, level: num(r.enhancementLevel), delta: num(r.offlineCount), raw: r.count })) : [], xpBySkill: offSkills ? Object.fromEntries(offSkills.map(r => [r.skillHrid, num(r.offlineExperience)])) : {}, keys: Object.keys(m).filter(k => /offline/i.test(k)) }, "init_character_data");
+            // lastOfflineTime is the logout; inactiveTime is the game's inactivity horizon (logout + 72 h), so the
+            // window ends at the login or that horizon, whichever came first.
+            const from = parseServerTime(ch.lastOfflineTime), loginAt = serverTs || serverNow(), horizon = parseServerTime(ch.inactiveTime);
+            const to = horizon && horizon < loginAt ? horizon : loginAt;
+            emit("offline", { from, to, loginAt, horizon, items: offItems ? offItems.map(r => ({ item: r.itemHrid, level: num(r.enhancementLevel), delta: num(r.offlineCount), raw: r.count })) : [], xpBySkill: offSkills ? Object.fromEntries(offSkills.map(r => [r.skillHrid, num(r.offlineExperience)])) : {}, keys: Object.keys(m).filter(k => /offline/i.test(k)) }, "init_character_data");
         }
         // Party chat replay.
         const chat = m.partyChatHistory || (m.chatHistoryByChannelMap && m.chatHistoryByChannelMap["/chat_channel_types/party"]);
@@ -819,7 +822,7 @@
                 case "consume": return `${ev.qty}× ${it(ev.item)}${ev.unitCost != null ? ` @ ${fmtCoins(ev.unitCost)}` : ` (purchase price known for ${ev.covered || 0} of ${ev.qty})`}`;
                 case "redeem": return `${ev.qty}× ${it(ev.token)} → ${ev.itemQty}× ${it(ev.item)}`;
                 case "baseline": return `${(ev.items || []).filter(i => i.kind !== "key material").length} consumables and ${(ev.items || []).filter(i => i.kind === "key material").length} key materials priced at ask, ${(ev.keys || []).length} key types, ${(ev.chests || []).length} chest types · ${fmtCoins(ev.coins)} coins`;
-                case "offline": return `${fmtDur((ev.to || 0) - (ev.from || 0))} away · ${(ev.items || []).length} item deltas · XP ${fmtCoins(Object.values(ev.xpBySkill || {}).reduce((s, v) => s + v, 0))}`;
+                case "offline": return `${fmtDur((ev.to || 0) - (ev.from || 0))} away (${ev.from ? fmtTime(ev.from).slice(11) : "?"} to ${ev.to ? fmtTime(ev.to).slice(11) : "?"}) · ${(ev.items || []).length} item deltas · XP ${fmtCoins(Object.values(ev.xpBySkill || {}).reduce((s, v) => s + v, 0))}`;
                 case "chat": return `${esc(ev.m)}${ev.keyCounts ? " · " + esc(Object.entries(ev.keyCounts).map(([n, k]) => `${n} ${k}`).join(", ")) : ""}${ev.replay ? " · replayed" : ""}`;
                 case "review": return `${esc(ev.reason)}`;
                 default: return esc(JSON.stringify(ev).slice(0, 200));
