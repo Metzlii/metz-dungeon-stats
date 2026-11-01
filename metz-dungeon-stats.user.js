@@ -1331,7 +1331,7 @@
 #mds-root button.mds-act{padding:3px 9px;font-size:.857em;white-space:nowrap}
 #mds-root .mds-bar .mds-note{color:#c5d4de;font-size:.857em}
 #mds-root table{width:100%;border-collapse:collapse;font-size:1em;font-variant-numeric:tabular-nums}
-#mds-root th{position:sticky;top:0;background:#1c2a35;text-align:left;font-size:.786em;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:7px 9px;border-bottom:1px solid rgba(230,239,243,.16)}
+#mds-root th{position:sticky;top:0;background:#1c2a35;text-align:left;cursor:grab;user-select:none;font-size:.786em;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:7px 9px;border-bottom:1px solid rgba(230,239,243,.16)}
 #mds-root td{padding:6px 9px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top;line-height:1.4;text-align:left}
 #mds-root .mds-card,#mds-root .mds-cards,#mds-root p,#mds-root h4,#mds-root .mds-bar{text-align:left}
 #mds-root tbody tr:hover td{background:rgba(230,239,243,.04)}
@@ -1355,6 +1355,8 @@
 #mds-root summary{cursor:pointer;color:#a9e9f1}
 #mds-root pre{white-space:pre-wrap;word-break:break-word;background:#1c2a35;padding:8px 10px;border-radius:8px;max-height:220px;overflow:auto;font-size:.857em;box-shadow:0 0 0 1px #3f424d}
 #mds-root .mds-flag{border-bottom:1px dotted rgba(230,239,243,.5);cursor:help;white-space:nowrap}
+#mds-root th.mds-dragging{opacity:.5}
+#mds-root th.mds-drop{box-shadow:inset 2px 0 0 #45c8d8}
 #mds-tab{white-space:nowrap}
 `;
 
@@ -1377,10 +1379,50 @@
         function applyCols() {
             if (!root) return;
             const hidden = RUN_COLS.map(([k], i) => (cols[k] ? null : i + 1)).filter(Boolean);
-            root.querySelector("#mds-cols-style").textContent = hidden.map(i => `#mds-root .mds-wrap-runs th:nth-child(${i}),#mds-root .mds-wrap-runs td:nth-child(${i}){display:none}`).join("");
+            root.querySelector("#mds-cols-style").textContent = hidden.map(i => `#mds-root .mds-wrap-runs th[data-oi="${i - 1}"],#mds-root .mds-wrap-runs td[data-oi="${i - 1}"]{display:none}`).join("");
             for (const inp of root.querySelectorAll("#mds-cols-bar input")) inp.checked = !!cols[inp.dataset.col];
         }
         function setCol(k, v) { cols[k] = !!v; try { localStorage.setItem(COLS_KEY, JSON.stringify(cols)); } catch (_e) { /* fine */ } applyCols(); if (tab === "runs") renderRuns(true); }
+        // Column order, every table: drag a header onto another to move it. Each table (keyed by its tbody id) keeps its
+        // own order per browser. Cells carry their original index (data-oi) so an order and the Runs column switches
+        // survive re-renders and reorders alike.
+        const ORDER_KEY = PANEL_KEY + "-order";
+        let orders = {};
+        try { orders = JSON.parse(localStorage.getItem(ORDER_KEY) || "{}") || {}; } catch (_e) { orders = {}; }
+        const tableKey = t => (t.tBodies[0] && t.tBodies[0].id ? t.tBodies[0].id.replace(/^mds-/, "") : null);
+        const tagCells = tr => { let i = 0; for (const c of tr.children) { if (!c.dataset.oi) c.dataset.oi = String(i); i++; } };
+        function fullOrder(key, n) { const o = (orders[key] || []).filter(i => Number.isInteger(i) && i >= 0 && i < n); return [...o, ...[...Array(n).keys()].filter(i => !o.includes(i))]; }
+        function applyOrder(table) {
+            const key = tableKey(table); const head = table.tHead && table.tHead.rows[0]; if (!key || !head) return;
+            tagCells(head); const n = head.children.length; const full = fullOrder(key, n);
+            const place = tr => {
+                tagCells(tr); if (tr.children.length !== n) return;
+                const cur = [...tr.children].map(c => Number(c.dataset.oi)); if (cur.every((v, i) => v === full[i])) return;
+                const by = {}; for (const c of tr.children) by[c.dataset.oi] = c; for (const i of full) tr.appendChild(by[i]);
+            };
+            place(head); for (const tb of table.tBodies) for (const tr of tb.rows) place(tr);
+        }
+        function applyAllOrders() { for (const t of root.querySelectorAll("table")) applyOrder(t); }
+        function setOrder(key, order) { orders[key] = order; try { localStorage.setItem(ORDER_KEY, JSON.stringify(orders)); } catch (_e) { /* fine */ } applyAllOrders(); }
+        let drag = null;
+        function wireColumnDrag() {
+            root.addEventListener("dragstart", e => { const th = e.target.closest("th"); const table = th && th.closest("table"); if (!th || !table || !tableKey(table)) return; drag = { key: tableKey(table), oi: Number(th.dataset.oi) }; th.classList.add("mds-dragging"); try { e.dataTransfer.setData("text/plain", th.textContent); e.dataTransfer.effectAllowed = "move"; } catch (_e) { /* fine */ } });
+            root.addEventListener("dragend", e => { const th = e.target.closest("th"); if (th) th.classList.remove("mds-dragging"); for (const x of root.querySelectorAll("th.mds-drop")) x.classList.remove("mds-drop"); drag = null; });
+            root.addEventListener("dragover", e => { const th = e.target.closest("th"); const table = th && th.closest("table"); if (!drag || !th || !table || tableKey(table) !== drag.key) return; e.preventDefault(); for (const x of table.querySelectorAll("th.mds-drop")) x.classList.remove("mds-drop"); if (Number(th.dataset.oi) !== drag.oi) th.classList.add("mds-drop"); });
+            root.addEventListener("drop", e => {
+                const th = e.target.closest("th"); const table = th && th.closest("table"); if (!drag || !th || !table || tableKey(table) !== drag.key) return;
+                e.preventDefault();
+                const n = table.tHead.rows[0].children.length; const full = fullOrder(drag.key, n).filter(i => i !== drag.oi);
+                const at = full.indexOf(Number(th.dataset.oi)); const rect = th.getBoundingClientRect(); const after = e.clientX > rect.left + rect.width / 2;
+                full.splice(at < 0 ? full.length : at + (after ? 1 : 0), 0, drag.oi);
+                setOrder(drag.key, full);
+            });
+            for (const th of root.querySelectorAll("th")) th.draggable = true;
+            // Re-rendered rows come back in original order; put them back in the chosen order. Idempotent, so the
+            // observer's own mutations settle after one pass.
+            new MutationObserver(muts => { const tables = new Set(); for (const m of muts) { const t = m.target && m.target.closest ? m.target.closest("table") : null; if (t) tables.add(t); } for (const t of tables) applyOrder(t); }).observe(root, { childList: true, subtree: true });
+            applyAllOrders();
+        }
         function setScale(v) { scale = Math.max(0.7, Math.min(1.8, Math.round(v * 20) / 20)); try { localStorage.setItem(SCALE_KEY, String(scale)); } catch (_e) { /* fine */ } applyScale(); }
         let money = null, moneyAt = 0, moneyRev = -1, moneyPrices = 0;
         const isToken = h => /_token$/.test(h);
@@ -1462,6 +1504,8 @@
  <h4>Runs table columns</h4>
  <div class="mds-bar" id="mds-cols-bar"></div>
  <p class="mds-note">Seen by says which sources a run came from (chat, live, or both) and carries the notes; it is off by default, and a run with a note then shows a small flag next to its result instead.</p>
+ <h4>Column order</h4>
+ <div class="mds-bar"><button id="mds-order-reset">Reset column order</button><span class="mds-note">Drag any column header onto another to move it. Every table remembers its own order in this browser.</span></div>
 </div>
 <style id="mds-cols-style"></style>
 <div class="mds-pane" data-pane="data" hidden>
@@ -1514,6 +1558,8 @@
             bar.innerHTML = RUN_COLS.map(([k, label]) => `<label><input type="checkbox" data-col="${k}"> ${label}</label>`).join("");
             bar.addEventListener("change", e => { const inp = e.target.closest("input[data-col]"); if (inp) setCol(inp.dataset.col, inp.checked); });
             applyCols();
+            wireColumnDrag();
+            root.querySelector("#mds-order-reset").addEventListener("click", () => { orders = {}; try { localStorage.removeItem(ORDER_KEY); } catch (_e) { /* fine */ } for (const tr of root.querySelectorAll("tr")) { const cells = [...tr.children].sort((a, b) => Number(a.dataset.oi) - Number(b.dataset.oi)); for (const c of cells) tr.appendChild(c); } });
             root.querySelector("#mds-history-input").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importMarketHistoryFile(f).then(() => render(), err => warn("history import failed", err)); });
             // Rows are held while the reader is scrolled down; they catch up at the top.
             els.wrap.addEventListener("scroll", () => { if (rowsHeld && els.wrap.scrollTop <= 8) renderRows(true); }, { passive: true });
