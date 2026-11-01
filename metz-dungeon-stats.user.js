@@ -742,6 +742,7 @@
 #mds-root .mds-card .l{font-size:9px;letter-spacing:.75px;text-transform:uppercase;color:#c0acd9}
 #mds-root .mds-card .n{font-size:17px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px}
 #mds-root .mds-card small{display:block;color:#b9a9d6;font-size:10px;margin-top:2px}
+#mds-root .mds-status{margin:0 0 8px;color:#d9cff0}
 #mds-root .mds-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px}
 #mds-root .mds-bar button,#mds-root .mds-bar select,#mds-root .mds-bar label{background:rgba(44,33,64,.8);border:1px solid rgba(190,160,255,.25);color:#e6ddf5;border-radius:7px;padding:4px 8px;font:inherit;cursor:pointer}
 #mds-root .mds-bar button.danger{border-color:rgba(255,120,120,.5);color:#ffb3b3}
@@ -812,16 +813,9 @@
             const rows = state.events.filter(e => filter === "all" ? e.kind !== "consume" : e.kind === filter).slice(0, 200);
             const used = state.events.filter(e => e.kind === "consume").reduce((s, e) => { s.n += e.qty; s.cost += e.unitCost != null ? e.unitCost * e.qty : 0; return s; }, { n: 0, cost: 0 });
             const byType = [...state.counts.byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t} ${n}`).join(" · ");
+            const runLine = state.run ? `${esc(shortAction(state.run.zone))} T${state.run.tier} · wave ${state.run.waves} · ${fmtDur(serverNow() - state.run.startAt)}` : "between runs";
             body.innerHTML = `
-<div class="mds-cards">
- <div class="mds-card"><div class="l">Character</div><div class="n">${esc(state.characterName || "waiting for login")}</div><small>${state.record ? "record open" : "no record yet"}${state.meta.recordStart ? ` · since ${fmtTime(state.meta.recordStart)}` : ""}</small></div>
- <div class="mds-card"><div class="l">Events</div><div class="n">${state.counts.events}</div><small>${state.reviews} for review this session</small></div>
- <div class="mds-card"><div class="l">Frames heard</div><div class="n">${state.counts.frames}</div><small>${state.sockets} socket${state.sockets === 1 ? "" : "s"}${state.viaData ? ` · ${state.viaData} via data getter` : ""}</small></div>
- <div class="mds-card"><div class="l">Game data</div><div class="n">${ref.ready ? Object.keys(ref.dungeons).length + " dungeons" : "not loaded"}</div><small>${ref.source || "waiting"}${ref.version ? " · " + esc(ref.version) : ""}</small></div>
- <div class="mds-card"><div class="l">Prices</div><div class="n">${prices.map ? Object.keys(prices.map).length : 0}</div><small>${prices.at ? fmtTime(prices.at) : "not fetched"}${prices.error ? " · " + esc(prices.error) : ""}</small></div>
- <div class="mds-card"><div class="l">Run</div><div class="n">${state.run ? `wave ${state.run.waves}` : "none"}</div><small>${state.run ? esc(shortAction(state.run.zone)) + " T" + state.run.tier + " · " + fmtDur(serverNow() - state.run.startAt) : "between runs"}</small></div>
- <div class="mds-card"><div class="l">Consumables used</div><div class="n">${used.n}</div><small>${fmtCoins(used.cost)} at purchase price · recent events only</small></div>
-</div>
+<p class="mds-status"><strong>${esc(state.characterName || "waiting for login")}</strong>${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}</p>
 <div class="mds-bar">
  <label>Show <select id="mds-filter">${kinds.map(k => `<option value="${k}"${k === filter ? " selected" : ""}>${k}</option>`).join("")}</select></label>
  <button id="mds-export">Export record (JSON)</button>
@@ -833,8 +827,14 @@
 <div class="mds-wrap"><table><thead><tr><th>Time</th><th>Kind</th><th>What</th><th>Source</th></tr></thead><tbody>
 ${rows.map(ev => `<tr class="${ev.kind}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${ev.kind}</td><td class="d">${describe(ev)}</td><td class="t">${esc(ev.src || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="t">Nothing recorded yet.</td></tr>`}
 </tbody></table></div>
-<details><summary>Message counts this session</summary><pre>${esc(byType || "none yet")}</pre></details>
-<details><summary>Held keys and chests (inventory mirror)</summary><pre>${esc([...state.inventory.values()].filter(r => r.itemLocationHrid === INV && (ref.keyItems.has(r.itemHrid) || ref.chestItems[r.itemHrid])).map(r => `${r.count}× ${itemName(r.itemHrid)}`).join("\n") || "none")}</pre></details>`;
+<details><summary>Diagnostics</summary><pre>${esc([
+                `frames heard ${state.counts.frames} · ${state.sockets} socket${state.sockets === 1 ? "" : "s"}${state.viaData ? ` · ${state.viaData} via data getter` : ""}`,
+                `game data: ${ref.ready ? Object.keys(ref.dungeons).length + " dungeons" : "not loaded"} · ${ref.source || "waiting"}${ref.version ? " · " + ref.version : ""}`,
+                `prices: ${prices.map ? Object.keys(prices.map).length : 0} items · ${prices.at ? "fetched " + fmtTime(prices.at) : "not fetched this session"}${prices.error ? " · " + prices.error : ""}`,
+                `record: ${state.record ? JSON.stringify(state.record.stats()) : "none"} · device ${DEVICE} · v${VERSION}`,
+                `held keys and chests: ${[...state.inventory.values()].filter(r => r.itemLocationHrid === INV && (ref.keyItems.has(r.itemHrid) || ref.chestItems[r.itemHrid])).map(r => `${r.count}× ${itemName(r.itemHrid)}`).join(", ") || "none"}`,
+                `messages this session: ${byType || "none yet"}`,
+            ].join("\n"))}</pre></details>`;
             body.querySelector("#mds-filter").addEventListener("change", e => { filter = e.target.value; const w = body.querySelector(".mds-wrap"); if (w) w.scrollTop = 0; render(); });
             body.querySelector(".mds-wrap").addEventListener("scroll", e => { if (deferred && e.target.scrollTop <= 8) render(); }, { passive: true });
             body.querySelector("#mds-export").addEventListener("click", exportRecord);
