@@ -1711,11 +1711,29 @@
                 const mats = recipe.inputs.filter(i => i.item !== "/items/coin").map(i => { const b = buys.filter(l => l.item === i.item); const qty = b.reduce((s, l) => s + l.qty, 0), coins = b.reduce((s, l) => s + l.qty * l.price, 0); const paid = qty ? coins / qty : null; const price = paid != null ? paid : askOf(i.item); return { item: i.item, qty, coins, paid, price, perKey: i.qty * cut, needed: g.crafted * i.qty * cut }; });
                 const coinsIn = ((recipe.inputs.find(i => i.item === "/items/coin") || {}).qty || 0) * cut;
                 const priced = mats.every(m => m.price != null);
-                let cost = priced ? mats.reduce((s, m) => s + m.price * m.perKey, 0) + coinsIn : null;
-                if (cost != null && art && art.tea) { const tp = ledgerAvg(art.tea) != null ? ledgerAvg(art.tea) : askOf(art.tea); if (tp != null) cost += tp * art.seconds / art.teaSeconds; }
-                const asks = mats.filter(m => m.paid == null && m.price != null).length;
+                // Measured consumption wins: the crafts this record has observed say what a key really took.
+                const obs = state.timeline.filter(e => e.kind === "craft" && e.action === g.action && (e.outputs || []).some(o => o.item === g.key));
+                const keysOut = obs.reduce((s, e) => s + (e.outputs || []).filter(o => o.item === g.key).reduce((a, o) => a + o.qty, 0), 0);
+                let cost = null, basis = "";
+                if (keysOut > 0) {
+                    const perKey = {}; for (const e of obs) for (const i of (e.inputs || [])) perKey[i.item] = (perKey[i.item] || 0) + i.qty / keysOut;
+                    const coinsPerKey = obs.reduce((s, e) => s + (e.coins || 0), 0) / keysOut;
+                    const teaPerKey = {}; for (const e of obs) for (const t of (e.teas || [])) teaPerKey[t.item] = (teaPerKey[t.item] || 0) + t.qty / keysOut;
+                    const priceOf = h => { const m = mats.find(x => x.item === h); if (m && m.price != null) return m.price; const b = buys.filter(l => l.item === h); if (b.length) return b.reduce((s, l) => s + l.qty * l.price, 0) / b.reduce((s, l) => s + l.qty, 0); const a = ledgerAvg(h); return a != null ? a : askOf(h); };
+                    let c = coinsPerKey, ok = true;
+                    for (const [h, q] of Object.entries(perKey)) { const p = priceOf(h); if (p == null) { ok = false; break; } c += p * q; }
+                    for (const [h, q] of Object.entries(teaPerKey)) { const p = priceOf(h); if (p != null) c += p * q; }
+                    if (ok) { cost = c; const units = Object.values(perKey).reduce((a, b) => a + b, 0); basis = `measured on ${obs.length} craft${obs.length === 1 ? "" : "s"} (${units.toFixed(2)} materials per key) at your average paid price`; }
+                }
+                if (cost == null && priced) {
+                    cost = mats.reduce((s, m) => s + m.price * m.perKey, 0) + coinsIn;
+                    if (art && art.tea) { const tp = ledgerAvg(art.tea) != null ? ledgerAvg(art.tea) : askOf(art.tea); if (tp != null) cost += tp * art.seconds / art.teaSeconds; }
+                    const asksN = mats.filter(m => m.paid == null && m.price != null).length;
+                    basis = `recipe at your average paid price${asksN ? ` (${asksN} at ask)` : ""}${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan"}${art && art.tea ? " + tea" : ""} · no craft observed yet`;
+                }
+                const asks = 0;
                 const coverage = mats.reduce((s, m) => s + m.needed, 0) > 0 ? mats.reduce((s, m) => s + Math.min(m.qty, m.needed), 0) / mats.reduce((s, m) => s + m.needed, 0) : 0;
-                return `<tr><td class="k">${it(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtTime(g.from).slice(0, 10)}</td><td class="t">${fmtTime(g.to).slice(0, 10)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.paid != null ? ` @ ${fmtCoins(m.paid)}` : " (none here)"}`).join(", ")}<small>${Math.round(coverage * 100)}% of what these crafts consumed is in the merged history (${devices} source${devices === 1 ? "" : "s"})</small></td><td>${cost != null ? `${fmtCoins(cost)}<small>recipe at your average paid price${asks ? ` (${asks} at ask)` : ""}${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan"}${art && art.tea ? " + tea" : ""}</small>` : "–"}</td></tr>`;
+                return `<tr><td class="k">${it(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtTime(g.from).slice(0, 10)}</td><td class="t">${fmtTime(g.to).slice(0, 10)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.paid != null ? ` @ ${fmtCoins(m.paid)}` : " (none here)"}`).join(", ")}<small>${Math.round(coverage * 100)}% of what these crafts consumed is in the merged history (${devices} source${devices === 1 ? "" : "s"})</small></td><td>${cost != null ? `${fmtCoins(cost)}<small>${esc(basis)}</small>` : "–"}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="t">No key crafts in the log yet.</td></tr>`;
             els["mds-lifenote"].textContent = `The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: ${all.length} sessions${all.length ? ` from ${fmtTime(Math.min(...all.map(e => e.start))).slice(0, 10)}` : ""}. Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device, merged here by listing id from this PC's Toolasha store and any file merged on the Data tab (${state.marketHistory.size} listings); the cost per key takes the average paid price in that history (a price holds whatever share was bought on one PC) with recipe quantities at your current artisan rate, since the log has no consumption per craft; no lifetime income is shown until the records from both PCs are merged (import, milestone 5).`;
         }
