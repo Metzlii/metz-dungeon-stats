@@ -144,7 +144,7 @@
     // ---------------------------------------------------------------------------------------------------------------
     // Static reference: dungeons, key recipes, openables, item facts. From init_client_data (message or cache).
     // ---------------------------------------------------------------------------------------------------------------
-    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), realKeys: new Set(), dungeonLoot: new Set(), chestItems: {}, items: {}, tokenShop: {}, skills: {}, version: null, source: null };
+    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), realKeys: new Set(), dungeonLoot: new Set(), chestItems: {}, items: {}, tokenShop: {}, skills: {}, abilities: {}, levelTable: [], version: null, source: null };
 
     function buildRef(data) {
         if (!isObj(data) || !isObj(data.actionDetailMap) || !isObj(data.itemDetailMap)) return false;
@@ -175,6 +175,8 @@
             const costs = Array.isArray(entry.costs) ? entry.costs : []; if (costs.length !== 1 || !/_token$/.test(costs[0].itemHrid || "") || !(num(costs[0].count) > 0)) continue;
             (ref.tokenShop[costs[0].itemHrid] = ref.tokenShop[costs[0].itemHrid] || []).push({ item: entry.itemHrid, tokens: num(costs[0].count), count: num(entry.count) || 1, shop: entry.hrid, category: entry.category || null });
         }
+        ref.abilities = {}; for (const [hrid, ab] of Object.entries(data.abilityDetailMap || {})) ref.abilities[hrid] = { name: ab.name || hrid.split("/").pop(), sortIndex: num(ab.sortIndex), special: !!ab.isSpecialAbility };
+        ref.levelTable = Array.isArray(data.levelExperienceTable) ? data.levelExperienceTable.map(num) : [];
         ref.skills = {}; for (const [hrid, sk] of Object.entries(data.skillDetailMap || {})) if (hrid !== "/skills/total_level") ref.skills[hrid] = { name: sk.name || hrid.split("/").pop(), sortIndex: num(sk.sortIndex), combat: !!sk.isCombat };
         ref.version = data.gameVersion || null;
         ref.ready = Object.keys(ref.dungeons).length > 0;
@@ -233,6 +235,8 @@
         meta: {},                       // loaded meta rows by key
         inventory: new Map(),           // hash -> row (inventory location and others)
         lifetimeXp: {},                 // skillHrid -> experience (lifetime)
+        lifetimeAbilityXp: {},          // abilityHrid -> experience (lifetime), from characterAbilities / endCharacterAbilities
+        levels: {},                     // skill or ability hrid -> level the game last reported
         listings: new Map(),            // listing id -> {filledQuantity, taxTaken, unclaimedCoinCount, unclaimedItemCount, isSell, itemHrid, price, status}
         pendingOrders: [],              // outgoing post_market_order frames waiting for their inventory rows
         battleItems: new Set(),         // consumables slotted in the current battle (self)
@@ -403,10 +407,24 @@
             if (!isObj(r) || !r.skillHrid || r.skillHrid === "/skills/total_level") continue;
             const xp = num(r.experience); const prev = state.lifetimeXp[r.skillHrid];
             if (prev != null && xp > prev) deltas[r.skillHrid] = xp - prev;
-            state.lifetimeXp[r.skillHrid] = xp;
+            state.lifetimeXp[r.skillHrid] = xp; if (r.level != null) state.levels[r.skillHrid] = num(r.level);
         }
         return deltas;
     }
+    function applyAbilities(rows) {
+        const deltas = {};
+        if (!Array.isArray(rows)) return deltas;
+        xpAbilityStart(); // the snapshot is the totals before this message
+        for (const r of rows) {
+            if (!isObj(r) || !r.abilityHrid) continue;
+            const xp = num(r.experience); const prev = state.lifetimeAbilityXp[r.abilityHrid];
+            if (prev != null && xp > prev) deltas[r.abilityHrid] = xp - prev;
+            state.lifetimeAbilityXp[r.abilityHrid] = xp; if (r.level != null) state.levels[r.abilityHrid] = num(r.level);
+        }
+        return deltas;
+    }
+    const levelOf = xp => { const t = ref.levelTable; if (!t.length) return null; let l = 0; for (let i = 1; i < t.length; i++) { if (xp >= t[i]) l = i; else break; } return l; };
+    const toNextLevel = (xp, level) => { const t = ref.levelTable; const l = level != null && t[level + 1] > xp ? level : levelOf(xp); return l != null && t[l + 1] != null ? Math.max(0, t[l + 1] - xp) : null; };
     const xpSnapshot = () => ({ ...state.lifetimeXp });
 
     // XP record (milestone 4): one permanent record, no sessions. XP since the record began is the lifetime total the
@@ -465,6 +483,14 @@
         info(`XP record start ${new Date(when).toISOString()}: ${basis}; active time backfilled ${Math.round(fill.coveredMs / 60000)} min from ${fill.sessions} log sessions`);
         return R;
     }
+    // Abilities: the Loot & XP Log has no ability XP, so there is nothing to back a start to; the snapshot is taken
+    // when this build first sees the abilities (with the record start when that is the same moment).
+    function xpAbilityStart() {
+        const R = xpRec(); if (R.startAbil || !Object.keys(state.lifetimeAbilityXp).length) return R;
+        R.startAbil = { ...state.lifetimeAbilityXp }; R.startAbilAt = serverNow(); xpSave();
+        info(`XP record: ability snapshot taken at ${new Date(R.startAbilAt).toISOString()}`);
+        return R;
+    }
     function xpDay(R, at, snapBefore) { const k = xpDayKey(at); let d = R.days[k]; if (!d) { const sameDayStart = R.startSnap && R.startAt && xpDayKey(R.startAt) === k; d = R.days[k] = { snap: { ...(sameDayStart ? R.startSnap : snapBefore) }, activeMs: 0, offlineMs: 0 }; delete d.snap["/skills/total_level"]; const keys = Object.keys(R.days).sort(); while (keys.length > XP_DAYS_KEEP) delete R.days[keys.shift()]; } return d; }
     function xpTick(deltas, at) {
         at = at || serverNow(); const R = xpEnsureStart(at); if (!R.startSnap) return;
@@ -503,7 +529,8 @@
             days.push({ day: k, bySkill: by, total: Object.values(by).reduce((a, v) => a + v, 0), activeMs: active, offlineMs: d.offlineMs });
         }
         const today = days.find(d => d.day === xpDayKey(now)) || null;
-        return { startAt: R.startAt, basis: R.basis || null, since, total, activeMs: active, offlineMs: R.offlineMs, perHour: active > 0 ? total / (active / 3600e3) : null, days, today };
+        const abilities = Object.entries(state.lifetimeAbilityXp).map(([h, xp]) => ({ hrid: h, xp, level: state.levels[h] != null ? state.levels[h] : levelOf(xp), since: R.startAbil && R.startAbil[h] != null ? Math.max(0, xp - R.startAbil[h]) : null })).sort((a, b) => b.xp - a.xp);
+        return { startAt: R.startAt, basis: R.basis || null, since, total, activeMs: active, abilities, abilStartAt: R.startAbilAt || null, offlineMs: R.offlineMs, perHour: active > 0 ? total / (active / 3600e3) : null, days, today };
     }
     function xpDelta(from, to) { const out = {}; for (const [k, v] of Object.entries(to)) { const d = v - (from[k] || 0); if (d > 0) out[k] = Math.round(d * 10) / 10; } return out; }
 
@@ -749,7 +776,9 @@
         if (!state.record || switched) await openRecord(id);
         applyRows(m.characterItems, true);
         noteBuffs(m);
-        for (const r of (Array.isArray(m.characterSkills) ? m.characterSkills : [])) if (isObj(r) && r.skillHrid && r.skillHrid !== "/skills/total_level") state.lifetimeXp[r.skillHrid] = num(r.experience);
+        for (const r of (Array.isArray(m.characterSkills) ? m.characterSkills : [])) if (isObj(r) && r.skillHrid && r.skillHrid !== "/skills/total_level") { state.lifetimeXp[r.skillHrid] = num(r.experience); if (r.level != null) state.levels[r.skillHrid] = num(r.level); }
+        for (const r of (Array.isArray(m.characterAbilities) ? m.characterAbilities : [])) if (isObj(r) && r.abilityHrid) { state.lifetimeAbilityXp[r.abilityHrid] = num(r.experience); if (r.level != null) state.levels[r.abilityHrid] = num(r.level); }
+        xpAbilityStart();
         applyActions(m.characterActions);
         seedListings(m.myMarketListings);
         retainFrame("init_character_data", m, "in");
@@ -1050,6 +1079,7 @@
             if (state.meta.ledger) restoreLedger(state.meta.ledger);
             if (isObj(state.meta.artisan)) state.artisan = state.meta.artisan;
             state.xpRec = null; xpRec();
+            xpAbilityStart();
             state.marketHistory = new Map(); for (const l of (Array.isArray(state.meta.marketHistory) ? state.meta.marketHistory : [])) if (l && l.id != null) state.marketHistory.set(l.id, l);
             state.lootLog = new Map(); for (const e of (Array.isArray(state.meta.lootLog) ? state.meta.lootLog : [])) if (e && e.id != null) { e.source = [...new Set(String(e.source || "").split("+").filter(Boolean))].join("+"); state.lootLog.set(e.id, e); } state.lootLogRev++;
             state.lastChatAt = num(state.meta.lastChatAt);
@@ -1081,6 +1111,7 @@
             if (type === "init_character_data") { onInitCharacter(m); return; }
             if (!state.characterId) return; // nothing before we know who we are
             retainFrame(type, m, "in");
+            if (Array.isArray(m.endCharacterAbilities) && m.endCharacterAbilities.length) applyAbilities(m.endCharacterAbilities);
             switch (type) {
                 case "new_battle": onNewBattle(m); break;
                 case "action_completed": onActionCompleted(m); break;
@@ -1549,6 +1580,7 @@
 #mds-root .mds-bar button.danger:hover{background:rgba(211,161,58,.12)}
 #mds-root button.mds-act{padding:3px 9px;font-size:.857em;white-space:nowrap}
 #mds-root td.mds-acts{white-space:nowrap}
+#mds-root tr.mds-flash td{background:rgba(69,200,216,.18)}
 #mds-root td.mds-acts .mds-act+.mds-act{margin-left:6px}
 #mds-root .mds-bar .mds-note{color:#c5d4de;font-size:.857em}
 #mds-root table{width:100%;border-collapse:collapse;font-size:1em;font-variant-numeric:tabular-nums}
@@ -1622,7 +1654,7 @@
         // Column switches, every table: a checkbox per column, grouped by tab in Settings. Keyed by the table (its
         // tbody id) and the column's original index; everything on by default except the Runs table's Seen-by.
         const COLS_KEY = PANEL_KEY + "-cols2";
-        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", "xp-skills": "Skills", "xp-days": "Days", review: "Review", tbody: "Capture log", plan: "Key crafting" };
+        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", "xp-skills": "Skills", "xp-abilities": "Abilities", "xp-days": "Days", "life-skills": "Skills, lifetime", "life-abilities": "Abilities, lifetime", review: "Review", tbody: "Capture log", plan: "Key crafting" };
         const DEFAULT_OFF = { runs: ["Seen by"] };
         let colVis = {};
         try { colVis = JSON.parse(localStorage.getItem(COLS_KEY) || "{}") || {}; } catch (_e) { colVis = {}; }
@@ -1802,6 +1834,10 @@
  <div class="mds-wrap"><table><thead><tr><th>Dungeon</th><th>Sessions</th><th>Clears</th><th>Chests</th><th>Time in sessions</th><th>Per clear</th><th>XP</th><th>XP / h</th><th>From</th><th>To</th></tr></thead><tbody id="mds-life-dungeons"></tbody></table></div>
  <h4 data-noun="keys">Key crafts, from the game's Loot &amp; XP Log</h4>
  <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Sessions</th><th>Crafted</th><th>Essence</th><th>First</th><th>Last</th><th>Materials bought on this PC</th><th>Cost per key</th></tr></thead><tbody id="mds-life-keys"></tbody></table></div>
+ <h4 data-noun="skills">Skills, lifetime</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Skill</th><th>Level</th><th>Lifetime XP</th><th>To next level</th><th>Since record</th></tr></thead><tbody id="mds-life-skills"></tbody></table></div>
+ <h4 data-noun="abilities">Abilities, lifetime</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Ability</th><th>Level</th><th>Lifetime XP</th><th>To next level</th><th>Since record</th></tr></thead><tbody id="mds-life-abilities"></tbody></table></div>
  <p class="mds-note" id="mds-lifenote"></p>
 </div>
 <div class="mds-pane" data-pane="xp" hidden>
@@ -1809,6 +1845,8 @@
  <div class="mds-cards" id="mds-xpcards"></div>
  <h4 data-noun="skills">Skills</h4>
  <div class="mds-wrap"><table><thead><tr><th>Skill</th><th>Since record</th><th>Today</th><th>XP / h</th><th>Share</th></tr></thead><tbody id="mds-xp-skills"></tbody></table></div>
+ <h4 data-noun="abilities">Abilities</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Ability</th><th>Level</th><th>Since record</th><th>XP / h</th><th>Share</th></tr></thead><tbody id="mds-xp-abilities"></tbody></table></div>
  <h4 data-noun="days">Days</h4>
  <div class="mds-wrap"><table><thead><tr><th>Day</th><th>XP</th><th>Active time</th><th>XP / h</th><th>Skills</th></tr></thead><tbody id="mds-xp-days"></tbody></table></div>
  <p class="mds-note">XP since the record began is the game's lifetime total now less the total when the record started, so it is exact whether or not the script was running, offline play included. XP per hour runs over active time: the time between XP messages when the gap is 15 minutes or less, plus offline time that earned XP. Days are on the server clock (UTC).</p>
@@ -1844,7 +1882,7 @@
 <details><summary>Diagnostics</summary><pre id="mds-diag"></pre></details>
 </div>
 </div>`;
-            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-xpcards", "mds-xp-skills", "mds-xp-days", "mds-review", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
+            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-xpcards", "mds-xp-skills", "mds-xp-abilities", "mds-xp-days", "mds-life-skills", "mds-life-abilities", "mds-review", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
             // Row actions: Keep N (moves loot into supplies), Accept (freezes a valuation of loot no longer held).
             root.addEventListener("click", e => {
                 const b = e.target.closest("button[data-act]"); if (!b) return;
@@ -1873,6 +1911,32 @@
             root.querySelector("#mds-toolasha").addEventListener("click", () => importToolasha("manual").then(() => render()));
             root.querySelector("#mds-history-file").addEventListener("click", () => root.querySelector("#mds-history-input").click());
             root.querySelector("#mds-record-file").addEventListener("click", () => root.querySelector("#mds-record-input").click());
+            // Ctrl+click (Cmd on a Mac) on any table row: the row as one line in the game's chat input, from the visible
+            // column headers and values in the order shown. Nothing is sent; the player sends it.
+            root.addEventListener("click", e => {
+                if (!(e.ctrlKey || e.metaKey) || e.target.closest("button, a, input, select, th")) return;
+                const tr = e.target.closest("tbody tr"); if (!tr || !root.contains(tr)) return;
+                const table = tr.closest("table"); const head = table && table.tHead && table.tHead.rows[0]; if (!head) return;
+                if (tr.cells.length === 1 && tr.cells[0].colSpan > 1) return;
+                const heads = [...head.children], cells = [...tr.cells];
+                const parts = [];
+                for (let i = 0; i < cells.length; i++) {
+                    const th = heads[i], td = cells[i]; if (!th || !td || th.hidden || td.hidden || getComputedStyle(td).display === "none") continue;
+                    if (td.querySelector("button") && !td.textContent.replace(/\s+/g, "").replace(/(Sell|Keep…|Shop|Buy|Done|Value…)/g, "")) continue;
+                    const label = th.textContent.trim(); const value = td.innerText.replace(/\s*\n\s*/g, "; ").replace(/\s+/g, " ").trim();
+                    if (!value || value === "–") continue;
+                    parts.push(i === 0 || !label ? value : `${label} ${value}`);
+                }
+                const line = parts.join(" · "); if (!line) return;
+                e.preventDefault();
+                const input = [...document.querySelectorAll('input[class*="Chat_chatInput"], [class*="Chat_chatInputContainer"] input[type="text"]')].find(el => !root.contains(el) && el.offsetParent !== null) || null;
+                if (input) {
+                    const setter = Object.getOwnPropertyDescriptor(W.HTMLInputElement.prototype, "value").set;
+                    const prev = input.value; const next = prev && !/\s$/.test(prev) ? `${prev} ${line}` : `${prev}${line}`;
+                    setter.call(input, next); input.dispatchEvent(new Event("input", { bubbles: true })); input.focus();
+                } else { try { navigator.clipboard.writeText(line); } catch (_e) { /* fine */ } warn("chat input not found; row copied to the clipboard instead:", line); }
+                tr.classList.add("mds-flash"); setTimeout(() => tr.classList.remove("mds-flash"), 400);
+            });
             root.querySelector("#mds-record-input").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importRecordFile(f).then(r => { if (r) W.alert(`Imported ${f.name}: ${r.added} events added, ${r.duplicate} already here, ${r.skipped} record-specific skipped, ${r.conflict} conflicts kept as ours.`); render(); }, err => { warn("record import failed", err); W.alert("Record import failed: " + (err && err.message || err)); }); });
             els["mds-review"].addEventListener("click", e => { const b = e.target.closest("button[data-dismiss]"); if (!b) return; const done = Array.isArray(state.meta.reviewDone) ? state.meta.reviewDone : []; if (!done.includes(b.dataset.dismiss)) done.push(b.dataset.dismiss); state.meta.reviewDone = done; state.record && state.record.queue("meta", { key: "reviewDone", value: done }); render(); });
             els["mds-plan-key"].addEventListener("change", e => { plan.key = e.target.value; savePlan(); renderPlan(); });
@@ -2198,13 +2262,16 @@
             try { const url = new URL(use.getAttribute("href"), document.baseURI); if (url.origin !== location.origin) return null; url.hash = ""; spriteUrl = url.href; } catch (_e) { return null; }
             return spriteUrl;
         }
-        let skillSpriteUrl = null;
-        function skillSpriteBase() {
-            if (skillSpriteUrl) return skillSpriteUrl;
-            const use = [...document.querySelectorAll('use[href*="skills_sprite"]')].find(u => !root || !root.contains(u)); if (!use) return null;
-            try { const url = new URL(use.getAttribute("href"), document.baseURI); if (url.origin !== location.origin) return null; url.hash = ""; skillSpriteUrl = url.href; } catch (_e) { return null; }
-            return skillSpriteUrl;
+        const spriteUrls = {};
+        function spriteOf(sheet) {
+            if (spriteUrls[sheet]) return spriteUrls[sheet];
+            const use = [...document.querySelectorAll(`use[href*="${sheet}"]`)].find(u => !root || !root.contains(u)); if (!use) return null;
+            try { const url = new URL(use.getAttribute("href"), document.baseURI); if (url.origin !== location.origin) return null; url.hash = ""; spriteUrls[sheet] = url.href; } catch (_e) { return null; }
+            return spriteUrls[sheet];
         }
+        const skillSpriteBase = () => spriteOf("skills_sprite");
+        const abilityName = h => (ref.abilities[h] && ref.abilities[h].name) || h.split("/").pop().replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+        const abilityIcon = h => { const b = spriteOf("abilities_sprite"); return b ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${h.split("/").pop()}"></use></svg>` : ""; };
         const skillName = h => (ref.skills[h] && ref.skills[h].name) || h.split("/").pop().replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
         const skillIcon = h => { const b = skillSpriteBase(); return b ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${h.split("/").pop()}"></use></svg>` : ""; };
         const icon = h => { const b = spriteBase(); return b && /^\/items\/[a-z0-9_]+$/.test(h) ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${h.split("/").pop()}"></use></svg>` : ""; };
@@ -2325,6 +2392,9 @@
             els["mds-xpcards"].innerHTML = sortCards("xpcards", cards).join("");
             const skills = Object.entries(S.since).sort((a, b) => b[1] - a[1]);
             els["mds-xp-skills"].innerHTML = skills.map(([h, v]) => `<tr><td class="k">${skillIcon(h)}${esc(skillName(h))}</td><td>${fmtCoins(v)}</td><td>${S.today && S.today.bySkill[h] ? fmtCoins(S.today.bySkill[h]) : "–"}</td><td>${S.activeMs > 0 ? fmtCoins(v / (S.activeMs / 3600e3)) : "–"}</td><td>${pct(v, S.total)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No XP since the record began.</td></tr>`;
+            const abSince = S.abilities.filter(a => a.since > 0); const abTotal = abSince.reduce((t, a) => t + a.since, 0);
+            els["mds-xp-abilities"].innerHTML = abSince.map(a => `<tr><td class="k">${abilityIcon(a.hrid)}${esc(abilityName(a.hrid))}</td><td>${a.level != null ? a.level : "–"}</td><td>${fmtCoins(a.since)}</td><td>${S.activeMs > 0 ? fmtCoins(a.since / (S.activeMs / 3600e3)) : "–"}</td><td>${pct(a.since, abTotal)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">${S.abilStartAt ? `No ability XP since ${fmtTime(S.abilStartAt)}.` : "Waiting for the game's ability totals."}</td></tr>`;
+            if (S.abilStartAt && S.startAt && S.abilStartAt - S.startAt > 60e3) els["mds-xp-abilities"].insertAdjacentHTML("beforeend", `<tr><td colspan="5" class="t">Abilities counted since ${fmtTime(S.abilStartAt)}, when this build first saw them; the Loot &amp; XP Log has no ability XP to back that to the record start.</td></tr>`);
             const skillList = by => Object.entries(by || {}).sort((a, b) => b[1] - a[1]).map(([h, v]) => `${fmtCoins(v)} ${esc(skillName(h))}`).join(", ") || "–";
             els["mds-xp-days"].innerHTML = S.days.map(d => `<tr><td class="t">${fmtDate(Date.parse(d.day + "T12:00:00Z"))}</td><td>${fmtCoins(d.total)}</td><td>${fmtHm(d.activeMs)}${d.offlineMs ? `<small> ${fmtHm(d.offlineMs)} offline</small>` : ""}</td><td>${d.activeMs > 0 ? fmtCoins(d.total / (d.activeMs / 3600e3)) : "–"}</td><td class="d">${skillList(d.bySkill)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No days yet.</td></tr>`;
         }
@@ -2380,6 +2450,13 @@
                 const coverage = mats.reduce((s, m) => s + m.needed, 0) > 0 ? mats.reduce((s, m) => s + Math.min(m.qty, m.needed), 0) / mats.reduce((s, m) => s + m.needed, 0) : 0;
                 return `<tr><td class="k">${itIcon(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtDate(g.from)}</td><td class="t">${fmtDate(g.to)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.paid != null ? ` @ ${fmtCoins(m.paid)}` : " (none here)"}`).join(", ")}<small>${Math.round(coverage * 100)}% of what these crafts consumed is in the merged history (${devices} source${devices === 1 ? "" : "s"})</small></td><td>${cost != null ? `${fmtCoins(cost)}<small>${esc(basis)}</small>` : "–"}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="t">No key crafts in the log yet.</td></tr>`;
+            {
+                const S = xpSummary(serverNow());
+                const skillRows = Object.entries(state.lifetimeXp).filter(([h]) => h !== "/skills/total_level").map(([h, xp]) => ({ hrid: h, xp, level: state.levels[h] != null ? state.levels[h] : levelOf(xp), since: S && S.since[h] || 0, sort: ref.skills[h] ? ref.skills[h].sortIndex : 999 })).sort((a, b) => a.sort - b.sort);
+                els["mds-life-skills"].innerHTML = skillRows.map(r => `<tr><td class="k">${skillIcon(r.hrid)}${esc(skillName(r.hrid))}</td><td>${r.level != null ? r.level : "–"}</td><td>${fmtCoins(r.xp)}</td><td>${coinsOr(toNextLevel(r.xp, r.level), "–")}</td><td>${r.since ? fmtCoins(r.since) : "–"}</td></tr>`).join("") || `<tr><td colspan="5" class="t">Waiting for the game's skill totals.</td></tr>`;
+                const abRows = (S ? S.abilities : []).map(a => ({ ...a, sort: ref.abilities[a.hrid] ? ref.abilities[a.hrid].sortIndex : 999 })).sort((a, b) => a.sort - b.sort);
+                els["mds-life-abilities"].innerHTML = abRows.map(a => `<tr><td class="k">${abilityIcon(a.hrid)}${esc(abilityName(a.hrid))}</td><td>${a.level != null ? a.level : "–"}</td><td>${fmtCoins(a.xp)}</td><td>${coinsOr(toNextLevel(a.xp, a.level), "–")}</td><td>${a.since ? fmtCoins(a.since) : "–"}</td></tr>`).join("") || `<tr><td colspan="5" class="t">Waiting for the game's ability totals (sent at login and with every completed action).</td></tr>`;
+            }
             els["mds-lifenote"].textContent = `The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: ${all.length} sessions${all.length ? ` from ${fmtDate(Math.min(...all.map(e => e.start)))}` : ""}. Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device, merged here by listing id from this PC's Toolasha store and any file merged on the Data tab (${state.marketHistory.size} listings); the cost per key takes the average paid price in that history (a price holds whatever share was bought on one PC) with recipe quantities at your current artisan rate, since the log has no consumption per craft; no lifetime income is shown until the records from both PCs are merged (import, milestone 5).`;
         }
         function renderChests() {
@@ -2528,6 +2605,6 @@
     const boot = () => { panel.refresh(); };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { state, ref, prices, version: VERSION, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()) }, importRecordData, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { state, ref, prices, version: VERSION, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();

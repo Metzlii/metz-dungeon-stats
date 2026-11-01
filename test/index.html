@@ -124,6 +124,7 @@
       myMarketListings: [],
       offlineItems: [{ itemHrid: "/items/pirate_chest", enhancementLevel: 0, count: 2, offlineCount: 3 }],
       offlineSkills: [{ skillHrid: "/skills/attack", offlineExperience: 12345 }],
+      characterAbilities: [{ abilityHrid: "/abilities/aqua_arrow", level: 50, experience: 400000 }, { abilityHrid: "/abilities/frost_surge", level: 70, experience: 900000 }],
       partyChatHistory: [{ id: 1, chan: "/chat_channel_types/party", t: iso(t0 - 2 * 3600e3), m: "systemChatMessage.partyKeyCount", isSystemMessage: true, systemMetadata: JSON.stringify({ keyCountString: "[Metzli - 12], [Dripyy - 3]" }) }],
     });
     await sleep(600); log("login fed; status:", window.__mds.status());
@@ -145,7 +146,7 @@
     const party = (bid, wave) => ({ type: "new_battle", combatStartTime: iso(t0), battleId: bid, wave, players: [
       { character: { id: CH, name: NAME }, deathCount: 0, combatConsumables: [{ itemHrid: "/items/dragon_fruit_yogurt", count: inv.get("/items/dragon_fruit_yogurt") }], totalSkillExperienceMap: { "/skills/attack": 1000 * wave }, totalLootMap: {} },
       { character: { id: 2, name: "Dripyy" }, deathCount: 0 }], monsters: [] });
-    const waveDone = (wave, items, xp) => ({ type: "action_completed", endCharacterAction: { id: 555, characterID: CH, partyID: 1, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, currentCount: wave === 65 ? 1 : 0, wave, isDone: false, updatedAt: iso(Date.now()) }, endCharacterItems: items || [], endCharacterSkills: xp || [{ skillHrid: "/skills/attack", experience: xpBase + 700 * wave, level: 100 }], endCharacterAbilities: [] });
+    const waveDone = (wave, items, xp) => ({ type: "action_completed", endCharacterAction: { id: 555, characterID: CH, partyID: 1, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, currentCount: wave === 65 ? 1 : 0, wave, isDone: false, updatedAt: iso(Date.now()) }, endCharacterItems: items || [], endCharacterSkills: xp || [{ skillHrid: "/skills/attack", experience: xpBase + 700 * wave, level: 100 }], endCharacterAbilities: [{ abilityHrid: "/abilities/aqua_arrow", level: 50, experience: 400000 + (xpBase - 1000000) + 300 * wave }] });
     let xpBase = 1000000;
     feed({ type: "chat_message_received", message: { id: 2, chan: "/chat_channel_types/party", t: iso(Date.now()), m: "systemChatMessage.partyKeyCount", isSystemMessage: true, systemMetadata: JSON.stringify({ keyCountString: "[Metzli - 14], [Dripyy - 3]" }) } });
     feed(party(100, 1));
@@ -185,7 +186,7 @@
     ] });
     await window.__mds.importToolasha("harness"); log("toolasha:", window.__mds.toolasha, "loot log sessions:", window.__mds.state.lootLog.size);
     // Every tab must render without throwing: a renderer lost in a refactor is caught here, not by the operator.
-    { const S = window.__mds.xp.summary(); log("xp:", JSON.stringify(S && { total: S.total, activeMs: S.activeMs, offlineMs: S.offlineMs, skills: S.since, days: S.days.map(d => [d.day, d.total, d.activeMs]) })); }
+    { const S = window.__mds.xp.summary(); log("xp:", JSON.stringify(S && { total: S.total, activeMs: S.activeMs, offlineMs: S.offlineMs, skills: S.since, abilities: S.abilities, days: S.days.map(d => [d.day, d.total, d.activeMs]) })); }
     // Record import from "another PC": a replayed chat event (natural key), a clear 1.5 s off (timed subject), an event
     // with the same id, a baseline (record-specific) and one genuinely new buy. Expect 1 added, 3 duplicates, 1 skipped.
     { const evs = await window.__mds.state.record.getAll("events"); const chat = evs.find(e => e.kind === "chat"); const clear = evs.find(e => e.kind === "clear");
