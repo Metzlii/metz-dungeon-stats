@@ -1654,7 +1654,7 @@
         // Column switches, every table: a checkbox per column, grouped by tab in Settings. Keyed by the table (its
         // tbody id) and the column's original index; everything on by default except the Runs table's Seen-by.
         const COLS_KEY = PANEL_KEY + "-cols2";
-        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", "xp-skills": "Skills", "xp-abilities": "Abilities", "xp-days": "Days", "life-skills": "Skills, lifetime", "life-abilities": "Abilities, lifetime", review: "Review", tbody: "Capture log", plan: "Key crafting" };
+        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", "xp-skills": "Skills", "xp-days": "Days", "life-skills": "Combat skills", review: "Review", tbody: "Capture log", plan: "Key crafting" };
         const DEFAULT_OFF = { runs: ["Seen by"] };
         let colVis = {};
         try { colVis = JSON.parse(localStorage.getItem(COLS_KEY) || "{}") || {}; } catch (_e) { colVis = {}; }
@@ -1834,10 +1834,8 @@
  <div class="mds-wrap"><table><thead><tr><th>Dungeon</th><th>Sessions</th><th>Clears</th><th>Chests</th><th>Time in sessions</th><th>Per clear</th><th>XP</th><th>XP / h</th><th>From</th><th>To</th></tr></thead><tbody id="mds-life-dungeons"></tbody></table></div>
  <h4 data-noun="keys">Key crafts, from the game's Loot &amp; XP Log</h4>
  <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Sessions</th><th>Crafted</th><th>Essence</th><th>First</th><th>Last</th><th>Materials bought on this PC</th><th>Cost per key</th></tr></thead><tbody id="mds-life-keys"></tbody></table></div>
- <h4 data-noun="skills">Skills, lifetime</h4>
- <div class="mds-wrap"><table><thead><tr><th>Skill</th><th>Level</th><th>Lifetime XP</th><th>To next level</th><th>Since record</th></tr></thead><tbody id="mds-life-skills"></tbody></table></div>
- <h4 data-noun="abilities">Abilities, lifetime</h4>
- <div class="mds-wrap"><table><thead><tr><th>Ability</th><th>Level</th><th>Lifetime XP</th><th>To next level</th><th>Since record</th></tr></thead><tbody id="mds-life-abilities"></tbody></table></div>
+ <h4 data-noun="skills">Combat skills, from the game's Loot &amp; XP Log</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Skill</th><th>Sessions</th><th>Time in sessions</th><th>XP</th><th>XP / h</th><th title="The dungeon and tier where this skill's rate was highest, over at least an hour of sessions">Best rate</th><th>From</th><th>To</th></tr></thead><tbody id="mds-life-skills"></tbody></table></div>
  <p class="mds-note" id="mds-lifenote"></p>
 </div>
 <div class="mds-pane" data-pane="xp" hidden>
@@ -1845,8 +1843,6 @@
  <div class="mds-cards" id="mds-xpcards"></div>
  <h4 data-noun="skills">Skills</h4>
  <div class="mds-wrap"><table><thead><tr><th>Skill</th><th>Since record</th><th>Today</th><th>XP / h</th><th>Share</th></tr></thead><tbody id="mds-xp-skills"></tbody></table></div>
- <h4 data-noun="abilities">Abilities</h4>
- <div class="mds-wrap"><table><thead><tr><th>Ability</th><th>Level</th><th>Since record</th><th>XP / h</th><th>Share</th></tr></thead><tbody id="mds-xp-abilities"></tbody></table></div>
  <h4 data-noun="days">Days</h4>
  <div class="mds-wrap"><table><thead><tr><th>Day</th><th>XP</th><th>Active time</th><th>XP / h</th><th>Skills</th></tr></thead><tbody id="mds-xp-days"></tbody></table></div>
  <p class="mds-note">XP since the record began is the game's lifetime total now less the total when the record started, so it is exact whether or not the script was running, offline play included. XP per hour runs over active time: the time between XP messages when the gap is 15 minutes or less, plus offline time that earned XP. Days are on the server clock (UTC).</p>
@@ -1882,7 +1878,7 @@
 <details><summary>Diagnostics</summary><pre id="mds-diag"></pre></details>
 </div>
 </div>`;
-            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-xpcards", "mds-xp-skills", "mds-xp-abilities", "mds-xp-days", "mds-life-skills", "mds-life-abilities", "mds-review", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
+            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-xpcards", "mds-xp-skills", "mds-xp-days", "mds-life-skills", "mds-review", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
             // Row actions: Keep N (moves loot into supplies), Accept (freezes a valuation of loot no longer held).
             root.addEventListener("click", e => {
                 const b = e.target.closest("button[data-act]"); if (!b) return;
@@ -2392,9 +2388,6 @@
             els["mds-xpcards"].innerHTML = sortCards("xpcards", cards).join("");
             const skills = Object.entries(S.since).sort((a, b) => b[1] - a[1]);
             els["mds-xp-skills"].innerHTML = skills.map(([h, v]) => `<tr><td class="k">${skillIcon(h)}${esc(skillName(h))}</td><td>${fmtCoins(v)}</td><td>${S.today && S.today.bySkill[h] ? fmtCoins(S.today.bySkill[h]) : "–"}</td><td>${S.activeMs > 0 ? fmtCoins(v / (S.activeMs / 3600e3)) : "–"}</td><td>${pct(v, S.total)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No XP since the record began.</td></tr>`;
-            const abSince = S.abilities.filter(a => a.since > 0); const abTotal = abSince.reduce((t, a) => t + a.since, 0);
-            els["mds-xp-abilities"].innerHTML = abSince.map(a => `<tr><td class="k">${abilityIcon(a.hrid)}${esc(abilityName(a.hrid))}</td><td>${a.level != null ? a.level : "–"}</td><td>${fmtCoins(a.since)}</td><td>${S.activeMs > 0 ? fmtCoins(a.since / (S.activeMs / 3600e3)) : "–"}</td><td>${pct(a.since, abTotal)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">${S.abilStartAt ? `No ability XP since ${fmtTime(S.abilStartAt)}.` : "Waiting for the game's ability totals."}</td></tr>`;
-            if (S.abilStartAt && S.startAt && S.abilStartAt - S.startAt > 60e3) els["mds-xp-abilities"].insertAdjacentHTML("beforeend", `<tr><td colspan="5" class="t">Abilities counted since ${fmtTime(S.abilStartAt)}, when this build first saw them; the Loot &amp; XP Log has no ability XP to back that to the record start.</td></tr>`);
             const skillList = by => Object.entries(by || {}).sort((a, b) => b[1] - a[1]).map(([h, v]) => `${fmtCoins(v)} ${esc(skillName(h))}`).join(", ") || "–";
             els["mds-xp-days"].innerHTML = S.days.map(d => `<tr><td class="t">${fmtDate(Date.parse(d.day + "T12:00:00Z"))}</td><td>${fmtCoins(d.total)}</td><td>${fmtHm(d.activeMs)}${d.offlineMs ? `<small> ${fmtHm(d.offlineMs)} offline</small>` : ""}</td><td>${d.activeMs > 0 ? fmtCoins(d.total / (d.activeMs / 3600e3)) : "–"}</td><td class="d">${skillList(d.bySkill)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No days yet.</td></tr>`;
         }
@@ -2451,11 +2444,24 @@
                 return `<tr><td class="k">${itIcon(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtDate(g.from)}</td><td class="t">${fmtDate(g.to)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.paid != null ? ` @ ${fmtCoins(m.paid)}` : " (none here)"}`).join(", ")}<small>${Math.round(coverage * 100)}% of what these crafts consumed is in the merged history (${devices} source${devices === 1 ? "" : "s"})</small></td><td>${cost != null ? `${fmtCoins(cost)}<small>${esc(basis)}</small>` : "–"}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="t">No key crafts in the log yet.</td></tr>`;
             {
-                const S = xpSummary(serverNow());
-                const skillRows = Object.entries(state.lifetimeXp).filter(([h]) => h !== "/skills/total_level").map(([h, xp]) => ({ hrid: h, xp, level: state.levels[h] != null ? state.levels[h] : levelOf(xp), since: S && S.since[h] || 0, sort: ref.skills[h] ? ref.skills[h].sortIndex : 999 })).sort((a, b) => a.sort - b.sort);
-                els["mds-life-skills"].innerHTML = skillRows.map(r => `<tr><td class="k">${skillIcon(r.hrid)}${esc(skillName(r.hrid))}</td><td>${r.level != null ? r.level : "–"}</td><td>${fmtCoins(r.xp)}</td><td>${coinsOr(toNextLevel(r.xp, r.level), "–")}</td><td>${r.since ? fmtCoins(r.since) : "–"}</td></tr>`).join("") || `<tr><td colspan="5" class="t">Waiting for the game's skill totals.</td></tr>`;
-                const abRows = (S ? S.abilities : []).map(a => ({ ...a, sort: ref.abilities[a.hrid] ? ref.abilities[a.hrid].sortIndex : 999 })).sort((a, b) => a.sort - b.sort);
-                els["mds-life-abilities"].innerHTML = abRows.map(a => `<tr><td class="k">${abilityIcon(a.hrid)}${esc(abilityName(a.hrid))}</td><td>${a.level != null ? a.level : "–"}</td><td>${fmtCoins(a.xp)}</td><td>${coinsOr(toNextLevel(a.xp, a.level), "–")}</td><td>${a.since ? fmtCoins(a.since) : "–"}</td></tr>`).join("") || `<tr><td colspan="5" class="t">Waiting for the game's ability totals (sent at login and with every completed action).</td></tr>`;
+                // Per combat skill: XP over every combat session in the log where it gained, XP/h over those sessions'
+                // time (the action's running time, offline included), and the dungeon where its rate was best.
+                const per = {};
+                for (const e of all) {
+                    if (!(ref.dungeons[e.action] || /\/combat\//.test(e.action))) continue;
+                    const ms = Math.max(0, endOf(e) - e.start); if (!(ms > 0)) continue;
+                    for (const [sk, v] of Object.entries(e.xp || {})) {
+                        if (!(v > 0) || sk === "/skills/total_level" || (ref.skills[sk] && !ref.skills[sk].combat)) continue;
+                        const p = per[sk] || (per[sk] = { skill: sk, n: 0, ms: 0, xp: 0, from: e.start, to: endOf(e), by: {} });
+                        p.n++; p.ms += ms; p.xp += v; p.from = Math.min(p.from, e.start); p.to = Math.max(p.to, endOf(e));
+                        const k = `${e.action}|${e.tier}`; const b = p.by[k] || (p.by[k] = { action: e.action, tier: e.tier, ms: 0, xp: 0 }); b.ms += ms; b.xp += v;
+                    }
+                }
+                const rows = Object.values(per).sort((a, b) => b.xp - a.xp);
+                els["mds-life-skills"].innerHTML = rows.map(p => {
+                    const best = Object.values(p.by).filter(b => b.ms >= 3600e3).sort((a, b) => b.xp / b.ms - a.xp / a.ms)[0] || null;
+                    return `<tr><td class="k">${skillIcon(p.skill)}${esc(skillName(p.skill))}</td><td>${p.n}</td><td>${fmtHm(p.ms)}</td><td>${fmtCoins(p.xp)}</td><td>${fmtCoins(p.xp / (p.ms / 3600e3))}</td><td class="d">${best ? `${fmtCoins(best.xp / (best.ms / 3600e3))} in ${zoneLabel(best.action, best.tier || null)}<small> ${fmtHm(best.ms)}</small>` : "–"}</td><td class="t">${fmtDate(p.from)}</td><td class="t">${fmtDate(p.to)}</td></tr>`;
+                }).join("") || `<tr><td colspan="8" class="t">No combat sessions in the log yet: open the game's Loot &amp; XP Log once.</td></tr>`;
             }
             els["mds-lifenote"].textContent = `The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: ${all.length} sessions${all.length ? ` from ${fmtDate(Math.min(...all.map(e => e.start)))}` : ""}. Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device, merged here by listing id from this PC's Toolasha store and any file merged on the Data tab (${state.marketHistory.size} listings); the cost per key takes the average paid price in that history (a price holds whatever share was bought on one PC) with recipe quantities at your current artisan rate, since the log has no consumption per craft; no lifetime income is shown until the records from both PCs are merged (import, milestone 5).`;
         }
