@@ -1614,7 +1614,7 @@
             const cards = [
                 card("Clears", S.clears, `${S.fails} failed${S.failRate != null ? ` (${(S.failRate * 100).toFixed(1)}%)` : ""} · ${S.cancelled} cancelled${S.unknown ? ` · ${S.unknown} end unknown` : ""}`),
                 card("Average run", S.avgClearMs != null ? fmtDur(S.avgClearMs) : "–", S.clearMs.length ? `${S.avgRunMs != null && S.fails ? `${fmtDur(S.avgRunMs)} counting fails · ` : ""}fastest ${fmtDur(S.fastestMs)} · slowest ${fmtDur(S.slowestMs)}` : "no completed run yet"),
-                card("Chests", S.chestTotal + offChests, `${chestLines || "none yet"}${offChests ? ` · ${offChests} of them while offline` : ""}${chestReconLine(d)}`),
+                card("Chests", S.chestTotal + offChests, `${chestLines || "none yet"}${offChests ? ` · ${offChests} of them while offline` : ""}${bagLine()}`),
                 card("Keys charged", S.keysCharged, `${S.keysCrafted} crafted in the record`),
                 card("In dungeons", fmtHm(S.dungeonMs), `${pct(S.dungeonMs, S.totalMs)} of ${fmtHm(S.totalMs)} recorded`),
                 card("Between runs", fmtHm(S.betweenMs), `crafting ${fmtHm(S.craftingMs)} · offline ${fmtHm(S.offlineBetweenMs)} · other ${fmtHm(S.otherMs)}`),
@@ -1664,85 +1664,12 @@
             }).join("") || `<tr><td colspan="7" class="t">Everything gained is sold, held, listed or kept.</td></tr>`;
             els["mds-lootnote"].textContent = `Loot = what this record saw come out of a chest or a token redemption. Held = in the bag now; Listed = on your sell orders. No longer held = gained − sold − opened − held − listed − kept, valued at the current bid less ${(M.tax.rate * 100).toFixed(1)}% tax; a bid that moved more than 50% since opening (or no bid) is marked for review and left out of the totals until accepted. Accepting freezes that value as a recorded event.`;
         }
-        // held now = held at record start + awarded (clears and offline blocks) − opened. Anything else is a chest the
-        // record did not see awarded, or an opening it did not see.
-        function chestRecon(d) {
-            const M = getMoney(); const base = state.timeline.find(e => e.kind === "baseline"); const out = [];
-            const types = new Set([...Object.keys(d.summary.chests), ...d.offline.flatMap(b => Object.keys(b.chests)), ...Object.keys(M.chests).filter(h => ref.chestItems[h]), ...((base && base.chests) || []).map(c => c.item)]);
-            for (const h of types) {
-                const start = ((base && base.chests) || []).find(c => c.item === h); const startQty = start ? start.qty : 0;
-                const awarded = (d.summary.chests[h] || 0) + d.offline.reduce((s, b) => s + (b.chests[h] || 0), 0);
-                const opened = M.chests[h] ? M.chests[h].opened : 0;
-                const now = held(h, 0);
-                out.push({ item: h, start: startQty, awarded, opened, now, gap: startQty + awarded - opened - now });
-            }
-            return out;
-        }
-        function chestReconLine(d) {
-            const r = chestRecon(d); if (!r.length || !state.inventory.size) return "";
-            const gaps = r.filter(x => x.gap !== 0);
-            return gaps.length ? ` · bag check: ${gaps.map(x => `${it(x.item)} ${x.gap > 0 ? `${x.gap} unaccounted for` : `${-x.gap} more in the bag than awarded`}`).join(", ")}` : " · bag check: start + awarded − opened = held ✓";
-        }
-        const lifetimeCrafted = key => [...state.lootLog.values()].filter(e => ref.keyActions[e.action] && ref.keyActions[e.action].outputs.some(o => o.item === key)).reduce((s, e) => s + (e.drops[key] || e.count), 0);
-        function renderLifetime() {
-            const all = [...state.lootLog.values()];
-            const endOf = e => isRunning(e) ? serverNow() : e.end;
-            const groups = {};
-            for (const e of all) {
-                if (!(ref.dungeons[e.action] || /\/combat\//.test(e.action))) continue;
-                const k = `${e.action}|${e.tier}`; const g = groups[k] || (groups[k] = { action: e.action, tier: e.tier, n: 0, clears: 0, chests: {}, ms: 0, xp: {}, from: e.start, to: endOf(e) });
-                g.n++; g.clears += e.count; g.ms += Math.max(0, endOf(e) - e.start); g.from = Math.min(g.from, e.start); g.to = Math.max(g.to, endOf(e));
-                for (const [h, q] of Object.entries(e.drops)) if (ref.chestItems[h.split("::")[0]]) g.chests[h.split("::")[0]] = (g.chests[h.split("::")[0]] || 0) + q;
-                for (const [sk, v] of Object.entries(e.xp)) g.xp[sk] = (g.xp[sk] || 0) + v;
-            }
-            const xpSumAll = x => Object.values(x || {}).reduce((s, v) => s + v, 0);
-            const rows = Object.values(groups).sort((a, b) => b.to - a.to);
-            els["mds-life-dungeons"].innerHTML = rows.map(g => `<tr><td class="k">${esc(shortAction(g.action))}${g.tier ? ` T${g.tier}` : ""}</td><td>${g.n}</td><td>${fmtQ(g.clears)}</td><td class="d">${Object.entries(g.chests).map(([h, q]) => `${fmtQ(q)} ${it(h)}`).join(", ") || "–"}</td><td>${fmtHm(g.ms)}</td><td>${g.clears ? fmtDur(g.ms / g.clears) : "–"}</td><td class="d">${Object.entries(g.xp).sort((a, b) => b[1] - a[1]).map(([sk, v]) => `${fmtCoins(v)} ${esc(sk.split("/").pop())}`).join(", ") || "–"}</td><td>${g.ms > 0 ? fmtCoins(xpSumAll(g.xp) / (g.ms / 3600e3)) : "–"}</td><td class="t">${fmtTime(g.from).slice(0, 10)}</td><td class="t">${fmtTime(g.to).slice(0, 10)}</td></tr>`).join("") || `<tr><td colspan="10" class="t">No sessions yet: open the game's Loot &amp; XP Log once.</td></tr>`;
-            // Key crafts, with what this PC's Toolasha history shows bought of the recipe's materials (a partial view
-            // when another PC bought some of them).
-            const craftGroups = {};
-            for (const e of all) { const r = ref.keyActions[e.action]; if (!r) continue; const key = (r.outputs[0] || {}).item; if (!key) continue; const g = craftGroups[key] || (craftGroups[key] = { key, action: e.action, n: 0, crafted: 0, essence: 0, from: e.start, to: e.end }); g.n++; g.crafted += e.drops[key] || e.count; g.essence += Object.entries(e.drops).filter(([h]) => /essence/.test(h)).reduce((s, [, q]) => s + q, 0); g.from = Math.min(g.from, e.start); g.to = Math.max(g.to, e.end); }
-            const buys = marketHistoryRows().filter(l => !l.isSell);
-            const devices = new Set(marketHistoryRows().map(l => String(l.src || "").split("+")).flat().filter(Boolean)).size;
-            els["mds-life-keys"].innerHTML = Object.values(craftGroups).sort((a, b) => b.to - a.to).map(g => {
-                // Prices from this PC's buys (an average paid is a price, whatever share of the quantity was bought here),
-                // quantities from the recipe at the current artisan rate: the history has no consumption per craft.
-                const art = artisanOf(g.action); const cut = art ? 1 - art.rate : 1;
-                const recipe = ref.keyActions[g.action];
-                const mats = recipe.inputs.filter(i => i.item !== "/items/coin").map(i => { const b = buys.filter(l => l.item === i.item); const qty = b.reduce((s, l) => s + l.qty, 0), coins = b.reduce((s, l) => s + l.qty * l.price, 0); const paid = qty ? coins / qty : null; const price = paid != null ? paid : askOf(i.item); return { item: i.item, qty, coins, paid, price, perKey: i.qty * cut, needed: g.crafted * i.qty * cut }; });
-                const coinsIn = ((recipe.inputs.find(i => i.item === "/items/coin") || {}).qty || 0) * cut;
-                const priced = mats.every(m => m.price != null);
-                // Measured consumption wins: the crafts this record has observed say what a key really took.
-                const obs = state.timeline.filter(e => e.kind === "craft" && e.action === g.action && (e.outputs || []).some(o => o.item === g.key));
-                const keysOut = obs.reduce((s, e) => s + (e.outputs || []).filter(o => o.item === g.key).reduce((a, o) => a + o.qty, 0), 0);
-                let cost = null, basis = "";
-                if (keysOut > 0) {
-                    const perKey = {}; for (const e of obs) for (const i of (e.inputs || [])) perKey[i.item] = (perKey[i.item] || 0) + i.qty / keysOut;
-                    const coinsPerKey = obs.reduce((s, e) => s + (e.coins || 0), 0) / keysOut;
-                    const teaPerKey = {}; for (const e of obs) for (const t of (e.teas || [])) teaPerKey[t.item] = (teaPerKey[t.item] || 0) + t.qty / keysOut;
-                    const priceOf = h => { const m = mats.find(x => x.item === h); if (m && m.price != null) return m.price; const b = buys.filter(l => l.item === h); if (b.length) return b.reduce((s, l) => s + l.qty * l.price, 0) / b.reduce((s, l) => s + l.qty, 0); const a = ledgerAvg(h); return a != null ? a : askOf(h); };
-                    let c = coinsPerKey, ok = true;
-                    for (const [h, q] of Object.entries(perKey)) { const p = priceOf(h); if (p == null) { ok = false; break; } c += p * q; }
-                    for (const [h, q] of Object.entries(teaPerKey)) { const p = priceOf(h); if (p != null) c += p * q; }
-                    if (ok) { cost = c; const units = Object.values(perKey).reduce((a, b) => a + b, 0); basis = `measured on ${obs.length} craft${obs.length === 1 ? "" : "s"} (${units.toFixed(2)} materials per key) at your average paid price`; }
-                }
-                if (cost == null && priced) {
-                    cost = mats.reduce((s, m) => s + m.price * m.perKey, 0) + coinsIn;
-                    if (art && art.tea) { const tp = ledgerAvg(art.tea) != null ? ledgerAvg(art.tea) : askOf(art.tea); if (tp != null) cost += tp * art.seconds / art.teaSeconds; }
-                    const asksN = mats.filter(m => m.paid == null && m.price != null).length;
-                    basis = `recipe at your average paid price${asksN ? ` (${asksN} at ask)` : ""}${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan"}${art && art.tea ? " + tea" : ""} · no craft observed yet`;
-                }
-                const asks = 0;
-                const coverage = mats.reduce((s, m) => s + m.needed, 0) > 0 ? mats.reduce((s, m) => s + Math.min(m.qty, m.needed), 0) / mats.reduce((s, m) => s + m.needed, 0) : 0;
-                return `<tr><td class="k">${it(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtTime(g.from).slice(0, 10)}</td><td class="t">${fmtTime(g.to).slice(0, 10)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.paid != null ? ` @ ${fmtCoins(m.paid)}` : " (none here)"}`).join(", ")}<small>${Math.round(coverage * 100)}% of what these crafts consumed is in the merged history (${devices} source${devices === 1 ? "" : "s"})</small></td><td>${cost != null ? `${fmtCoins(cost)}<small>${esc(basis)}</small>` : "–"}</td></tr>`;
-            }).join("") || `<tr><td colspan="8" class="t">No key crafts in the log yet.</td></tr>`;
-            els["mds-lifenote"].textContent = `The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: ${all.length} sessions${all.length ? ` from ${fmtTime(Math.min(...all.map(e => e.start))).slice(0, 10)}` : ""}. Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device, merged here by listing id from this PC's Toolasha store and any file merged on the Data tab (${state.marketHistory.size} listings); the cost per key takes the average paid price in that history (a price holds whatever share was bought on one PC) with recipe quantities at your current artisan rate, since the log has no consumption per craft; no lifetime income is shown until the records from both PCs are merged (import, milestone 5).`;
-        }
+        const bagLine = () => { const bag = Object.keys(ref.chestItems).map(h => [h, held(h, 0)]).filter(([, q]) => q > 0); return bag.length ? ` · in the bag now: ${bag.map(([h, q]) => `${q} ${it(h)}`).join(", ")}` : ""; };
         function renderChests() {
             const M = getMoney();
             const cards = Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(it(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`));
-            const recon = chestRecon(getDerived()).filter(x => x.start || x.awarded || x.opened || x.now);
-            els["mds-chestcards"].innerHTML = cards.join("") + recon.map(x => card(`${it(x.item)} in the bag`, fmtQ(x.now), `${x.start} at record start + ${x.awarded} awarded − ${x.opened} opened = ${x.start + x.awarded - x.opened}${x.gap === 0 ? " ✓" : x.gap > 0 ? ` · ${x.gap} unaccounted for` : ` · ${-x.gap} more than awarded`}`)).join("");
+            const bag = Object.keys(ref.chestItems).map(h => [h, held(h, 0)]).filter(([, q]) => q > 0);
+            els["mds-chestcards"].innerHTML = cards.join("") + (bag.length ? card("In the bag now", bag.reduce((a, [, q]) => a + q, 0), bag.map(([h, q]) => `${q} ${it(h)}`).join(" · ")) : "");
             const opens = state.timeline.filter(e => e.kind === "open" && e.at >= (state.meta.recordStart || 0)).slice(-300).reverse();
             els["mds-chests"].innerHTML = opens.map(ev => `<tr><td class="t">${fmtTime(ev.at)}</td><td class="k">${it(ev.chest)}</td><td>${ev.count}</td><td class="d">${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}${(g.counted || isCounted(g.item)) ? " (counted)" : (g.item !== "/items/coin" && !g.bid) ? " (no bid)" : ""}`).join(", ")}</td><td>${fmtCoins((ev.gains || []).filter(g => g.item !== "/items/coin" && !g.counted && !isCounted(g.item)).reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0))}</td><td>${ev.coinsGained ? fmtCoins(ev.coinsGained) : "–"}</td><td>${ev.keyCost && ev.keyCost.unitCost != null ? `${fmtCoins(ev.keyCost.unitCost * ev.count)}<small> ${esc(ev.keyCost.basis || "")}</small>` : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">No chest opened yet.</td></tr>`;
             els["mds-chestsnote"].textContent = "Newest first. Value at bid = each item's highest bid when the chest was opened; counted items (cowbells) and unpriced items carry no value. Key cost = the chest key's lot cost; a basis of ask means the key was held before the record began.";
