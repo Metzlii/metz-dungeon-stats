@@ -418,7 +418,7 @@
         run.deaths = run.deathsTotal != null && run.deathsAtStart != null ? Math.max(0, run.deathsTotal - run.deathsAtStart) : null;
         delete run.xpStart;
         saveRun(run); state.run = null;
-        emit(result, { runId: run.id, zone: run.zone, tier: run.tier, battleId: run.battleId, waves: run.waves, durationMs: run.durationMs, chests: run.chests, keysCharged: run.keysUsed, keyCost: run.keyCost || null, noBattleSeen: !run.battles, xpBySkill: run.xpBySkill, deaths: run.deaths, deathsTotal: run.deathsTotal, partial: run.partial }, src, run.endAt);
+        emit(result, { runId: run.id, zone: run.zone, tier: run.tier, battleId: run.battleId, waves: run.waves, durationMs: run.durationMs, chests: run.chests, keysCharged: run.keysUsed, keyCost: run.keyCost || null, noBattleSeen: !run.battles, xpEnd: xpSnapshot(), xpBySkill: run.xpBySkill, deaths: run.deaths, deathsTotal: run.deathsTotal, partial: run.partial }, src, run.endAt);
         return run;
     }
 
@@ -1036,8 +1036,8 @@
                 // see are unknown, not zero.
                 if (liveEnd.waves > 0) run.waves = liveEnd.waves; else if (liveEnd.kind === "clear" && C.maxWavesOf) run.waves = C.maxWavesOf(run.zone) || null;
                 const blind = !!liveEnd.noBattleSeen || (liveEnd.kind === "clear" && !(liveEnd.waves > 0));
-                run.chests = Array.isArray(liveEnd.chests) ? liveEnd.chests : null; run.deaths = blind ? null : (deathsOf.get(liveEnd.id) ?? null); run.xpBySkill = blind || !liveEnd.xpBySkill || !Object.keys(liveEnd.xpBySkill).length ? null : liveEnd.xpBySkill; run.keyCost = liveEnd.keyCost || null;
-                if (blind) run.note = "script was not running for the battles of this run; waves, deaths and XP not seen";
+                run.chests = Array.isArray(liveEnd.chests) ? liveEnd.chests : null; run.deaths = blind ? null : (deathsOf.get(liveEnd.id) ?? null); run.xpBySkill = blind || !liveEnd.xpBySkill || !Object.keys(liveEnd.xpBySkill).length ? null : liveEnd.xpBySkill; run.keyCost = liveEnd.keyCost || null; run.xpEnd = liveEnd.xpEnd || null;
+                if (blind) run.note = "script was not running for the battles of this run: waves, deaths and XP not seen";
                 if (liveEnd.keysCharged != null) { run.keysCharged = n(liveEnd.keysCharged); run.keysSrc = "clear message"; }
             }
             if (run.result === "clear" && run.keysCharged == null && run.keysBefore != null && run.keysAfter != null && end) {
@@ -1066,6 +1066,16 @@
         runs.sort((a, b) => a.startAt - b.startAt);
         // The record window. Runs that began before it count only if they were still going when it began.
         const windowStart = C.recordStart || (runs.length ? runs[0].startAt : nowMs), windowEnd = nowMs;
+        // XP for a run whose battles the script missed: the lifetime totals every run end records make it the total at
+        // this end minus the total at the previous run's end, when that end came just before this run started (runs chain
+        // back to back and XP only moves in battle). Otherwise it stays unknown.
+        runs.sort((a, b) => a.startAt - b.startAt);
+        for (let i = 1; i < runs.length; i++) {
+            const r = runs[i], p = runs[i - 1];
+            if (r.xpBySkill || !r.xpEnd || !p.xpEnd || p.endAt == null || r.startAt - p.endAt > 60e3) continue;
+            const d = {}; for (const [k, v] of Object.entries(r.xpEnd)) { const dv = n(v) - n(p.xpEnd[k]); if (dv > 0 && k !== "/skills/total_level") d[k] = dv; }
+            if (Object.keys(d).length) { r.xpBySkill = d; r.xpPartial = false; r.xpSrc = "lifetime totals at the two run ends"; r.note = r.note ? r.note.replace(/: waves, deaths and XP not seen/, ": deaths not seen; XP from the lifetime totals at the two run ends") : null; }
+        }
         const kept = runs.filter(r => r.startAt >= windowStart || (r.endAt == null ? r.result === "open" : r.endAt > windowStart));
         for (const r of kept) if (r.startAt < windowStart) r.spansRecordStart = true;
         const clip = (a, b) => [Math.max(a, windowStart), Math.min(b, windowEnd)];
