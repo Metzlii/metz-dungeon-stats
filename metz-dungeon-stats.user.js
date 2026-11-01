@@ -1349,6 +1349,8 @@
 #mds-root .mds-bar button.danger{border-color:#d3a13a;color:#f2d99a}
 #mds-root .mds-bar button.danger:hover{background:rgba(211,161,58,.12)}
 #mds-root button.mds-act{padding:3px 9px;font-size:.857em;white-space:nowrap}
+#mds-root td.mds-acts{white-space:nowrap}
+#mds-root td.mds-acts .mds-act+.mds-act{margin-left:6px}
 #mds-root .mds-bar .mds-note{color:#c5d4de;font-size:.857em}
 #mds-root table{width:100%;border-collapse:collapse;font-size:1em;font-variant-numeric:tabular-nums}
 #mds-root th{position:sticky;top:0;background:#1c2a35;text-align:left;cursor:grab;user-select:none;font-size:.786em;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:7px 9px;border-bottom:1px solid rgba(230,239,243,.16)}
@@ -2017,7 +2019,7 @@
         function renderLoot() {
             const M = getMoney();
             const lootRows = M.rows.filter(r => r.kind === "loot" || r.kind === "container");
-            els["mds-loot"].innerHTML = lootRows.map(r => `<tr><td class="k">${itemLink(r.item)}${r.kind === "container" ? `<small> opened ${r.opened}</small>` : ""}</td><td>${fmtQ(r.gained)}${r.redeemed ? `<small> ${r.redeemed} redeemed</small>` : ""}</td><td>${r.sold ? fmtQ(r.sold) : "–"}</td><td>${r.sold ? fmtCoins(r.soldNet) : "–"}</td><td>${fmtQ(r.held)}</td><td>${r.listed || "–"}</td><td>${r.kept || "–"}</td><td>${coinsOr(r.heldValue, "no bid")}</td><td><button class="mds-act" data-act="keep" data-item="${esc(r.item)}" data-kept="${r.kept}">Keep…</button></td></tr>`).join("") || `<tr><td colspan="9" class="t">No loot opened yet.</td></tr>`;
+            els["mds-loot"].innerHTML = lootRows.map(r => `<tr><td class="k">${itemLink(r.item)}${r.kind === "container" ? `<small> opened ${r.opened}</small>` : ""}</td><td>${fmtQ(r.gained)}${r.redeemed ? `<small> ${r.redeemed} redeemed</small>` : ""}</td><td>${r.sold ? fmtQ(r.sold) : "–"}</td><td>${r.sold ? fmtCoins(r.soldNet) : "–"}</td><td>${fmtQ(r.held)}</td><td>${r.listed || "–"}</td><td>${r.kept || "–"}</td><td>${coinsOr(r.heldValue, "no bid")}</td><td class="mds-acts">${r.held > 0 && !(ref.items[r.item] && ref.items[r.item].tradable === false) ? `<button class="mds-act" data-act="market" data-item="${esc(r.item)}" title="Open this item in the marketplace">Sell</button>` : ""}<button class="mds-act" data-act="keep" data-item="${esc(r.item)}" data-kept="${r.kept}">Keep…</button></td></tr>`).join("") || `<tr><td colspan="9" class="t">No loot opened yet.</td></tr>`;
             const tok = Object.entries(M.tokens);
             els["mds-tokens"].innerHTML = tok.map(([h, t]) => `<tr><td class="k">${itIcon(h)}</td><td>${fmtQ(t.gained)}</td><td>${t.redeemed ? fmtQ(t.redeemed) : "–"}</td><td>${Object.entries(t.received).map(([i, q]) => `${q} ${it(i)}`).join(", ") || "–"}</td><td>${fmtQ(t.held)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No tokens yet.</td></tr>`;
             const sup = [];
