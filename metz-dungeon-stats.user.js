@@ -1311,7 +1311,8 @@
 #mds-root button.mds-act{background:rgba(44,33,64,.8);border:1px solid rgba(190,160,255,.25);color:#e6ddf5;border-radius:6px;padding:2px 7px;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
 #mds-root .mds-wrap-chests{max-height:420px}
 #mds-toggle[hidden]{display:none}
-#mds-root.docked{position:static;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;backdrop-filter:none;margin:0}
+#mds-root.docked{position:static;z-index:auto;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;backdrop-filter:none;margin:0}
+/* z-index:auto matters: the strip is a flex container, and a flex item's z-index makes a stacking context even when static, which put the docked panel above the game's popups (z 300). */
 #mds-root.docked .mds-head .mds-x{display:none}
 #mds-root.docked .mds-body{overflow:visible}
 #mds-root.docked .mds-cards{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
