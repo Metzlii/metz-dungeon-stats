@@ -1267,7 +1267,8 @@
     // screen; a small floating button opens it anywhere else.
     // ---------------------------------------------------------------------------------------------------------------
     const CSS = `
-/* The simulator site's system (zone-page/spira-theme.css + its design system): sea-slate ground, water accent, gold
+/* Every size inside the panel is in em of the root font size, so the Settings text-size control scales the whole panel.
+   The simulator site's system (zone-page/spira-theme.css + its design system): sea-slate ground, water accent, gold
    only for warnings, Inter, 8px radius, hairline dividers at 16% of the text colour. */
 #mds-toggle{position:fixed;left:10px;bottom:10px;z-index:2147483000;background:#1c2a35;color:#e6eff3;border:1px solid rgba(230,239,243,.16);border-radius:8px;padding:7px 12px;font:500 13px/1.2 "Inter",system-ui,sans-serif;cursor:pointer;box-shadow:0 0 0 1px #3f424d}
 #mds-toggle:hover{border-color:#45c8d8;color:#a9e9f1}
@@ -1278,13 +1279,13 @@
 /* z-index:auto matters: the strip is a flex container, and a flex item's z-index makes a stacking context even when static, which put the docked panel above the game's popups (z 300). */
 #mds-root *{box-sizing:border-box}
 #mds-root .mds-head{display:flex;align-items:center;gap:10px;padding:10px 14px 8px}
-#mds-root .mds-head strong{font-size:17px;font-weight:500;letter-spacing:-.015em}
-#mds-root .mds-head .mds-sub{color:#c5d4de;font-size:12px}
-#mds-root .mds-head .mds-x{margin-left:auto;background:none;border:0;color:#c5d4de;font-size:20px;line-height:1;cursor:pointer}
+#mds-root .mds-head strong{font-size:1.214em;font-weight:500;letter-spacing:-.015em}
+#mds-root .mds-head .mds-sub{color:#c5d4de;font-size:.857em}
+#mds-root .mds-head .mds-x{margin-left:auto;background:none;border:0;color:#c5d4de;font-size:1.43em;line-height:1;cursor:pointer}
 #mds-root .mds-head .mds-x:hover{color:#e6eff3}
 #mds-root.docked .mds-head .mds-x{display:none}
 #mds-root .mds-tabs{display:inline-flex;margin:0 14px;border:1px solid rgba(230,239,243,.16);border-radius:8px;overflow:hidden;align-self:flex-start}
-#mds-root .mds-tabs button{background:transparent;border:0;border-left:1px solid rgba(230,239,243,.16);color:#e6eff3;padding:7px 14px;cursor:pointer;font:500 14px/1.2 "Inter",system-ui,sans-serif}
+#mds-root .mds-tabs button{background:transparent;border:0;border-left:1px solid rgba(230,239,243,.16);color:#e6eff3;padding:7px 14px;cursor:pointer;font:500 1em/1.2 "Inter",system-ui,sans-serif}
 #mds-root .mds-tabs button:first-child{border-left:0}
 #mds-root .mds-tabs button:hover{background:rgba(230,239,243,.07)}
 #mds-root .mds-tabs button[aria-selected="true"]{color:#45c8d8;box-shadow:inset 0 0 0 1px #45c8d8}
@@ -1292,26 +1293,26 @@
 #mds-root.docked .mds-body{overflow:visible}
 #mds-root .mds-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px}
 #mds-root .mds-card{display:flex;flex-direction:column;gap:3px;background:#1c2a35;border-radius:8px;padding:10px 12px;box-shadow:0 0 0 1px #3f424d}
-#mds-root .mds-card .l{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#45c8d8}
-#mds-root .mds-card .n{font-size:23px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.2}
-#mds-root .mds-card small{display:block;color:#c5d4de;font-size:12px;line-height:1.4}
-#mds-root .mds-status{margin:0 0 10px;color:#c5d4de;font-size:13px}
+#mds-root .mds-card .l{font-size:.786em;letter-spacing:.1em;text-transform:uppercase;color:#45c8d8}
+#mds-root .mds-card .n{font-size:1.643em;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.2}
+#mds-root .mds-card small{display:block;color:#c5d4de;font-size:.857em;line-height:1.4}
+#mds-root .mds-status{margin:0 0 10px;color:#c5d4de;font-size:.929em}
 #mds-root .mds-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
-#mds-root .mds-bar button,#mds-root .mds-bar select,#mds-root .mds-bar label,#mds-root button.mds-act{background:transparent;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:8px;padding:6px 10px;font:500 13px/1.2 "Inter",system-ui,sans-serif;cursor:pointer}
+#mds-root .mds-bar button,#mds-root .mds-bar select,#mds-root .mds-bar label,#mds-root button.mds-act{background:transparent;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:8px;padding:6px 10px;font:500 .929em/1.2 "Inter",system-ui,sans-serif;cursor:pointer}
 #mds-root .mds-bar select{background:#1c2a35}
 #mds-root .mds-bar button:hover,#mds-root button.mds-act:hover{background:rgba(230,239,243,.07)}
 #mds-root .mds-bar button.danger{border-color:#d3a13a;color:#f2d99a}
 #mds-root .mds-bar button.danger:hover{background:rgba(211,161,58,.12)}
-#mds-root button.mds-act{padding:3px 9px;font-size:12px;white-space:nowrap}
-#mds-root .mds-bar .mds-note{color:#c5d4de;font-size:12px}
-#mds-root table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
-#mds-root th{position:sticky;top:0;background:#1c2a35;text-align:left;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:7px 9px;border-bottom:1px solid rgba(230,239,243,.16)}
+#mds-root button.mds-act{padding:3px 9px;font-size:.857em;white-space:nowrap}
+#mds-root .mds-bar .mds-note{color:#c5d4de;font-size:.857em}
+#mds-root table{width:100%;border-collapse:collapse;font-size:1em;font-variant-numeric:tabular-nums}
+#mds-root th{position:sticky;top:0;background:#1c2a35;text-align:left;font-size:.786em;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:7px 9px;border-bottom:1px solid rgba(230,239,243,.16)}
 #mds-root td{padding:6px 9px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top;line-height:1.4}
 #mds-root tbody tr:hover td{background:rgba(230,239,243,.04)}
 #mds-root td.k{white-space:nowrap;font-weight:500}
 #mds-root td.t{white-space:nowrap;color:#c5d4de}
 #mds-root td.d{color:#dee9ef;word-break:break-word}
-#mds-root td small{display:block;color:#c5d4de;font-size:11px;font-weight:400}
+#mds-root td small{display:block;color:#c5d4de;font-size:.786em;font-weight:400}
 #mds-root tr.review td.k{color:#f2d99a}
 #mds-root tr.clear td.k{color:#a9e9f1}
 #mds-root tr.fail td.k,#mds-root tr.stop td.k{color:#e6be62}
@@ -1321,12 +1322,12 @@
 #mds-root .mds-wrap{max-height:400px;overflow:auto;border-radius:8px;background:#1c2a35;box-shadow:0 0 0 1px #3f424d}
 #mds-root .mds-wrap-chests{max-height:460px}
 #mds-root .mds-pane[hidden]{display:none}
-#mds-root p.mds-note{color:#c5d4de;font-size:12px;margin:8px 0 0;line-height:1.45}
-#mds-root h4{margin:14px 0 6px;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6)}
+#mds-root p.mds-note{color:#c5d4de;font-size:.857em;margin:8px 0 0;line-height:1.45}
+#mds-root h4{margin:14px 0 6px;font-size:.786em;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6)}
 #mds-root .mds-pane h4:first-child{margin-top:0}
 #mds-root details{margin:8px 0}
 #mds-root summary{cursor:pointer;color:#a9e9f1}
-#mds-root pre{white-space:pre-wrap;word-break:break-word;background:#1c2a35;padding:8px 10px;border-radius:8px;max-height:220px;overflow:auto;font-size:12px;box-shadow:0 0 0 1px #3f424d}
+#mds-root pre{white-space:pre-wrap;word-break:break-word;background:#1c2a35;padding:8px 10px;border-radius:8px;max-height:220px;overflow:auto;font-size:.857em;box-shadow:0 0 0 1px #3f424d}
 #mds-tab{white-space:nowrap}
 `;
 
@@ -1335,7 +1336,13 @@
         const els = {};
         let derived = null, derivedAt = 0, derivedRev = -1;
         const KINDS = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
-        const TABS = [["overview", "Overview"], ["runs", "Runs"], ["keys", "Keys"], ["loot", "Loot"], ["chests", "Chests"], ["lifetime", "Lifetime"], ["data", "Data"]];
+        const TABS = [["overview", "Overview"], ["runs", "Runs"], ["keys", "Keys"], ["loot", "Loot"], ["chests", "Chests"], ["lifetime", "Lifetime"], ["data", "Data"], ["settings", "Settings"]];
+        // Text size: every size in the panel is in em of the root, so one font-size scales it all. Saved per browser.
+        const SCALE_KEY = PANEL_KEY + "-scale", BASE_PX = 14;
+        let scale = 1;
+        try { const v = Number(localStorage.getItem(SCALE_KEY)); if (v >= 0.7 && v <= 1.8) scale = v; } catch (_e) { /* fine */ }
+        function applyScale() { if (!root) return; root.style.fontSize = `${Math.round(BASE_PX * scale * 10) / 10}px`; const el = root.querySelector("#mds-fs-val"); if (el) el.textContent = `${Math.round(scale * 100)}%`; }
+        function setScale(v) { scale = Math.max(0.7, Math.min(1.8, Math.round(v * 20) / 20)); try { localStorage.setItem(SCALE_KEY, String(scale)); } catch (_e) { /* fine */ } applyScale(); }
         let money = null, moneyAt = 0, moneyRev = -1, moneyPrices = 0;
         const isToken = h => /_token$/.test(h);
         const moneyCtx = () => ({
@@ -1409,6 +1416,11 @@
  <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Sessions</th><th>Crafted</th><th>Essence</th><th>First</th><th>Last</th><th>Materials bought on this PC</th><th>Cost per key</th></tr></thead><tbody id="mds-life-keys"></tbody></table></div>
  <p class="mds-note" id="mds-lifenote"></p>
 </div>
+<div class="mds-pane" data-pane="settings" hidden>
+ <h4>Text size</h4>
+ <div class="mds-bar"><button id="mds-fs-down" title="Smaller">A −</button><span id="mds-fs-val" class="mds-note"></span><button id="mds-fs-up" title="Larger">A +</button><button id="mds-fs-reset">Reset</button></div>
+ <p class="mds-note">Scales every size in the panel, from 70% to 180% in steps of 5%. Saved in this browser only.</p>
+</div>
 <div class="mds-pane" data-pane="data" hidden>
 <div class="mds-bar">
  <label>Show <select id="mds-filter">${KINDS.map(k => `<option value="${k}">${k}</option>`).join("")}</select></label>
@@ -1451,6 +1463,10 @@
             root.querySelector("#mds-reset").addEventListener("click", resetRecord);
             root.querySelector("#mds-toolasha").addEventListener("click", () => importToolasha("manual").then(() => render()));
             root.querySelector("#mds-history-file").addEventListener("click", () => root.querySelector("#mds-history-input").click());
+            root.querySelector("#mds-fs-down").addEventListener("click", () => setScale(scale - 0.05));
+            root.querySelector("#mds-fs-up").addEventListener("click", () => setScale(scale + 0.05));
+            root.querySelector("#mds-fs-reset").addEventListener("click", () => setScale(1));
+            applyScale();
             root.querySelector("#mds-history-input").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importMarketHistoryFile(f).then(() => render(), err => warn("history import failed", err)); });
             // Rows are held while the reader is scrolled down; they catch up at the top.
             els.wrap.addEventListener("scroll", () => { if (rowsHeld && els.wrap.scrollTop <= 8) renderRows(true); }, { passive: true });
