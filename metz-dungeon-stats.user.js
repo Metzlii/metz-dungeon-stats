@@ -144,7 +144,7 @@
     // ---------------------------------------------------------------------------------------------------------------
     // Static reference: dungeons, key recipes, openables, item facts. From init_client_data (message or cache).
     // ---------------------------------------------------------------------------------------------------------------
-    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), realKeys: new Set(), dungeonLoot: new Set(), chestItems: {}, items: {}, version: null, source: null };
+    const ref = { ready: false, dungeons: {}, keyActions: {}, keyItems: new Set(), realKeys: new Set(), dungeonLoot: new Set(), chestItems: {}, items: {}, tokenShop: {}, version: null, source: null };
 
     function buildRef(data) {
         if (!isObj(data) || !isObj(data.actionDetailMap) || !isObj(data.itemDetailMap)) return false;
@@ -169,6 +169,12 @@
         Object.entries(ref.dungeons).sort((a, b) => a[1].sortIndex - b[1].sortIndex).forEach(([, dg], i) => { dg.index = i + 1; });
         ref.dungeonLoot = new Set(); for (const [chest, c] of Object.entries(ref.chestItems)) if (c.zone) for (const d of ((data.openableLootDropMap || {})[chest] || [])) if (d && d.itemHrid) ref.dungeonLoot.add(d.itemHrid);
         ref.realKeys = new Set([...Object.values(ref.dungeons).map(d => d.keyItem), ...Object.values(ref.chestItems).map(c => c.key)].filter(Boolean));
+        // Token shop: shop items paid with exactly one kind of token (the site's chestValue.mjs rule, ZONE-12).
+        ref.tokenShop = {};
+        for (const entry of Object.values(data.shopItemDetailMap || {})) {
+            const costs = Array.isArray(entry.costs) ? entry.costs : []; if (costs.length !== 1 || !/_token$/.test(costs[0].itemHrid || "") || !(num(costs[0].count) > 0)) continue;
+            (ref.tokenShop[costs[0].itemHrid] = ref.tokenShop[costs[0].itemHrid] || []).push({ item: entry.itemHrid, tokens: num(costs[0].count), count: num(entry.count) || 1, shop: entry.hrid, category: entry.category || null });
+        }
         ref.version = data.gameVersion || null;
         ref.ready = Object.keys(ref.dungeons).length > 0;
         return ref.ready;
@@ -1196,7 +1202,15 @@
         const tokens = {};
         for (const [item, gi] of Object.entries(gained)) if (X.isToken(item)) { const t = bump(tokens, item, () => ({ gained: 0, redeemed: 0, received: {} })); t.gained += gi.qty; }
         for (const r of redeems) { const t = bump(tokens, r.token, () => ({ gained: 0, redeemed: 0, received: {} })); t.redeemed += n(r.qty); t.received[r.item] = (t.received[r.item] || 0) + n(r.itemQty); const gi = bump(gained, r.item, () => ({ qty: 0, value: 0, priced: 0, chests: {} })); gi.redeemed = (gi.redeemed || 0) + n(r.itemQty); if (n(r.bid) > 0) { gi.value += r.bid * n(r.itemQty); gi.priced += n(r.itemQty); } }
-        for (const [k, t] of Object.entries(tokens)) { t.bag = X.held(k); t.held = Math.min(t.bag, Math.max(0, t.gained - t.redeemed)); t.holdover = t.bag - t.held; }
+        for (const [k, t] of Object.entries(tokens)) {
+            t.bag = X.held(k); t.held = Math.min(t.bag, Math.max(0, t.gained - t.redeemed)); t.holdover = t.bag - t.held;
+            // Worth: the best coins per token any shop item costing only this token sells for at bid, net of tax
+            // (the site's rule). Null when no shop item for it has a bid.
+            let best = null;
+            for (const e of (X.tokenShop ? X.tokenShop(k) : [])) { const bid = X.bidOf(e.item); if (bid == null) continue; const per = bid * (1 - tax.rate) * e.count / e.tokens; if (!best || per > best.perToken) best = { perToken: per, item: e.item, tokens: e.tokens, bid }; }
+            t.perToken = best ? best.perToken : null; t.via = best ? best.item : null; t.viaTokens = best ? best.tokens : null;
+            t.heldValue = best ? t.held * best.perToken : null; t.holdoverValue = best ? t.holdover * best.perToken : null; t.gainedValue = best ? t.gained * best.perToken : null;
+        }
         // Sold: loot (anything the record saw come out of a chest or a redemption) against everything else.
         const lootItems = new Set(Object.keys(gained));
         const sellBy = {}; const sold = { loot: { qty: 0, gross: 0, tax: 0, net: 0 }, other: { qty: 0, gross: 0, tax: 0, net: 0 } };
@@ -1524,7 +1538,7 @@
         const isToken = h => /_token$/.test(h);
         const moneyCtx = () => ({
             recordStart: state.meta.recordStart || 0, reviewPct: 0.5,
-            isCounted, isKey: h => ref.keyItems.has(h), isChest: h => !!ref.chestItems[h], isDungeonChest: h => !!(ref.chestItems[h] && ref.chestItems[h].zone), isDungeonLoot: h => ref.dungeonLoot.has(h), isConsumable, isToken,
+            isCounted, isKey: h => ref.keyItems.has(h), isChest: h => !!ref.chestItems[h], isDungeonChest: h => !!(ref.chestItems[h] && ref.chestItems[h].zone), isDungeonLoot: h => ref.dungeonLoot.has(h), isConsumable, isToken, tokenShop: h => ref.tokenShop[h] || [],
             isOpenable: h => !!(ref.items[h] && ref.items[h].openable), isTradable: h => !(ref.items[h] && ref.items[h].tradable === false),
             held: h => held(h, 0), listed: h => listedQty(h, 0), bidOf, askOf, avgOf: ledgerAvg, keyAvg: keyAverage,
             keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, keyRecipes: ref.keyActions, artisanOf, consumeTotals: state.consumeTotals,
@@ -1587,7 +1601,7 @@
  <h4 data-noun="items">Loot to sell</h4>
  <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Gained</th><th>Sold</th><th>Sold net</th><th>Held</th><th title="In the bag before the record began; sellable from here, but not counted in held loot or net">Holdover</th><th>Listed</th><th>Kept</th><th>Held at bid</th><th></th></tr></thead><tbody id="mds-loot"></tbody></table></div>
  <h4 data-noun="tokens">Dungeon tokens</h4>
- <div class="mds-wrap"><table><thead><tr><th>Token</th><th>Gained</th><th>Redeemed</th><th>Received</th><th>Held</th><th title="In the bag before the record began">Holdover</th></tr></thead><tbody id="mds-tokens"></tbody></table></div>
+ <div class="mds-wrap"><table><thead><tr><th>Token</th><th>Gained</th><th>Redeemed</th><th>Received</th><th>Held</th><th title="In the bag before the record began">Holdover</th><th title="The best coins per token any shop item costing only this token sells for at bid, net of tax (the site's rule)">Per token</th><th title="Held × per token; the holdover's worth beneath it, not counted">Held value</th><th></th></tr></thead><tbody id="mds-tokens"></tbody></table></div>
  <h4 data-noun="items">Supplies kept for future runs</h4>
  <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Kind</th><th>Held</th><th>Ledger cost</th><th>Held at cost</th><th>Used in the record</th></tr></thead><tbody id="mds-supplies"></tbody></table></div>
  <h4 data-noun="items">Loot no longer held</h4>
@@ -1676,7 +1690,7 @@
                 const lines = [`${it(plan.key)} × ${(els["mds-plan-sum"].textContent.match(/buys ([\d,]+)|^([\d,]+) /) || []).slice(1).find(Boolean) || "?"}`, ...lastPlanRows.filter(x => x.buy > 0).map(x => `- ${itemName(x.item)} × ${x.buy.toLocaleString()}${x.cost != null ? ` ≈ ${Math.round(x.cost).toLocaleString()} coins` : ""}`), `Total ≈ ${Math.round(lastPlanRows.reduce((s, x) => s + (x.buy > 0 && x.cost != null ? x.cost : 0), 0)).toLocaleString()} coins`].join("\n");
                 try { await navigator.clipboard.writeText(lines); } catch (_e) { W.prompt("Copy the shopping list:", lines); }
             });
-            root.addEventListener("click", e => { const a = e.target.closest("a[data-market]"); if (a) { e.preventDefault(); goToMarket(a.dataset.market); return; } const b = e.target.closest("button[data-act=market]"); if (b) goToMarket(b.dataset.item); });
+            root.addEventListener("click", e => { const a = e.target.closest("a[data-market]"); if (a) { e.preventDefault(); goToMarket(a.dataset.market); return; } const b = e.target.closest("button[data-act=market]"); if (b) goToMarket(b.dataset.item); const sh = e.target.closest("button[data-act=shop]"); if (sh) goToShop(); });
             root.querySelector("#mds-fs-down").addEventListener("click", () => setScale(scale - 0.05));
             root.querySelector("#mds-fs-up").addEventListener("click", () => setScale(scale + 0.05));
             root.querySelector("#mds-fs-reset").addEventListener("click", () => setScale(1));
@@ -1939,6 +1953,27 @@
             return null;
         }
         const goToMarket = item => { const f = gameHandler("handleGoToMarketplace"); if (f) { try { f(item, 0); return true; } catch (e) { warn("market navigation failed", e); } } W.alert("The game's marketplace navigation was not found; open the marketplace yourself."); return false; };
+        // Any handler whose name matches: the shop's navigation handler is not yet measured (handleGoToShop or similar).
+        function gameHandlerLike(re) {
+            const rootEl = document.getElementById("root"); if (!rootEl) return null;
+            let first = (rootEl._reactRootContainer && (rootEl._reactRootContainer.current || (rootEl._reactRootContainer._internalRoot && rootEl._reactRootContainer._internalRoot.current))) || null;
+            if (!first) { const k = Object.keys(rootEl).find(x => x.startsWith("__reactContainer$")); if (k) first = rootEl[k]; }
+            const pending = first ? [first] : [], seen = new Set();
+            while (pending.length && seen.size < 4000) {
+                const f = pending.pop(); if (!f || seen.has(f)) continue; seen.add(f);
+                const node = f.stateNode;
+                if (node && typeof node === "object" && !(node instanceof Node)) { const name = Object.getOwnPropertyNames(node).find(n => re.test(n) && typeof node[n] === "function"); if (name) return { name, call: (...args) => node[name](...args) }; }
+                if (f.child) pending.push(f.child); if (f.sibling) pending.push(f.sibling);
+            }
+            return null;
+        }
+        const goToShop = () => {
+            const h = gameHandlerLike(/^handleGoTow*Shopw*$/i); if (h) { try { h.call(); return true; } catch (e) { warn("shop navigation failed", h.name, e); } }
+            // Fallback: the game's own Shop entry in its navigation, clicked.
+            const nav = [...document.querySelectorAll('#root [class*="NavigationBar"] *, #root nav *')].find(el => el.children.length === 0 && /^Shop$/i.test(el.textContent.trim()));
+            if (nav) { nav.click(); return true; }
+            W.alert("The game's shop navigation was not found; open the shop yourself."); return false;
+        };
         const goToAction = action => { const f = gameHandler("handleGoToAction"); if (f) { try { f(action); return true; } catch (e) { warn("action navigation failed", e); } } W.alert("The game's action navigation was not found; open the crafting page yourself."); return false; };
         let spriteUrl = null;
         function spriteBase() {
@@ -2024,7 +2059,7 @@
             const lootRows = M.rows.filter(r => r.kind === "loot" || r.kind === "container");
             els["mds-loot"].innerHTML = lootRows.map(r => `<tr><td class="k">${itemLink(r.item)}${r.kind === "container" ? `<small> opened ${r.opened}</small>` : ""}</td><td>${fmtQ(r.gained)}${r.redeemed ? `<small> ${r.redeemed} redeemed</small>` : ""}</td><td>${r.sold ? fmtQ(r.sold) : "–"}</td><td>${r.sold ? fmtCoins(r.soldNet) : "–"}</td><td>${fmtQ(r.held)}</td><td>${r.holdover ? fmtQ(r.holdover) : "–"}</td><td>${r.listed || "–"}</td><td>${r.kept || "–"}</td><td>${coinsOr(r.heldValue, "no bid")}</td><td class="mds-acts">${r.bag > 0 && !(ref.items[r.item] && ref.items[r.item].tradable === false) ? `<button class="mds-act" data-act="market" data-item="${esc(r.item)}" title="Open this item in the marketplace">Sell</button>` : ""}<button class="mds-act" data-act="keep" data-item="${esc(r.item)}" data-kept="${r.kept}">Keep…</button></td></tr>`).join("") || `<tr><td colspan="10" class="t">No loot opened yet.</td></tr>`;
             const tok = Object.entries(M.tokens);
-            els["mds-tokens"].innerHTML = tok.map(([h, t]) => `<tr><td class="k">${itIcon(h)}</td><td>${fmtQ(t.gained)}</td><td>${t.redeemed ? fmtQ(t.redeemed) : "–"}</td><td>${Object.entries(t.received).map(([i, q]) => `${q} ${it(i)}`).join(", ") || "–"}</td><td>${fmtQ(t.held)}</td><td>${t.holdover ? fmtQ(t.holdover) : "–"}</td></tr>`).join("") || `<tr><td colspan="6" class="t">No tokens yet.</td></tr>`;
+            els["mds-tokens"].innerHTML = tok.map(([h, t]) => `<tr><td class="k">${itIcon(h)}</td><td>${fmtQ(t.gained)}</td><td>${t.redeemed ? fmtQ(t.redeemed) : "–"}</td><td>${Object.entries(t.received).map(([i, q]) => `${q} ${it(i)}`).join(", ") || "–"}</td><td>${fmtQ(t.held)}</td><td>${t.holdover ? fmtQ(t.holdover) : "–"}</td><td>${t.perToken != null ? `${fmtCoins(t.perToken)}<small> via ${esc(it(t.via))}, ${fmtQ(t.viaTokens)} tokens</small>` : "<small>no shop item with a bid</small>"}</td><td>${t.heldValue != null ? `${fmtCoins(t.heldValue)}${t.holdover ? `<small> + holdover ${fmtCoins(t.holdoverValue)}</small>` : ""}` : "–"}</td><td class="mds-acts">${t.bag > 0 ? `<button class="mds-act" data-act="shop" data-item="${esc(h)}" title="Open the game's shop">Shop</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="9" class="t">No tokens yet.</td></tr>`;
             const sup = [];
             for (const [h, k] of Object.entries(M.keys)) if (k.held > 0 || k.used > 0) sup.push({ item: h, kind: "key", held: k.held, cost: k.costPerKey, used: `${k.used} used` });
             for (const [h, c] of Object.entries(M.consumables)) if (c.held > 0 || c.used > 0) sup.push({ item: h, kind: "consumable", held: c.held, cost: c.avg, used: `${c.used} used${c.offline ? ` (${c.offline} offline)` : ""}${c.unknown ? ` · ${c.unknown} unpriced` : ""}` });
