@@ -1456,7 +1456,18 @@
         // hidden and the panel sits in its place; clicking any game tab hands the strip back exactly as it was. React may
         // re-render the strip at any time, so an observer re-applies the selection and re-hides a re-rendered panel.
         // -----------------------------------------------------------------------------------------------------------
-        const dock = { strip: null, tab: null, active: false, saved: null, compMo: null, bodyMo: null, timer: null, worked: false };
+        const dock = { strip: null, tab: null, active: false, saved: null, compMo: null, bodyMo: null, timer: null, worked: false, modalTimer: null, hiddenForModal: false };
+        // The game's popups (quest, task, opened loot) are an 80% translucent backdrop over a card with no background, at
+        // z-index 300 inside the header, so whatever is in the game panel shows through them at 20%. The Battle panel
+        // merely dims; a panel of text reads as clutter. While one is open the docked panel steps aside.
+        const modalOpen = () => { for (const el of document.querySelectorAll('[class*="Modal"]')) { if (el === root || root.contains(el)) continue; const c = getComputedStyle(el); if (c.position === "static" || c.opacity === "0" || c.visibility === "hidden" || !(Number(c.zIndex) > 0)) continue; const r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0) return true; } return false; };
+        function modalWatch() {
+            if (!dock.active || !root) return;
+            const open = modalOpen();
+            if (open !== dock.hiddenForModal) { dock.hiddenForModal = open; root.style.visibility = open ? "hidden" : ""; }
+        }
+        function modalWatchStart() { if (!dock.modalTimer) dock.modalTimer = setInterval(modalWatch, 400); modalWatch(); }
+        function modalWatchStop() { if (dock.modalTimer) { clearInterval(dock.modalTimer); dock.modalTimer = null; } if (dock.hiddenForModal) { dock.hiddenForModal = false; if (root) root.style.visibility = ""; } }
         const STRIP_TABS = ["Combat Zones", "Find Party", "My Party"];
         const tabText = b => { const sp = b.querySelector(".MuiBadge-root") || b; for (const nd of sp.childNodes) if (nd.nodeType === 3 && nd.textContent.trim()) return nd.textContent.trim(); return (sp.textContent || "").trim(); };
         function findStrip() {
@@ -1516,6 +1527,7 @@
             root.classList.add("docked"); root.hidden = false;
             if (root.parentNode !== parts.comp) parts.comp.appendChild(root);
             open = true; render();
+            modalWatchStart();
         }
         // Idempotent: every write is guarded so re-applying under the observer never loops.
         function dockApply() {
@@ -1541,6 +1553,7 @@
         function dockDeactivate() {
             if (!dock.active) return;
             dock.active = false;
+            modalWatchStop();
             dockRestore();
             root.classList.remove("docked"); root.hidden = true; open = false;
             if (root.parentNode !== document.body) document.body.appendChild(root);
@@ -1551,7 +1564,7 @@
             if (dock.strip) dock.strip.removeEventListener("click", onStripClick, true);
             if (dock.tab && dock.tab.parentNode) dock.tab.parentNode.removeChild(dock.tab);
             dock.strip = null; dock.saved = null;
-            if (dock.active) { dock.active = false; root.classList.remove("docked"); root.hidden = true; open = false; }
+            if (dock.active) { dock.active = false; modalWatchStop(); root.classList.remove("docked"); root.hidden = true; open = false; }
             if (root && root.parentNode !== document.body) document.body.appendChild(root);
         }
         function setTab(k, silent) {
