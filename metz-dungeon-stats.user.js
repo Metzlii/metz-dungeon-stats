@@ -1394,7 +1394,8 @@
 #mds-root th.mds-drop{box-shadow:inset 2px 0 0 #45c8d8}
 #mds-root .mds-set{margin:4px 0 10px;padding:8px 10px;background:#1c2a35;border-radius:8px;box-shadow:0 0 0 1px #3f424d}
 #mds-root .mds-set-title{display:block;font-size:.929em;font-weight:500;margin-bottom:6px}
-#mds-root .mds-set .mds-bar{margin:0}
+#mds-root .mds-set .mds-bar{margin:0 0 8px}
+#mds-root .mds-set > :last-child{margin-bottom:0}
 #mds-tab{white-space:nowrap}
 `;
 
