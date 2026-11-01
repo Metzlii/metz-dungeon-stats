@@ -1388,6 +1388,7 @@
 #mds-root .mds-tile small{color:#c5d4de;font-size:.786em;line-height:1.2}
 #mds-root a.mds-link{color:#a9e9f1;text-decoration:none;border-bottom:1px dotted rgba(169,233,241,.5)}
 #mds-root a.mds-link:hover{color:#45c8d8;border-bottom-color:#45c8d8}
+#mds-root .mds-num-wide{width:10em}
 #mds-root .mds-num{width:7em;background:#1c2a35;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:6px;padding:4px 6px;font:inherit}
 #mds-root th.mds-dragging{opacity:.5}
 #mds-root th.mds-drop{box-shadow:inset 2px 0 0 #45c8d8}
@@ -1526,7 +1527,8 @@
 <div class="mds-pane" data-pane="keys" hidden>
  <h4>Key crafting</h4>
  <div class="mds-set">
-  <div class="mds-bar"><label>Key <select id="mds-plan-key"></select></label><label>Keys wanted <input id="mds-plan-qty" type="number" min="1" max="100000" step="1" value="100" class="mds-num"></label><button id="mds-plan-craft" title="Uses the game's own navigation">Open crafting page</button><button id="mds-plan-copy">Copy shopping list</button><button id="mds-plan-prices">Refresh prices</button></div>
+  <div class="mds-bar"><label>Key <select id="mds-plan-key"></select></label><label>Keys wanted <input id="mds-plan-qty" type="number" min="1" max="100000" step="1" placeholder="as many as the budget buys" class="mds-num"></label><label>Budget <input id="mds-plan-budget" type="number" min="0" step="1" class="mds-num mds-num-wide" title="Coins to spend on materials and the recipe's coins; follows your bag until you type a figure"></label><button id="mds-plan-wallet" title="Follow the coins in the bag again">Use bag coins</button><label><input type="checkbox" id="mds-plan-owned" checked> Count owned materials</label></div>
+  <div class="mds-bar"><button id="mds-plan-craft" title="Uses the game's own navigation">Open crafting page</button><button id="mds-plan-copy">Copy shopping list</button><button id="mds-plan-prices">Refresh prices</button></div>
   <div class="mds-wrap"><table><thead><tr><th>Material</th><th>Per key</th><th>Need</th><th>Owned</th><th>Buy</th><th>Ask</th><th>Cost</th><th></th></tr></thead><tbody id="mds-plan"></tbody></table></div>
   <p class="mds-note" id="mds-plan-sum"></p>
  </div>
@@ -1586,7 +1588,7 @@
 <details><summary>Diagnostics</summary><pre id="mds-diag"></pre></details>
 </div>
 </div>`;
-            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-sum", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
+            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-consumables", "mds-plan", "mds-plan-key", "mds-plan-qty", "mds-plan-budget", "mds-plan-owned", "mds-plan-sum", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote", "mds-life-dungeons", "mds-life-keys", "mds-lifenote"]) els[id] = root.querySelector("#" + id);
             // Row actions: Keep N (moves loot into supplies), Accept (freezes a valuation of loot no longer held).
             root.addEventListener("click", e => {
                 const b = e.target.closest("button[data-act]"); if (!b) return;
@@ -1615,12 +1617,15 @@
             root.querySelector("#mds-toolasha").addEventListener("click", () => importToolasha("manual").then(() => render()));
             root.querySelector("#mds-history-file").addEventListener("click", () => root.querySelector("#mds-history-input").click());
             els["mds-plan-key"].addEventListener("change", e => { plan.key = e.target.value; savePlan(); renderPlan(); });
-            els["mds-plan-qty"].addEventListener("input", e => { const v = Math.floor(Number(e.target.value)); if (v > 0) { plan.qty = Math.min(100000, v); savePlan(); renderPlan(); } });
+            els["mds-plan-qty"].addEventListener("input", e => { const v = Math.floor(Number(e.target.value)); plan.qty = e.target.value.trim() === "" || !(v > 0) ? null : Math.min(100000, v); savePlan(); renderPlan(); });
+            els["mds-plan-budget"].addEventListener("input", e => { const v = Math.floor(Number(e.target.value)); plan.budget = e.target.value.trim() === "" || !(v >= 0) ? null : v; savePlan(); renderPlan(); });
+            root.querySelector("#mds-plan-wallet").addEventListener("click", () => { plan.budget = null; savePlan(); renderPlan(); });
+            els["mds-plan-owned"].addEventListener("change", e => { plan.owned = !!e.target.checked; savePlan(); renderPlan(); });
             root.querySelector("#mds-plan-craft").addEventListener("click", () => { const p = plan.key && planRecipe(plan.key); if (p) goToAction(p.action); });
             root.querySelector("#mds-plan-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
             root.querySelector("#mds-plan-copy").addEventListener("click", async () => {
                 if (!lastPlanRows) return;
-                const lines = [`${it(plan.key)} × ${plan.qty.toLocaleString()}`, ...lastPlanRows.filter(x => x.buy > 0).map(x => `- ${itemName(x.item)} × ${x.buy.toLocaleString()}${x.cost != null ? ` ≈ ${Math.round(x.cost).toLocaleString()} coins` : ""}`), `Total ≈ ${Math.round(lastPlanRows.reduce((s, x) => s + (x.buy > 0 && x.cost != null ? x.cost : 0), 0)).toLocaleString()} coins`].join("\n");
+                const lines = [`${it(plan.key)} × ${(els["mds-plan-sum"].textContent.match(/buys ([\d,]+)|^([\d,]+) /) || []).slice(1).find(Boolean) || "?"}`, ...lastPlanRows.filter(x => x.buy > 0).map(x => `- ${itemName(x.item)} × ${x.buy.toLocaleString()}${x.cost != null ? ` ≈ ${Math.round(x.cost).toLocaleString()} coins` : ""}`), `Total ≈ ${Math.round(lastPlanRows.reduce((s, x) => s + (x.buy > 0 && x.cost != null ? x.cost : 0), 0)).toLocaleString()} coins`].join("\n");
                 try { await navigator.clipboard.writeText(lines); } catch (_e) { W.prompt("Copy the shopping list:", lines); }
             });
             root.addEventListener("click", e => { const a = e.target.closest("a[data-market]"); if (a) { e.preventDefault(); goToMarket(a.dataset.market); return; } const b = e.target.closest("button[data-act=market]"); if (b) goToMarket(b.dataset.item); });
@@ -1904,8 +1909,9 @@
         // Key crafting planner: the recipe at the game's artisan rate, what is owned, what to buy at ask, the cost per
         // key beside the key's own ask. A planning aid, not a record; nothing here is estimated beyond the recipe.
         const PLAN_KEY = PANEL_KEY + "-plan";
-        let plan = { key: null, qty: 100 };
-        try { const v = JSON.parse(localStorage.getItem(PLAN_KEY) || "null"); if (v && typeof v === "object") plan = { key: v.key || null, qty: Number(v.qty) > 0 ? Math.floor(Number(v.qty)) : 100 }; } catch (_e) { /* fine */ }
+        // qty null = as many as the budget buys; budget null = follow the coins in the bag.
+        let plan = { key: null, qty: null, budget: null, owned: true };
+        try { const v = JSON.parse(localStorage.getItem(PLAN_KEY) || "null"); if (v && typeof v === "object") plan = { key: v.key || null, qty: Number(v.qty) > 0 ? Math.floor(Number(v.qty)) : null, budget: Number(v.budget) >= 0 && v.budget !== null ? Math.floor(Number(v.budget)) : null, owned: v.owned !== false }; } catch (_e) { /* fine */ }
         const savePlan = () => { try { localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); } catch (_e) { /* fine */ } };
         let lastPlanRows = null;
         function planRecipe(key) { for (const [action, r] of Object.entries(ref.keyActions)) if (r.outputs.some(o => o.item === key)) return { action, r }; return null; }
@@ -1914,18 +1920,34 @@
             if (!keys.length) { sel.innerHTML = ""; els["mds-plan"].innerHTML = `<tr><td colspan="8" class="t">Key recipes come with the game data; log in first.</td></tr>`; els["mds-plan-sum"].textContent = ""; return; }
             if (!plan.key || !keys.includes(plan.key)) plan.key = keys.includes("/items/pirate_chest_key") ? "/items/pirate_chest_key" : keys[0];
             if ([...sel.options].map(o => o.value).join("|") !== keys.join("|")) sel.innerHTML = keys.map(k => `<option value="${esc(k)}">${it(k)}</option>`).join("");
-            sel.value = plan.key; if (document.activeElement !== els["mds-plan-qty"]) els["mds-plan-qty"].value = String(plan.qty);
+            sel.value = plan.key; if (document.activeElement !== els["mds-plan-qty"]) els["mds-plan-qty"].value = plan.qty == null ? "" : String(plan.qty);
             const { action, r } = planRecipe(plan.key); const out = r.outputs.find(o => o.item === plan.key); const perCraft = out ? out.qty : 1;
-            const art = artisanOf(action); const cut = art ? 1 - art.rate : 1; const crafts = Math.ceil(plan.qty / perCraft);
-            const rows = []; let total = 0, unpriced = [];
-            for (const i of r.inputs) {
-                const perKey = i.qty * cut / perCraft; const need = i.item === "/items/coin" ? Math.ceil(i.qty * cut * crafts) : Math.ceil(i.qty * cut * crafts);
-                const owned = i.item === "/items/coin" ? coins() : held(i.item, 0); const buy = Math.max(0, need - owned);
-                const ask = i.item === "/items/coin" ? 1 : askOf(i.item); const cost = ask != null ? buy * ask : null;
-                if (ask == null && buy > 0) unpriced.push(i.item); if (cost != null) total += cost;
-                rows.push({ item: i.item, perKey, need, owned, buy, ask, cost });
+            const art = artisanOf(action); const cut = art ? 1 - art.rate : 1;
+            const budget = plan.budget != null ? plan.budget : coins();
+            if (document.activeElement !== els["mds-plan-budget"]) els["mds-plan-budget"].value = String(budget);
+            els["mds-plan-owned"].checked = plan.owned;
+            // What N keys take: each input at the recipe cut by artisan, the tea by craft time; what to buy is the need
+            // beyond what is owned (or all of it, with owned materials not counted) at ask; coins are needed as they are.
+            const rowsFor = keys => {
+                const crafts = Math.ceil(keys / perCraft); const rows = []; let cost = 0; const unpriced = [];
+                for (const i of r.inputs) {
+                    const need = Math.ceil(i.qty * cut * crafts); const owned = i.item === "/items/coin" ? 0 : (plan.owned ? held(i.item, 0) : 0); const buy = Math.max(0, need - owned);
+                    const ask = i.item === "/items/coin" ? 1 : askOf(i.item); const c = ask != null ? buy * ask : null;
+                    if (ask == null && buy > 0) unpriced.push(i.item); if (c != null) cost += c;
+                    rows.push({ item: i.item, perKey: i.qty * cut / perCraft, need, owned: i.item === "/items/coin" ? coins() : held(i.item, 0), buy, ask, cost: c });
+                }
+                if (art && art.tea) { const need = Math.ceil(crafts * (art.seconds || 10) / (art.teaSeconds || 300)); const owned = plan.owned ? held(art.tea, 0) : 0; const buy = Math.max(0, need - owned); const ask = askOf(art.tea); const c = ask != null ? buy * ask : null; if (c != null) cost += c; rows.push({ item: art.tea, perKey: (art.seconds || 10) / (art.teaSeconds || 300) / perCraft, need, owned: held(art.tea, 0), buy, ask, cost: c, tea: true }); }
+                return { crafts, rows, cost, unpriced };
+            };
+            let want = plan.qty, mode = "wanted";
+            if (want == null) {
+                // Most keys the budget buys: cost is monotone in keys, so search.
+                mode = "budget"; let lo = 0, hi = 100000;
+                if (rowsFor(1).cost > budget || rowsFor(1).unpriced.length) hi = 0;
+                while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); const t = rowsFor(mid); if (t.cost <= budget && !t.unpriced.length) lo = mid; else hi = mid - 1; }
+                want = lo;
             }
-            if (art && art.tea) { const teaNeed = Math.ceil(crafts * (art.seconds || 10) / (art.teaSeconds || 300)); const owned = held(art.tea, 0); const buy = Math.max(0, teaNeed - owned); const ask = askOf(art.tea); const cost = ask != null ? buy * ask : null; if (cost != null) total += cost; rows.push({ item: art.tea, perKey: (art.seconds || 10) / (art.teaSeconds || 300) / perCraft, need: teaNeed, owned, buy, ask, cost, tea: true }); }
+            const { crafts, rows, cost: total, unpriced } = rowsFor(Math.max(want, 0));
             lastPlanRows = rows;
             els["mds-plan"].innerHTML = rows.map(x => `<tr><td class="k">${itemLink(x.item)}${x.tea ? "<small>artisan tea, by craft time</small>" : ""}</td><td>${x.item === "/items/coin" ? fmtCoins(x.perKey) : x.perKey.toFixed(x.perKey >= 10 ? 1 : 3)}</td><td>${x.item === "/items/coin" ? fmtCoins(x.need) : fmtQ(x.need)}</td><td>${x.item === "/items/coin" ? fmtCoins(x.owned) : fmtQ(x.owned)}</td><td>${x.buy > 0 ? (x.item === "/items/coin" ? fmtCoins(x.buy) : fmtQ(x.buy)) : "–"}</td><td>${x.item === "/items/coin" ? "–" : coinsOr(x.ask, "no ask")}</td><td>${x.buy > 0 && x.cost != null ? fmtCoins(x.cost) : "–"}</td><td>${x.item !== "/items/coin" && x.buy > 0 && !(ref.items[x.item] && ref.items[x.item].tradable === false) ? `<button class="mds-act" data-act="market" data-item="${esc(x.item)}">Buy</button>` : (x.item !== "/items/coin" ? "<small>enough owned</small>" : "")}</td></tr>`).join("");
             // Cost per key at ask (everything bought now) beside the key's own ask.
@@ -1933,7 +1955,11 @@
             for (const i of r.inputs) { const p = i.item === "/items/coin" ? 1 : askOf(i.item); if (p == null) { perKeyOk = false; break; } perKeyCost += p * i.qty * cut / perCraft; }
             if (perKeyOk && art && art.tea) { const tp = askOf(art.tea); if (tp != null) perKeyCost += tp * (art.seconds || 10) / (art.teaSeconds || 300) / perCraft; }
             const keyAsk = askOf(plan.key);
-            els["mds-plan-sum"].textContent = `${plan.qty.toLocaleString()} ${it(plan.key)} = ${crafts.toLocaleString()} craft${crafts === 1 ? "" : "s"}${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan tea slotted"}. To buy: ${fmtCoins(total)}${unpriced.length ? ` (${unpriced.map(it).join(", ")} unpriced)` : ""}. Crafting cost ${perKeyOk ? fmtCoins(perKeyCost) : "?"} per key at ask${keyAsk != null ? ` against ${fmtCoins(keyAsk)} to buy a key (${perKeyOk ? (perKeyCost < keyAsk ? `crafting saves ${fmtCoins(keyAsk - perKeyCost)}` : `buying saves ${fmtCoins(perKeyCost - keyAsk)}`) : "?"})` : ""}.`;
+            const over = total - budget;
+            const head = mode === "budget"
+                ? (want > 0 ? `A budget of ${fmtCoins(budget)} buys ${want.toLocaleString()} ${it(plan.key)} (${crafts.toLocaleString()} craft${crafts === 1 ? "" : "s"}) for ${fmtCoins(total)}` : `A budget of ${fmtCoins(budget)} does not cover one ${it(plan.key)}${unpriced.length ? ` (${unpriced.map(it).join(", ")} unpriced)` : ""}`)
+                : `${want.toLocaleString()} ${it(plan.key)} = ${crafts.toLocaleString()} craft${crafts === 1 ? "" : "s"}, ${fmtCoins(total)} to buy${over > 0 ? `, ${fmtCoins(over)} over the budget of ${fmtCoins(budget)}` : ` within the budget of ${fmtCoins(budget)}`}${unpriced.length ? ` (${unpriced.map(it).join(", ")} unpriced)` : ""}`;
+            els["mds-plan-sum"].textContent = `${head}${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan tea slotted"}. Crafting cost ${perKeyOk ? fmtCoins(perKeyCost) : "?"} per key at ask${keyAsk != null ? ` against ${fmtCoins(keyAsk)} to buy a key (${perKeyOk ? (perKeyCost < keyAsk ? `crafting saves ${fmtCoins(keyAsk - perKeyCost)}` : `buying saves ${fmtCoins(perKeyCost - keyAsk)}`) : "?"})` : ""}.`;
         }
         function renderKeys() {
             const M = getMoney();
