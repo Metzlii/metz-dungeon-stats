@@ -95,10 +95,14 @@
   // first 1,000 redwood at 3,808) and one sell order the script never sees filling inside the record window.
   async function seedToolasha(t0) {
     await new Promise(r => { const q = indexedDB.deleteDatabase("ToolashaDB"); q.onsuccess = q.onerror = q.onblocked = () => r(); });
-    const db = await new Promise((r, j) => { const q = indexedDB.open("ToolashaDB", 1); q.onupgradeneeded = e => e.target.result.createObjectStore("marketListings"); q.onsuccess = () => r(q.result); q.onerror = () => j(q.error); });
+    const db = await new Promise((r, j) => { const q = indexedDB.open("ToolashaDB", 1); q.onupgradeneeded = e => { e.target.result.createObjectStore("marketListings"); e.target.result.createObjectStore("lootLogHistory"); }; q.onsuccess = () => r(q.result); q.onerror = () => j(q.error); });
     const L = (id, at, item, price, qty, isSell) => ({ id, timestamp: at, createdTimestamp: new Date(at).toISOString(), itemHrid: item, enhancementLevel: 0, price, orderQuantity: qty, filledQuantity: qty, isSell, status: "filled" });
     const rows = [L(1, t0 - 30 * 86400e3, "/items/arcane_lumber", 4800, 400, false), L(2, t0 - 2 * 86400e3, "/items/arcane_lumber", 4820, 700, false), L(3, t0 - 86400e3, "/items/redwood_lumber", 3808, 1000, false), L(4, t0 - 3 * 86400e3, "/items/white_key_fragment", 879000, 30, false), L(5, t0 + 20 * 60e3, "/items/pirate_essence", 1700, 100, true)];
     await new Promise((r, j) => { const tx = db.transaction("marketListings", "readwrite"); tx.objectStore("marketListings").put(rows, "marketListingTimestamps"); tx.oncomplete = () => r(); tx.onerror = () => j(tx.error); });
+    // Toolasha's copy of the game's Loot & XP Log: an older dungeon session and an old key craft.
+    const S = (id, start, end, action, tier, count, drops, xp) => ({ startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString(), characterActionId: id, actionHrid: action, difficultyTier: tier, primaryItemHash: "", secondaryItemHash: "", actionCount: count, partyId: tier ? 598592 : 0, drops, xpGains: xp, labyrinthStartedAt: "0001-01-01T00:00:00Z", totalActiveMillis: 0 });
+    const sessions = [S(900001, t0 - 2 * 86400e3, t0 - 86400e3, "/actions/combat/pirate_cove", 2, 70, { "/items/pirate_chest::0": 80, "/items/pirate_refinement_chest::0": 80 }, { "/skills/magic": 19000000 }), S(900002, t0 - 86400e3 - 3600e3, t0 - 86400e3 - 3000e3, "/actions/crafting/pirate_chest_key", 0, 295, { "/items/crafting_essence::0": 30, "/items/pirate_chest_key::0": 295 }, { "/skills/crafting": 1580000 })];
+    await new Promise((r, j) => { const tx = db.transaction("lootLogHistory", "readwrite"); tx.objectStore("lootLogHistory").put(sessions, "lootLog_" + CH); tx.oncomplete = () => r(); tx.onerror = () => j(tx.error); });
     db.close();
   }
   async function scenario() {
@@ -167,7 +171,12 @@
     feed(sale);
     await sleep(1500);
     await window.__mds.flush();
-    await window.__mds.importToolasha("harness"); log("toolasha:", window.__mds.toolasha);
+    // The game answers the Loot & XP Log panel with the current session list: the running dungeon and the crafts.
+    feed({ type: "loot_log_updated", lootLogs: [
+      { startTime: iso(t0 - 60e3), endTime: iso(Date.now()), characterActionId: 555, actionHrid: "/actions/combat/pirate_cove", difficultyTier: 2, actionCount: 1, partyId: 598592, drops: { "/items/pirate_chest::0": 1, "/items/pirate_refinement_chest::0": 1 }, xpGains: { "/skills/magic": 280000 }, totalActiveMillis: 0 },
+      { startTime: iso(t0 + 30e3), endTime: iso(t0 + 50e3), characterActionId: 556, actionHrid: "/actions/crafting/pirate_entry_key", difficultyTier: 0, actionCount: 1, partyId: 0, drops: { "/items/pirate_entry_key::0": 1 }, xpGains: { "/skills/crafting": 1071 }, totalActiveMillis: 0 },
+    ] });
+    await window.__mds.importToolasha("harness"); log("toolasha:", window.__mds.toolasha, "loot log sessions:", window.__mds.state.lootLog.size);
     log("done; status:", window.__mds.status());
     document.getElementById("mds-toggle").click();
   }

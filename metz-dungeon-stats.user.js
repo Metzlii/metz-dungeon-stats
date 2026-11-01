@@ -231,6 +231,8 @@
         timeline: [], timelineRev: 0,   // every non-consume event, oldest first: what derive() reads
         consumeTotals: new Map(),       // itemHrid -> {qty, cost, unknownQty} over every consume event (they stay out of the timeline)
         artisan: {},                    // actionType -> {rate, tea, at}: the game's artisan buff (tea × pouch), from consumableActionTypeBuffsMap
+        lootLog: new Map(),             // characterActionId -> session from the game's Loot & XP Log (loot_log_updated) and Toolasha's copy
+        lootLogRev: 0, lootLogAt: 0,
         ledger: new Map(),              // itemHrid -> {qty, cost} running purchase ledger (average cost)
         keyLots: new Map(),             // keyItem -> [{qty, unitCost, basis, craftId}]
         counts: { frames: 0, byType: new Map(), events: 0 },
@@ -686,7 +688,40 @@
     //      script off) become buy/sell events marked imported; sells carry tax at the rate in force, never measured.
     // Read-only: the database is opened without a version and never created.
     // ---------------------------------------------------------------------------------------------------------------
-    const TOOLASHA = { status: "not read", listings: 0, seeded: 0, imported: 0, at: 0 };
+    // ---------------------------------------------------------------------------------------------------------------
+    // Loot & XP Log. The game answers the panel with loot_log_updated: entries per character action session
+    // {startTime, endTime, characterActionId, actionHrid, difficultyTier, actionCount, partyId, drops {"hrid::level": n},
+    // xpGains {skill: xp}}. For a dungeon, actionCount is the clears of that party action and drops are its chests, the
+    // server's own count, offline included. Entries are merged by characterActionId (the latest end time wins) and kept
+    // in meta; Toolasha's persisted copy (store lootLogHistory, key lootLog_<characterId>) is merged the same way.
+    // ---------------------------------------------------------------------------------------------------------------
+    function normLootLog(e) {
+        if (!isObj(e) || e.characterActionId == null || !e.actionHrid) return null;
+        const start = parseServerTime(e.startTime), end = parseServerTime(e.endTime); if (!start) return null;
+        const drops = {}; for (const [k, v] of Object.entries(isObj(e.drops) ? e.drops : {})) { const [hrid, lvl] = String(k).split("::"); drops[hrid + (lvl && lvl !== "0" ? "::" + lvl : "")] = num(v); }
+        return { id: e.characterActionId, action: e.actionHrid, tier: num(e.difficultyTier), start, end: end || start, count: num(e.actionCount), party: num(e.partyId) || 0, drops, xp: isObj(e.xpGains) ? e.xpGains : {}, activeMs: num(e.totalActiveMillis) || 0 };
+    }
+    function mergeLootLog(list, source) {
+        let changed = 0;
+        for (const raw of list) { const e = normLootLog(raw); if (!e) continue; const prev = state.lootLog.get(e.id); if (!prev || e.end > prev.end || e.count > prev.count || (e.end === prev.end && JSON.stringify(e.drops) !== JSON.stringify(prev.drops))) { e.source = prev ? `${prev.source}+${source}`.replace(/(game)\+game/, "$1").replace(/toolasha\+toolasha/, "toolasha") : source; state.lootLog.set(e.id, e); changed++; } }
+        if (changed) { state.lootLogRev++; state.lootLogAt = serverNow(); if (state.record) state.record.queue("meta", { key: "lootLog", value: [...state.lootLog.values()] }); }
+        return changed;
+    }
+    function onLootLog(m) {
+        const list = Object.values(m).find(v => Array.isArray(v) && v.some(x => isObj(x) && x.characterActionId != null));
+        if (!list) return review("loot_log_updated without a session list", { keys: Object.keys(m) }, "loot_log_updated");
+        const changed = mergeLootLog(list, "game");
+        emit("note", { text: `Loot & XP Log read: ${list.length} sessions, ${changed} new or updated`, lootLog: { entries: list.length, changed } }, "loot_log_updated");
+        panel.touch();
+    }
+    const TOOLASHA = { status: "not read", listings: 0, seeded: 0, imported: 0, at: 0, sessions: 0 };
+    async function readToolashaStore(store, key) {
+        try {
+            if (typeof indexedDB.databases === "function") { const dbs = await indexedDB.databases(); if (!dbs.some(d => d && d.name === "ToolashaDB")) return null; }
+            const db = await new Promise((res, rej) => { const q = indexedDB.open("ToolashaDB"); q.onupgradeneeded = e => { try { e.target.transaction.abort(); } catch (_e) { /* fine */ } }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error || new Error("open failed")); q.onblocked = () => rej(new Error("blocked")); });
+            try { if (!db.objectStoreNames.contains(store)) return null; return await new Promise((res, rej) => { const q = db.transaction(store, "readonly").objectStore(store).get(key); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); } finally { db.close(); }
+        } catch (_e) { return null; }
+    }
     async function readToolashaListings() {
         try {
             if (typeof indexedDB.databases === "function") { const dbs = await indexedDB.databases(); if (!dbs.some(d => d && d.name === "ToolashaDB")) { TOOLASHA.status = "no ToolashaDB"; return null; } }
@@ -742,6 +777,9 @@
                 imported++;
             }
             TOOLASHA.imported += imported;
+            // 3. Toolasha's copy of the Loot & XP Log (the game only sends the current window when the panel opens).
+            const history = await readToolashaStore("lootLogHistory", `lootLog_${state.characterId}`);
+            if (Array.isArray(history)) { const n = mergeLootLog(history, "toolasha"); TOOLASHA.sessions = history.length; if (n) emit("note", { text: `Toolasha loot log history: ${history.length} sessions, ${n} new or updated` }, "toolasha"); }
             if (imported) { state.timeline.sort((a, b) => a.at - b.at); state.timelineRev++; }
             info(`toolasha history (${reason}): ${listings.length} listings, ${TOOLASHA.seeded} items seeded, ${imported} fills imported`);
             panel.touch();
@@ -756,6 +794,7 @@
             state.meta = {}; for (const r of metaRows) state.meta[r.key] = r.value !== undefined ? r.value : r;
             if (state.meta.ledger) restoreLedger(state.meta.ledger);
             if (isObj(state.meta.artisan)) state.artisan = state.meta.artisan;
+            state.lootLog = new Map(); for (const e of (Array.isArray(state.meta.lootLog) ? state.meta.lootLog : [])) if (e && e.id != null) state.lootLog.set(e.id, e); state.lootLogRev++;
             state.lastChatAt = num(state.meta.lastChatAt);
             state.chatSeen = new Set(Array.isArray(state.meta.chatSeen) ? state.meta.chatSeen : []);
             state.events = (await state.record.getAll("events", "at", null, "prev", 200));
@@ -792,6 +831,7 @@
                 case "items_updated": { const diffs = applyRows(m.endCharacterItems, false); if (diffs.length) onInventoryDiffs(diffs, "items_updated", m); break; }
                 case "skills_updated": { const d = applySkills(m.endCharacterSkills); if (Object.keys(d).length) noteSkillingXp(d, null, serverNow()); break; }
                 case "loot_opened": onLootOpened(m); break;
+                case "loot_log_updated": onLootLog(m); break;
                 case "consumable_buffs_updated": case "action_type_consumable_slots_updated": noteBuffs(m); break;
                 case "market_listings_updated": onListings(m); break;
                 case "chat_message_received": onChat(m, false); break;
@@ -1267,6 +1307,9 @@
 <div class="mds-pane" data-pane="runs" hidden>
  <div class="mds-wrap mds-wrap-runs"><table><thead><tr><th>Start</th><th>Result</th><th>Run time</th><th>Waves</th><th>Chests</th><th>Keys</th><th>Deaths</th><th>XP</th><th>Seen by</th></tr></thead><tbody id="mds-runs"></tbody></table></div>
  <p class="mds-note" id="mds-runsnote"></p>
+ <h4>Sessions in the game's Loot &amp; XP Log</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Start</th><th>End</th><th>Action</th><th>Game: count</th><th>Game: drops</th><th>Game: XP</th><th>This record</th><th>Seen by</th></tr></thead><tbody id="mds-sessions"></tbody></table></div>
+ <p class="mds-note" id="mds-sessionsnote"></p>
 </div>
 <div class="mds-pane" data-pane="keys" hidden>
  <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Held</th><th>Crafted</th><th>Bought</th><th>Dropped</th><th>Used</th><th>Cost per key</th><th>Used at cost</th><th>At start</th></tr></thead><tbody id="mds-keys"></tbody></table></div>
@@ -1304,7 +1347,7 @@
 <details><summary>Diagnostics</summary><pre id="mds-diag"></pre></details>
 </div>
 </div>`;
-            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote"]) els[id] = root.querySelector("#" + id);
+            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-sessions", "mds-sessionsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote"]) els[id] = root.querySelector("#" + id);
             // Row actions: Keep N (moves loot into supplies), Accept (freezes a valuation of loot no longer held).
             root.addEventListener("click", e => {
                 const b = e.target.closest("button[data-act]"); if (!b) return;
@@ -1479,6 +1522,7 @@
                 case "offline": { const to = Math.min(ev.to || ev.at, ev.at); return `${fmtDur(to - (ev.from || 0))} offline (${fmtTime(ev.from)} to ${fmtTime(to)}) · ${(ev.items || []).length} item deltas · XP ${fmtCoins(xpSum(ev.xpBySkill))}`; }
                 case "chat": return `${esc(ev.m)}${ev.keyCounts ? " · " + esc(Object.entries(ev.keyCounts).map(([n, k]) => `${n} ${k}`).join(", ")) : ""}${ev.replay ? " · replayed" : ""}`;
                 case "review": return `${esc(ev.reason)}`;
+                case "note": return esc(ev.text || "");
                 case "reprice": return `from ${esc(ev.from)} (${ev.listings} listings): ${(ev.items || []).map(r => `${it(r.item)} ${fmtCoins(r.prevAvg)} → ${fmtCoins(r.avg)} (${r.covered} of ${r.qty} from ${r.listings} buys)`).join(", ") || "no stock matched"}${(ev.keys || []).length ? ` · keys: ${ev.keys.map(k => `${k.qty} ${it(k.item)} ${fmtCoins(k.prev)} → ${fmtCoins(k.unitCost)}`).join(", ")}` : ""}`;
                 case "keep": return `${it(ev.item)}: kept ${ev.total} for future runs`;
                 case "value": return `${ev.qty} ${it(ev.item)} valued at ${fmtCoins(ev.unitValue)} each (bid ${fmtCoins(ev.bidNow)}, at open ${fmtCoins(ev.bidAtOpen)})`;
@@ -1516,7 +1560,9 @@
                 card("Net", fmtCoins(M.net), `sold + chest coins − spent · held loot ${fmtCoins(M.heldLoot)} at bid · no longer held ${fmtCoins(M.missingLoot)}${M.reviewRows ? ` · ${M.reviewRows} to review` : ""}`),
             );
             els["mds-cards"].innerHTML = cards.join("");
-            els["mds-ovnote"].textContent = `Since ${fmtTime(S.windowStart)}. A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.${S.open ? " One run is in progress." : ""}`;
+            const live = sessionsOf().find(e => (ref.dungeons[e.action] || /\/combat\//.test(e.action)) && isRunning(e) && e.end > S.windowStart);
+            const check = live ? (() => { const o = recordInSpan(d, live); const chests = Object.entries(live.drops).filter(([h]) => ref.chestItems[h.split("::")[0]]).reduce((s, [, q]) => s + q, 0); return o ? ` Game's Loot & XP Log for the session since ${fmtTime(live.start)} (read ${fmtTime(state.lootLogAt)}): ${live.count} clears, ${chests} chests; this record has ${o.clears} clears, ${o.chests} chests${live.start < S.windowStart ? " since it started" : " in that span"}${o.clears === live.count ? "." : " (differs)."}` : ""; })() : "";
+            els["mds-ovnote"].textContent = `${check}Since ${fmtTime(S.windowStart)}. A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.${S.open ? " One run is in progress." : ""}`;
         }
         const fmtQ = q => (q == null ? "–" : Number.isInteger(q) ? q.toLocaleString() : q.toFixed(1));
         const coinsOr = (v, dash = "–") => (v == null ? dash : fmtCoins(v));
@@ -1557,6 +1603,30 @@
             els["mds-chests"].innerHTML = opens.map(ev => `<tr><td class="t">${fmtTime(ev.at)}</td><td class="k">${it(ev.chest)}</td><td>${ev.count}</td><td class="d">${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}${(g.counted || isCounted(g.item)) ? " (counted)" : (g.item !== "/items/coin" && !g.bid) ? " (no bid)" : ""}`).join(", ")}</td><td>${fmtCoins((ev.gains || []).filter(g => g.item !== "/items/coin" && !g.counted && !isCounted(g.item)).reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0))}</td><td>${ev.coinsGained ? fmtCoins(ev.coinsGained) : "–"}</td><td>${ev.keyCost && ev.keyCost.unitCost != null ? `${fmtCoins(ev.keyCost.unitCost * ev.count)}<small> ${esc(ev.keyCost.basis || "")}</small>` : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">No chest opened yet.</td></tr>`;
             els["mds-chestsnote"].textContent = "Newest first. Value at bid = each item's highest bid when the chest was opened; counted items (cowbells) and unpriced items carry no value. Key cost = the chest key's lot cost; a basis of ask means the key was held before the record began.";
         }
+        // Sessions the game logged (dungeons and key crafts), newest first, beside what this record counted in the
+        // same span: clears from the runs, chests from the clears plus offline blocks inside it.
+        const sessionsOf = () => [...state.lootLog.values()].filter(e => ref.dungeons[e.action] || ref.keyActions[e.action] || /\/combat\//.test(e.action)).sort((a, b) => b.start - a.start);
+        const isRunning = e => Math.abs(e.end - state.lootLogAt) < 15e3; // the game stamps a running session's end with the time of the read
+        function recordInSpan(d, e) {
+            if (e.end <= d.summary.windowStart) return null;
+            const runs = d.runs.filter(r => r.startAt >= e.start - 5000 && r.startAt <= e.end);
+            const clears = runs.filter(r => r.result === "clear").length;
+            const chests = runs.reduce((s, r) => s + (r.chests || []).reduce((a, c) => a + c.qty, 0), 0) + d.offline.filter(b => b.from >= e.start - 5000 && b.to <= e.end + 5000).reduce((s, b) => s + b.chestTotal, 0);
+            return { clears, chests, runs: runs.length };
+        }
+        function renderSessions(d) {
+            const list = sessionsOf().slice(0, 60);
+            const xpSumAll = x => Object.values(x || {}).reduce((s, v) => s + v, 0);
+            els["mds-sessions"].innerHTML = list.map(e => {
+                const dungeon = !!ref.dungeons[e.action] || /\/combat\//.test(e.action);
+                const drops = Object.entries(e.drops).map(([h, q]) => `${q} ${it(h.split("::")[0])}`).join(", ") || "none";
+                const ours = dungeon ? recordInSpan(d, e) : null;
+                const match = ours ? (ours.clears === e.count ? "" : " ≠") : "";
+                const partial = ours && e.start < d.summary.windowStart ? " (from record start)" : "";
+                return `<tr class="${ours && ours.clears !== e.count && !isRunning(e) && !partial ? "review" : ""}"><td class="t">${fmtTime(e.start)}</td><td class="t">${isRunning(e) ? "running" : fmtTime(e.end)}</td><td class="k">${esc(shortAction(e.action))}${e.tier ? ` T${e.tier}` : ""}</td><td>${e.count}${dungeon ? " clears" : " crafts"}</td><td class="d">${drops}</td><td>${fmtCoins(xpSumAll(e.xp))}</td><td>${ours ? `${ours.clears} clears${match} · ${ours.chests} chests${partial}` : (dungeon ? "before this record" : "–")}</td><td class="t">${esc(e.source || "")}</td></tr>`;
+            }).join("") || `<tr><td colspan="8" class="t">Open the game's Loot &amp; XP Log once (Moo Pass) and its sessions appear here; Toolasha's saved history is merged at login.</td></tr>`;
+            els["mds-sessionsnote"].textContent = "The game's own log, one row per action session: its count (dungeon clears, or keys crafted), its drops and XP, offline included. \"This record\" counts the clears and chests this record has for the same span; ≠ marks a difference, highlighted once the session is over. The game's count is the reference; this record only adds times and costs the log does not have.";
+        }
         function renderRuns(force) {
             if (!els["mds-runs"]) return;
             if (!force && els.runsWrap.scrollTop > 8) { runsHeld = true; return; }
@@ -1571,6 +1641,7 @@
                 const result = r.result === "open" ? "in progress" : r.result;
                 return `<tr class="${r.result}"><td class="t">${fmtTime(r.startAt)}${r.spansRecordStart ? " ↰" : ""}</td><td class="k">${result}</td><td>${dur}</td><td>${r.waves ?? "–"}</td><td>${chestText(r)}</td><td>${r.keysCharged ?? "–"}${r.keysSrc === "key count" ? "*" : ""}</td><td>${r.deaths ?? "–"}</td><td>${r.xpBySkill ? fmtCoins(xpSum(r.xpBySkill)) + (r.xpPartial ? "†" : "") : "–"}</td><td class="t">${r.source}${r.note ? ` · ${esc(r.note)}` : ""}</td></tr>`;
             }).join("") || `<tr><td colspan="9" class="t">No runs yet.</td></tr>`;
+            renderSessions(d);
             els["mds-runsnote"].textContent = "Newest first. * keys charged read from the party key counts (no clear message seen). † XP counted from when the script joined the run. ↰ the run was under way when the record started.";
         }
         function render() {
@@ -1590,6 +1661,7 @@
                 els["mds-diag"].textContent = [
                     `frames heard ${state.counts.frames} · ${state.sockets} socket${state.sockets === 1 ? "" : "s"}${state.viaData ? ` · ${state.viaData} via data getter` : ""}`,
                     `game data: ${ref.ready ? Object.keys(ref.dungeons).length + " dungeons" : "not loaded"} · ${ref.source || "waiting"}${ref.version ? " · " + ref.version : ""}`,
+                    `loot log: ${state.lootLog.size} sessions${state.lootLogAt ? ` · last read ${fmtTime(state.lootLogAt)}` : ""}${TOOLASHA.sessions ? ` · ${TOOLASHA.sessions} from Toolasha` : ""}`,
                     `toolasha history: ${TOOLASHA.status}${TOOLASHA.listings ? ` · ${TOOLASHA.listings} listings · ${TOOLASHA.seeded} items seeded · ${TOOLASHA.imported} fills imported` : ""}${state.meta.toolashaSeeded ? ` · seeded ${fmtTime(state.meta.toolashaSeeded)}` : ""}`,
                     `artisan: ${Object.entries(state.artisan).filter(([, a]) => a.rate > 0).map(([t, a]) => `${t.split("/").pop()} ${(a.rate * 100).toFixed(2)}% (${a.tea ? itemName(a.tea) : "?"})`).join(", ") || "none seen"}`,
                     `prices: ${prices.map ? Object.keys(prices.map).length : 0} items · ${prices.at ? "fetched " + fmtTime(prices.at) : "not fetched this session"}${prices.error ? " · " + prices.error : ""}`,
@@ -1620,7 +1692,7 @@
         if (!state.record) return;
         if (!W.confirm("Delete this character's whole Dungeon Stats record? Export it first if you want to keep it.")) return;
         await state.record.flush(); await state.record.clearAll();
-        state.meta = {}; state.events = []; state.timeline = []; state.timelineRev++; state.consumeTotals.clear(); state.chatSeen.clear(); state.counts.events = 0; state.ledger.clear(); state.keyLots.clear(); keyAverages.clear(); state.run = null;
+        state.meta = {}; state.events = []; state.timeline = []; state.timelineRev++; state.consumeTotals.clear(); state.lootLog.clear(); state.lootLogRev++; state.chatSeen.clear(); state.counts.events = 0; state.ledger.clear(); state.keyLots.clear(); keyAverages.clear(); state.run = null;
         panel.render();
     }
 
