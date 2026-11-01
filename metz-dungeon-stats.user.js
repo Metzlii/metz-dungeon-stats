@@ -763,19 +763,40 @@
 `;
 
     const panel = (() => {
-        let root = null, body = null, toggle = null, dirty = false, timer = null, filter = "all", open = false, hover = false;
+        let root = null, body = null, toggle = null, dirty = false, timer = null, filter = "all", open = false, rowsHeld = false;
+        let statusEl = null, tbodyEl = null, wrapEl = null, diagEl = null;
+        const KINDS = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
         function ensure() {
             if (root || !document.body) return;
             const style = document.createElement("style"); style.textContent = CSS; document.documentElement.appendChild(style);
             toggle = document.createElement("button"); toggle.id = "mds-toggle"; toggle.textContent = "Dungeon Stats"; toggle.title = "Metz Dungeon Stats"; toggle.addEventListener("click", () => setOpen(!open));
             root = document.createElement("section"); root.id = "mds-root"; root.hidden = true;
-            root.innerHTML = `<div class="mds-head"><strong>Metz Dungeon Stats</strong><span class="mds-sub">v${VERSION} · milestone 1: capture and record</span><button class="mds-x" title="Close">×</button></div><div class="mds-tabs"><button role="tab" aria-selected="true">Data</button></div><div class="mds-body"></div>`;
+            // Built once. Refreshes touch only the status line, the table rows and the diagnostics text, so an open
+            // dropdown, the scroll position and an expanded section are never torn down.
+            root.innerHTML = `<div class="mds-head"><strong>Metz Dungeon Stats</strong><span class="mds-sub">v${VERSION} · milestone 1: capture and record</span><button class="mds-x" title="Close">×</button></div>
+<div class="mds-tabs"><button role="tab" aria-selected="true">Data</button></div>
+<div class="mds-body">
+<p class="mds-status" id="mds-status"></p>
+<div class="mds-bar">
+ <label>Show <select id="mds-filter">${KINDS.map(k => `<option value="${k}">${k}</option>`).join("")}</select></label>
+ <button id="mds-export">Export record (JSON)</button>
+ <button id="mds-export-frames">Export raw frames</button>
+ <button id="mds-prices">Refresh prices</button>
+ <button id="mds-reset" class="danger">Reset record</button>
+ <span class="mds-note">Newest first. Source = the game message the event came from. Consumable uses are recorded but shown only under "consume".</span>
+</div>
+<div class="mds-wrap"><table><thead><tr><th>Time</th><th>Kind</th><th>What</th><th>Source</th></tr></thead><tbody id="mds-tbody"></tbody></table></div>
+<details><summary>Diagnostics</summary><pre id="mds-diag"></pre></details>
+</div>`;
             root.querySelector(".mds-x").addEventListener("click", () => setOpen(false));
-            // The panel never rebuilds under the pointer or a focused control (an open dropdown would be torn down).
-            root.addEventListener("mouseenter", () => { hover = true; });
-            root.addEventListener("mouseleave", () => { hover = false; if (deferred) render(); });
-            root.addEventListener("focusout", () => { setTimeout(() => { if (deferred && !hover && !root.contains(document.activeElement)) render(); }, 0); });
-            body = root.querySelector(".mds-body");
+            body = root.querySelector(".mds-body"); statusEl = root.querySelector("#mds-status"); tbodyEl = root.querySelector("#mds-tbody"); wrapEl = root.querySelector(".mds-wrap"); diagEl = root.querySelector("#mds-diag");
+            root.querySelector("#mds-filter").addEventListener("change", e => { filter = e.target.value; wrapEl.scrollTop = 0; renderRows(true); });
+            root.querySelector("#mds-export").addEventListener("click", exportRecord);
+            root.querySelector("#mds-export-frames").addEventListener("click", exportFrames);
+            root.querySelector("#mds-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
+            root.querySelector("#mds-reset").addEventListener("click", resetRecord);
+            // Rows are held while the reader is scrolled down; they catch up at the top.
+            wrapEl.addEventListener("scroll", () => { if (rowsHeld && wrapEl.scrollTop <= 8) renderRows(true); }, { passive: true });
             document.body.appendChild(toggle); document.body.appendChild(root);
             try { open = localStorage.getItem(PANEL_KEY) === "open"; } catch (_e) { open = false; }
             root.hidden = !open; if (open) render();
@@ -804,48 +825,29 @@
                 default: return esc(JSON.stringify(ev).slice(0, 200));
             }
         }
-        let deferred = false;
-        function render() {
-            ensure(); if (!body) return;
-            // Never rebuild the feed under a reader: while the list is scrolled down, hold the refresh until they
-            // return to the top (new events arrive at the top anyway).
-            const wrapBefore = body.querySelector(".mds-wrap");
-            const busy = (wrapBefore && wrapBefore.scrollTop > 8) || hover || (root && root.contains(document.activeElement) && document.activeElement !== root);
-            if (busy && body.childElementCount) { deferred = true; return; }
-            deferred = false;
-            const kinds = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
+        function renderRows(force) {
+            if (!tbodyEl) return;
+            if (!force && wrapEl.scrollTop > 8) { rowsHeld = true; return; }
+            rowsHeld = false;
             // The default feed leaves consumable uses out: they are kept for cost tracking, not for reading.
             const rows = state.events.filter(e => filter === "all" ? e.kind !== "consume" : e.kind === filter).slice(0, 200);
+            tbodyEl.innerHTML = rows.map(ev => `<tr class="${ev.kind}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${ev.kind}</td><td class="d">${describe(ev)}</td><td class="t">${esc(ev.src || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="t">Nothing recorded yet.</td></tr>`;
+        }
+        function render() {
+            ensure(); if (!body) return;
             const used = state.events.filter(e => e.kind === "consume").reduce((s, e) => { s.n += e.qty; s.cost += e.unitCost != null ? e.unitCost * e.qty : 0; return s; }, { n: 0, cost: 0 });
+            const runLine = state.run ? `${shortAction(state.run.zone)} T${state.run.tier} · wave ${state.run.waves} · ${fmtDur(serverNow() - state.run.startAt)}` : "between runs";
+            statusEl.textContent = `${state.characterName || "waiting for login"}${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}`;
+            renderRows(false);
             const byType = [...state.counts.byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t} ${n}`).join(" · ");
-            const runLine = state.run ? `${esc(shortAction(state.run.zone))} T${state.run.tier} · wave ${state.run.waves} · ${fmtDur(serverNow() - state.run.startAt)}` : "between runs";
-            body.innerHTML = `
-<p class="mds-status"><strong>${esc(state.characterName || "waiting for login")}</strong>${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}</p>
-<div class="mds-bar">
- <label>Show <select id="mds-filter">${kinds.map(k => `<option value="${k}"${k === filter ? " selected" : ""}>${k}</option>`).join("")}</select></label>
- <button id="mds-export">Export record (JSON)</button>
- <button id="mds-export-frames">Export raw frames</button>
- <button id="mds-prices">Refresh prices</button>
- <button id="mds-reset" class="danger">Reset record</button>
- <span class="mds-note">Newest first. Source = the game message the event came from. Consumable uses are recorded but shown only under "consume".</span>
-</div>
-<div class="mds-wrap"><table><thead><tr><th>Time</th><th>Kind</th><th>What</th><th>Source</th></tr></thead><tbody>
-${rows.map(ev => `<tr class="${ev.kind}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${ev.kind}</td><td class="d">${describe(ev)}</td><td class="t">${esc(ev.src || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="t">Nothing recorded yet.</td></tr>`}
-</tbody></table></div>
-<details><summary>Diagnostics</summary><pre>${esc([
+            diagEl.textContent = [
                 `frames heard ${state.counts.frames} · ${state.sockets} socket${state.sockets === 1 ? "" : "s"}${state.viaData ? ` · ${state.viaData} via data getter` : ""}`,
                 `game data: ${ref.ready ? Object.keys(ref.dungeons).length + " dungeons" : "not loaded"} · ${ref.source || "waiting"}${ref.version ? " · " + ref.version : ""}`,
                 `prices: ${prices.map ? Object.keys(prices.map).length : 0} items · ${prices.at ? "fetched " + fmtTime(prices.at) : "not fetched this session"}${prices.error ? " · " + prices.error : ""}`,
                 `record: ${state.record ? JSON.stringify(state.record.stats()) : "none"} · device ${DEVICE} · v${VERSION}`,
                 `held keys and chests: ${[...state.inventory.values()].filter(r => r.itemLocationHrid === INV && (ref.keyItems.has(r.itemHrid) || ref.chestItems[r.itemHrid])).map(r => `${r.count}× ${itemName(r.itemHrid)}`).join(", ") || "none"}`,
                 `messages this session: ${byType || "none yet"}`,
-            ].join("\n"))}</pre></details>`;
-            body.querySelector("#mds-filter").addEventListener("change", e => { filter = e.target.value; const w = body.querySelector(".mds-wrap"); if (w) w.scrollTop = 0; render(); });
-            body.querySelector(".mds-wrap").addEventListener("scroll", e => { if (deferred && e.target.scrollTop <= 8) render(); }, { passive: true });
-            body.querySelector("#mds-export").addEventListener("click", exportRecord);
-            body.querySelector("#mds-export-frames").addEventListener("click", exportFrames);
-            body.querySelector("#mds-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
-            body.querySelector("#mds-reset").addEventListener("click", resetRecord);
+            ].join("\n");
         }
         return { refresh, touch, render };
     })();
