@@ -1581,6 +1581,7 @@
 #mds-root .mds-bar button.danger:hover{background:rgba(211,161,58,.12)}
 #mds-root button.mds-act{padding:3px 9px;font-size:.857em;white-space:nowrap}
 #mds-root td.mds-acts{white-space:nowrap}
+#mds-root td.mds-acts-plan{width:7.5em;min-width:7.5em;box-sizing:border-box}
 #mds-root tr.mds-flash td{background:rgba(69,200,216,.18)}
 #mds-root td.mds-acts .mds-act+.mds-act{margin-left:6px}
 #mds-root .mds-bar .mds-note{color:#c5d4de;font-size:.857em}
@@ -2324,7 +2325,7 @@
             }
             const { crafts, rows, cost: total, unpriced } = rowsFor(Math.max(want, 0));
             lastPlanRows = rows;
-            els["mds-plan"].innerHTML = rows.map(x => `<tr><td class="k">${itemLink(x.item)}${x.tea ? "<small>artisan tea, by craft time</small>" : ""}</td><td>${x.item === "/items/coin" ? fmtCoins(x.perKey) : x.perKey.toFixed(x.perKey >= 10 ? 1 : 3)}</td><td>${x.item === "/items/coin" ? fmtCoins(x.need) : fmtQ(x.need)}</td><td>${x.item === "/items/coin" ? fmtCoins(x.owned) : fmtQ(x.owned)}</td><td>${x.buy > 0 ? (x.item === "/items/coin" ? fmtCoins(x.buy) : fmtQ(x.buy)) : "–"}</td><td>${x.item === "/items/coin" ? "–" : coinsOr(x.ask, "no ask")}</td><td>${x.buy > 0 && x.cost != null ? fmtCoins(x.cost) : "–"}</td><td>${x.item !== "/items/coin" && x.buy > 0 && !(ref.items[x.item] && ref.items[x.item].tradable === false) ? `<button class="mds-act" data-act="market" data-item="${esc(x.item)}">Buy</button>` : (x.item !== "/items/coin" ? "<small>enough owned</small>" : "")}</td></tr>`).join("");
+            els["mds-plan"].innerHTML = rows.map(x => `<tr><td class="k">${itemLink(x.item)}${x.tea ? "<small>artisan tea, by craft time</small>" : ""}</td><td>${x.item === "/items/coin" ? fmtCoins(x.perKey) : x.perKey.toFixed(x.perKey >= 10 ? 1 : 3)}</td><td>${x.item === "/items/coin" ? fmtCoins(x.need) : fmtQ(x.need)}</td><td>${x.item === "/items/coin" ? fmtCoins(x.owned) : fmtQ(x.owned)}</td><td>${x.buy > 0 ? (x.item === "/items/coin" ? fmtCoins(x.buy) : fmtQ(x.buy)) : "–"}</td><td>${x.item === "/items/coin" ? "–" : coinsOr(x.ask, "no ask")}</td><td>${x.buy > 0 && x.cost != null ? fmtCoins(x.cost) : "–"}</td><td class="mds-acts mds-acts-plan">${x.item !== "/items/coin" && x.buy > 0 && !(ref.items[x.item] && ref.items[x.item].tradable === false) ? `<button class="mds-act" data-act="market" data-item="${esc(x.item)}">Buy</button>` : (x.item !== "/items/coin" ? "<small>enough owned</small>" : "")}</td></tr>`).join("");
             // Cost per key at ask (everything bought now) beside the key's own ask.
             let perKeyCost = 0, perKeyOk = true;
             for (const i of r.inputs) { const p = i.item === "/items/coin" ? 1 : askOf(i.item); if (p == null) { perKeyOk = false; break; } perKeyCost += p * i.qty * cut / perCraft; }
