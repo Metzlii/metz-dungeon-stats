@@ -1768,7 +1768,7 @@
             els["mds-tbody"].innerHTML = rows.map(ev => `<tr class="${ev.kind}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${ev.kind}</td><td class="d">${describe(ev)}</td><td class="t">${esc(ev.src || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="t">Nothing recorded yet.</td></tr>`;
         }
         const cardKey = label => String(label).replace(/<[^>]*>/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-        function card(label, value, sub) { return `<div class="mds-card" data-card="${cardKey(label)}" draggable="true"><div class="l">${label}</div><div class="n">${value}</div>${sub ? `<small>${sub}</small>` : ""}</div>`; }
+        function card(label, value, sub) { const text = Array.isArray(sub) ? sub.filter(Boolean).join("<br>") : sub; return `<div class="mds-card" data-card="${cardKey(label)}" draggable="true"><div class="l">${label}</div><div class="n">${value}</div>${text ? `<small>${text}</small>` : ""}</div>`; }
         // Card order per container (Overview, Chests), saved per browser: drag a card onto another to move it there.
         const CARDS_KEY = PANEL_KEY + "-cards";
         let cardOrders = {};
@@ -1802,26 +1802,27 @@
             const perType = { ...S.chests }; for (const b of d.offline) for (const [h, q] of Object.entries(b.chests)) perType[h] = (perType[h] || 0) + q;
             const Mc = getMoney().chests; const baseRows = holdover().rows; const earnedNow = {}, holdNow = {};
             for (const h of new Set([...Object.keys(perType), ...baseRows.map(c => c.item)])) { const base = (baseRows.find(c => c.item === h) || {}).qty || 0; const opened = Mc[h] ? Mc[h].opened : 0; holdNow[h] = Math.max(0, base - opened); earnedNow[h] = Math.max(0, (perType[h] || 0) - Math.max(0, opened - base)); }
-            const chestLines = Object.entries(earnedNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${it(h)}`).join(" · ");
-            const holdLines = Object.entries(holdNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${it(h)}`).join(" · ");
+            const chestLines = Object.entries(earnedNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${chestName(h)}`);
+            const holdLines = Object.entries(holdNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${chestName(h)}`);
             const holdTotal = Object.values(holdNow).reduce((a, b) => a + b, 0), earnedTotal = Object.values(earnedNow).reduce((a, b) => a + b, 0);
-            const cards = [
-                card("Clears", S.clears, `${S.fails} failed${S.failRate != null ? ` (${(S.failRate * 100).toFixed(1)}%)` : ""} · ${S.cancelled} cancelled${S.unknown ? ` · ${S.unknown} end unknown` : ""}`),
-                card("Average run", S.avgClearMs != null ? fmtDur(S.avgClearMs) : "–", S.clearMs.length ? `${S.avgRunMs != null && S.fails ? `${fmtDur(S.avgRunMs)} counting fails · ` : ""}fastest ${fmtDur(S.fastestMs)} · slowest ${fmtDur(S.slowestMs)}` : "no completed run yet"),
-                card("Chests earned", earnedTotal, chestLines || "none yet"),
-                ...(holdTotal ? [card("Holdover chests", holdTotal, holdLines)] : []),
-                card("Keys charged", S.keysCharged, `${S.keysCrafted} crafted in the record`),
-                card("In dungeons", fmtHm(S.dungeonMs), `${pct(S.dungeonMs, S.totalMs)} of ${fmtHm(S.totalMs)} recorded`),
-                card("Between runs", fmtHm(S.betweenMs), `crafting ${fmtHm(S.craftingMs)} · offline ${fmtHm(S.offlineBetweenMs)} · other ${fmtHm(S.otherMs)}`),
-            ];
-            for (const [h, c] of Object.entries(S.counted || {})) if (c.qty > 0) cards.push(card(it(h) + "s", c.qty, Object.entries(c.byChest).filter(([, b]) => b.qty > 0).map(([chest, b]) => `${b.opened ? (b.qty / b.opened).toFixed(2) : "?"} per ${it(chest)}`).join(" · ")));
-            if (S.unknownMs > 0) cards.push(card("Unaccounted", fmtHm(S.unknownMs), "runs whose end the chat ledger does not show"));
             const M = getMoney();
+            const assumed = M.tax.measured ? "" : " assumed";
+            const cards = [
+                card("Clears", S.clears, [`${S.fails} Failed${S.failRate != null ? ` (${(S.failRate * 100).toFixed(1)}%)` : ""}`, `${S.cancelled} Cancelled`, S.unknown ? `${S.unknown} End unknown` : ""]),
+                card("Average run", S.avgClearMs != null ? fmtDur(S.avgClearMs) : "–", S.clearMs.length ? [S.avgRunMs != null && S.fails ? `${fmtDur(S.avgRunMs)} counting fails` : "", `Fastest ${fmtDur(S.fastestMs)}`, `Slowest ${fmtDur(S.slowestMs)}`] : ["No completed run yet"]),
+                card("Chests earned", earnedTotal, chestLines.length ? chestLines : ["None yet"]),
+                ...(holdTotal ? [card("Holdover chests", holdTotal, holdLines)] : []),
+                card("Keys charged", S.keysCharged, [`${S.keysCrafted} Crafted in the record`]),
+                card("In dungeons", fmtHm(S.dungeonMs), [`${pct(S.dungeonMs, S.totalMs)} of ${fmtHm(S.totalMs)} recorded`]),
+                card("Between runs", fmtHm(S.betweenMs), [`Crafting ${fmtHm(S.craftingMs)}`, `Offline ${fmtHm(S.offlineBetweenMs)}`, `Other ${fmtHm(S.otherMs)}`]),
+            ];
+            for (const [h, c] of Object.entries(S.counted || {})) if (c.qty > 0) cards.push(card(it(h) + "s", c.qty, Object.entries(c.byChest).filter(([, b]) => b.qty > 0).map(([chest, b]) => `${b.opened ? (b.qty / b.opened).toFixed(2) : "?"} per ${chestName(chest)}`)));
+            if (S.unknownMs > 0) cards.push(card("Unaccounted", fmtHm(S.unknownMs), ["Runs whose end the chat ledger does not show"]));
             cards.push(
-                card("Spent", fmtCoins(M.spent.total), `buys ${fmtCoins(M.spent.buys)} · craft coins ${fmtCoins(M.spent.craftCoins)} · used in runs ${fmtCoins(M.used.total)} at ledger cost`),
-                card("Loot at open", fmtCoins(M.loot.atOpen), `${M.loot.opened} dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid${M.loot.nestedOpened ? ` · ${M.loot.nestedOpened} chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : ""} · + ${fmtCoins(M.loot.coins)} coins${M.loot.other.opened ? ` · ${M.loot.other.opened} other box${M.loot.other.opened === 1 ? "" : "es"} not counted` : ""}`),
-                card("Sold", fmtCoins(M.sold.loot.net), `${M.sold.loot.qty} items · ${fmtCoins(M.sold.loot.tax)} tax (${(M.tax.rate * 100).toFixed(1)}%${M.tax.measured ? "" : " assumed"})${M.sold.other.net ? ` · other sales ${fmtCoins(M.sold.other.net)} not counted` : ""}`),
-                card("Net", fmtCoins(M.net), `sold + chest coins − spent · held loot ${fmtCoins(M.heldLoot)} at bid · no longer held ${fmtCoins(M.missingLoot)}${M.reviewRows ? ` · ${M.reviewRows} to review` : ""}`),
+                card("Spent", fmtCoins(M.spent.total), [`Buys ${fmtCoins(M.spent.buys)}`, `Craft coins ${fmtCoins(M.spent.craftCoins)}`, `Used in runs ${fmtCoins(M.used.total)} at ledger cost`]),
+                card("Loot at open", fmtCoins(M.loot.atOpen), [`${M.loot.opened} Dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid`, M.loot.nestedOpened ? `${M.loot.nestedOpened} Chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : "", `+ ${fmtCoins(M.loot.coins)} Coins`, M.loot.other.opened ? `${M.loot.other.opened} Other box${M.loot.other.opened === 1 ? "" : "es"} not counted` : ""]),
+                card("Sold", fmtCoins(M.sold.loot.net), [`${M.sold.loot.qty} Items`, `${fmtCoins(M.sold.loot.tax)} Tax (${(M.tax.rate * 100).toFixed(1)}%${assumed})`, M.sold.other.net ? `Other sales ${fmtCoins(M.sold.other.net)} not counted` : ""]),
+                card("Net", fmtCoins(M.net), [`Sold ${fmtCoins(M.sold.loot.net)}`, `+ Chest coins ${fmtCoins(M.loot.coins)}`, `− Spent ${fmtCoins(M.spent.total)}`, `Held loot ${fmtCoins(M.heldLoot)} at bid`, `No longer held ${fmtCoins(M.missingLoot)}`, M.reviewRows ? `${M.reviewRows} To review` : ""]),
             );
             els["mds-cards"].innerHTML = sortCards("cards", cards).join("");
             const live = sessionsOf().find(e => (ref.dungeons[e.action] || /\/combat\//.test(e.action)) && isRunning(e) && e.end > S.windowStart);
@@ -1829,6 +1830,10 @@
             els["mds-ovnote"].textContent = `${check}Since ${fmtTime(S.windowStart)}. A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.${S.open ? " One run is in progress." : ""}`;
         }
         const fmtQ = q => (q == null ? "–" : Number.isInteger(q) ? q.toLocaleString() : q.toFixed(1));
+        // Dungeon codes everywhere: Pirate Cove is D4, its chests "D4 Chest" and "D4 Refine", a run at tier 2 "T2D4".
+        const dCode = zone => { const dg = ref.dungeons[zone]; return dg && dg.index ? `D${dg.index}` : null; };
+        const zoneLabel = (zone, tier) => { const d = dCode(zone); return d ? `${tier != null ? `T${tier}` : ""}${d}` : `${esc(shortAction(zone || "?"))}${tier ? ` T${tier}` : ""}`; };
+        const chestName = h => { const c = ref.chestItems[h]; const d = c && c.zone ? dCode(c.zone) : null; return d ? `${d} ${/refinement/.test(h) ? "Refine" : "Chest"}` : it(h); };
         const coinsOr = (v, dash = "–") => (v == null ? dash : fmtCoins(v));
         function renderKeys() {
             const M = getMoney();
@@ -1875,7 +1880,7 @@
             }
             const xpSumAll = x => Object.values(x || {}).reduce((s, v) => s + v, 0);
             const rows = Object.values(groups).sort((a, b) => b.to - a.to);
-            els["mds-life-dungeons"].innerHTML = rows.map(g => `<tr><td class="k">${esc(shortAction(g.action))}${g.tier ? ` T${g.tier}` : ""}</td><td>${g.n}</td><td>${fmtQ(g.clears)}</td><td class="d">${Object.entries(g.chests).map(([h, q]) => `${fmtQ(q)} ${/refinement/.test(h) ? "Refine" : "Chest"}`).join(", ") || "–"}</td><td>${fmtHm(g.ms)}</td><td>${g.clears ? fmtDur(g.ms / g.clears) : "–"}</td><td class="d">${Object.entries(g.xp).sort((a, b) => b[1] - a[1]).map(([sk, v]) => `${fmtCoins(v)} ${esc(sk.split("/").pop())}`).join(", ") || "–"}</td><td>${g.ms > 0 ? fmtCoins(xpSumAll(g.xp) / (g.ms / 3600e3)) : "–"}</td><td class="t">${fmtDate(g.from)}</td><td class="t">${fmtDate(g.to)}</td></tr>`).join("") || `<tr><td colspan="10" class="t">No sessions yet: open the game's Loot &amp; XP Log once.</td></tr>`;
+            els["mds-life-dungeons"].innerHTML = rows.map(g => `<tr><td class="k"><span title="${esc((ref.dungeons[g.action] || {}).name || shortAction(g.action))}">${zoneLabel(g.action, g.tier || null)}</span></td><td>${g.n}</td><td>${fmtQ(g.clears)}</td><td class="d">${Object.entries(g.chests).map(([h, q]) => `${fmtQ(q)} ${/refinement/.test(h) ? "Refine" : "Chest"}`).join(", ") || "–"}</td><td>${fmtHm(g.ms)}</td><td>${g.clears ? fmtDur(g.ms / g.clears) : "–"}</td><td class="d">${Object.entries(g.xp).sort((a, b) => b[1] - a[1]).map(([sk, v]) => `${fmtCoins(v)} ${esc(sk.split("/").pop())}`).join(", ") || "–"}</td><td>${g.ms > 0 ? fmtCoins(xpSumAll(g.xp) / (g.ms / 3600e3)) : "–"}</td><td class="t">${fmtDate(g.from)}</td><td class="t">${fmtDate(g.to)}</td></tr>`).join("") || `<tr><td colspan="10" class="t">No sessions yet: open the game's Loot &amp; XP Log once.</td></tr>`;
             // Key crafts, with what this PC's Toolasha history shows bought of the recipe's materials (a partial view
             // when another PC bought some of them).
             const craftGroups = {};
@@ -1919,7 +1924,7 @@
         function renderChests() {
             const M = getMoney();
             const otherCard = M.loot.other.opened ? [card("Other boxes (not dungeon loot)", M.loot.other.opened, `${Object.entries(M.loot.other.kinds).map(([h, q]) => `${q} ${it(h)}`).join(" · ")} · value at bid ${fmtCoins(M.loot.other.value)}${M.loot.other.coins ? ` · coins ${fmtCoins(M.loot.other.coins)}` : ""} · kept out of the loot and the net`)] : [];
-            const cards = otherCard.concat(Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(it(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`)));
+            const cards = otherCard.concat(Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(chestName(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`)));
             const bag = Object.keys(ref.chestItems).map(h => [h, held(h, 0)]).filter(([, q]) => q > 0);
             els["mds-chestcards"].innerHTML = sortCards("chestcards", [...cards, ...(bag.length ? [card("In the bag now", bag.reduce((a, [, q]) => a + q, 0), bag.map(([h, q]) => `${q} ${it(h)}`).join(" · "))] : [])]).join("");
             const opens = state.timeline.filter(e => e.kind === "open" && e.at >= (state.meta.recordStart || 0)).slice(-300).reverse();
@@ -1969,7 +1974,7 @@
                 const ours = dungeon ? recordInSpan(d, e) : null;
                 const text = compareText(ours, e, d.summary.windowStart);
                 const off = ours && text && /≠/.test(text) && !isRunning(e);
-                return `<tr class="${off ? "review" : ""}"><td class="t">${fmtTime(e.start)}</td><td class="t">${isRunning(e) ? (serverNow() - e.readAt > 600e3 ? `running at ${fmtClock(e.readAt)}` : "running") : fmtTime(e.end)}</td><td class="k">${esc(shortAction(e.action))}${e.tier ? ` T${e.tier}` : ""}</td><td>${e.count}${dungeon ? " clears" : " crafts"}</td><td class="d">${drops}</td><td>${fmtCoins(xpSumAll(e.xp))}</td><td>${text || (dungeon ? "before this record" : "–")}</td><td class="t">${esc(e.source || "")}</td></tr>`;
+                return `<tr class="${off ? "review" : ""}"><td class="t">${fmtTime(e.start)}</td><td class="t">${isRunning(e) ? (serverNow() - e.readAt > 600e3 ? `running at ${fmtClock(e.readAt)}` : "running") : fmtTime(e.end)}</td><td class="k"><span title="${esc((ref.dungeons[e.action] || {}).name || shortAction(e.action))}">${zoneLabel(e.action, e.tier || null)}</span></td><td>${e.count}${dungeon ? " clears" : " crafts"}</td><td class="d">${drops}</td><td>${fmtCoins(xpSumAll(e.xp))}</td><td>${text || (dungeon ? "before this record" : "–")}</td><td class="t">${esc(e.source || "")}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="t">Open the game's Loot &amp; XP Log once (Moo Pass) and its sessions appear here; Toolasha's saved history is merged at login.</td></tr>`;
             els["mds-sessionsnote"].textContent = "The game's own log, one row per action session: its count (dungeon clears, or keys crafted), its drops and XP, offline included. \"This record\" counts the clears and chests this record has for the same span; ≠ marks a difference, highlighted once the session is over. The game's count is the reference; this record only adds times and costs the log does not have.";
         }
@@ -2001,7 +2006,7 @@
             ensure(); if (!root) return;
             if (!prices.map && !prices.fetching && !prices.error) fetchPrices(false).then(() => touch(), () => {});
             const used = state.events.filter(e => e.kind === "consume").reduce((s, e) => { s.n += e.qty; s.cost += e.unitCost != null ? e.unitCost * e.qty : 0; return s; }, { n: 0, cost: 0 });
-            const runLine = state.run ? `${shortAction(state.run.zone)} T${state.run.tier} · wave ${state.run.waves} · ${fmtDur(serverNow() - state.run.startAt)}` : "between runs";
+            const runLine = state.run ? `${zoneLabel(state.run.zone, state.run.tier)} · wave ${state.run.waves} · ${fmtDur(serverNow() - state.run.startAt)}` : "between runs";
             els["mds-status"].textContent = `${state.characterName || "waiting for login"}${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}`;
             root.querySelector("#mds-banner").hidden = bannerDismissed || state.lootLogReadThisSession || !state.ready;
             if (tab === "overview") renderOverview();
