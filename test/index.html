@@ -91,8 +91,19 @@
   const add = (item, d) => set(item, (inv.get(item) || 0) + d);
   const feed = f => window.__mds.feed(f);
 
+  // Toolasha's market history, as Toolasha stores it: buys before the record (arcane lumber at 4,820 and 4,800, the
+  // first 1,000 redwood at 3,808) and one sell order the script never sees filling inside the record window.
+  async function seedToolasha(t0) {
+    await new Promise(r => { const q = indexedDB.deleteDatabase("ToolashaDB"); q.onsuccess = q.onerror = q.onblocked = () => r(); });
+    const db = await new Promise((r, j) => { const q = indexedDB.open("ToolashaDB", 1); q.onupgradeneeded = e => e.target.result.createObjectStore("marketListings"); q.onsuccess = () => r(q.result); q.onerror = () => j(q.error); });
+    const L = (id, at, item, price, qty, isSell) => ({ id, timestamp: at, createdTimestamp: new Date(at).toISOString(), itemHrid: item, enhancementLevel: 0, price, orderQuantity: qty, filledQuantity: qty, isSell, status: "filled" });
+    const rows = [L(1, t0 - 30 * 86400e3, "/items/arcane_lumber", 4800, 400, false), L(2, t0 - 2 * 86400e3, "/items/arcane_lumber", 4820, 700, false), L(3, t0 - 86400e3, "/items/redwood_lumber", 3808, 1000, false), L(4, t0 - 3 * 86400e3, "/items/white_key_fragment", 879000, 30, false), L(5, t0 + 20 * 60e3, "/items/pirate_essence", 1700, 100, true)];
+    await new Promise((r, j) => { const tx = db.transaction("marketListings", "readwrite"); tx.objectStore("marketListings").put(rows, "marketListingTimestamps"); tx.oncomplete = () => r(); tx.onerror = () => j(tx.error); });
+    db.close();
+  }
   async function scenario() {
     const t0 = Date.now();
+    await seedToolasha(t0); log("ToolashaDB replica seeded");
     log("loading init_client_data ...");
     const icd = await realFetch("/scratch/design-export-0919/init_client_data.json").then(r => r.json());
     feed(icd); log("init_client_data fed; dungeons:", Object.keys(window.__mds.ref.dungeons).length);
@@ -156,6 +167,7 @@
     feed(sale);
     await sleep(1500);
     await window.__mds.flush();
+    await window.__mds.importToolasha("harness"); log("toolasha:", window.__mds.toolasha);
     log("done; status:", window.__mds.status());
     document.getElementById("mds-toggle").click();
   }

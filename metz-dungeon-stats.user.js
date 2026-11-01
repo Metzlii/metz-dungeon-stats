@@ -667,12 +667,87 @@
         if (Array.isArray(chat)) { const sorted = chat.slice().sort((a, b) => (parseServerTime(a.t) || 0) - (parseServerTime(b.t) || 0)); let n = 0; for (const c of sorted) { const before = state.counts.events; onChat({ message: c }, true); if (state.counts.events > before) n++; } if (n) info(`replayed ${n} party system messages from the login history`); }
         state.record.queue("meta", { key: "lastChatAt", value: state.lastChatAt });
         state.ready = true; panel.refresh();
+        importToolasha("login");
     }
 
     function ledgerState() { return { ledger: [...state.ledger.entries()], keyLots: [...state.keyLots.entries()], keyAverages: [...keyAverages.entries()], listings: [...state.listings.values()], lifetimeXp: state.lifetimeXp }; }
     function restoreLedger(v) { if (!isObj(v)) return; state.ledger = new Map(v.ledger || []); state.keyLots = new Map(v.keyLots || []); for (const [k, e] of (v.keyAverages || [])) keyAverages.set(k, e); if (Array.isArray(v.listings)) for (const l of v.listings) state.listings.set(l.id, l); }
 
-    const TIMELINE_KINDS = ["start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "redeem", "baseline", "offline", "chat", "review", "value", "keep", "note"];
+    const TIMELINE_KINDS = ["start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "redeem", "baseline", "offline", "chat", "review", "value", "keep", "reprice", "note"];
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Toolasha market history. Toolasha keeps every listing it has seen for this player in IndexedDB (ToolashaDB,
+    // store marketListings, key marketListingTimestamps: an array of {id, createdTimestamp, itemHrid,
+    // enhancementLevel, price, orderQuantity, filledQuantity, isSell}). Two uses, both recorded as events:
+    //   1. once per record, stock that the baseline priced at ask is re-priced at what the player actually paid for it,
+    //      walking their filled buys newest first until the held quantity is covered (a reprice event, applied to the
+    //      purchase ledger and to key lots priced from the recipe);
+    //   2. on every login, listings inside the record window whose fills the script did not see (another device,
+    //      script off) become buy/sell events marked imported; sells carry tax at the rate in force, never measured.
+    // Read-only: the database is opened without a version and never created.
+    // ---------------------------------------------------------------------------------------------------------------
+    const TOOLASHA = { status: "not read", listings: 0, seeded: 0, imported: 0, at: 0 };
+    async function readToolashaListings() {
+        try {
+            if (typeof indexedDB.databases === "function") { const dbs = await indexedDB.databases(); if (!dbs.some(d => d && d.name === "ToolashaDB")) { TOOLASHA.status = "no ToolashaDB"; return null; } }
+            const db = await new Promise((res, rej) => { const q = indexedDB.open("ToolashaDB"); q.onupgradeneeded = e => { try { e.target.transaction.abort(); } catch (_e) { /* fine */ } }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error || new Error("open failed")); q.onblocked = () => rej(new Error("blocked")); });
+            try {
+                if (!db.objectStoreNames.contains("marketListings")) { TOOLASHA.status = "no marketListings store"; return null; }
+                const v = await new Promise((res, rej) => { const q = db.transaction("marketListings", "readonly").objectStore("marketListings").get("marketListingTimestamps"); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+                if (!Array.isArray(v)) { TOOLASHA.status = "no listing history"; return null; }
+                TOOLASHA.status = "read"; TOOLASHA.listings = v.length; TOOLASHA.at = Date.now();
+                return v.map(l => ({ id: l.id, at: parseServerTime(l.createdTimestamp) || num(l.timestamp), item: l.itemHrid, level: num(l.enhancementLevel), price: num(l.price), qty: num(l.filledQuantity), ordered: num(l.orderQuantity), isSell: !!l.isSell })).filter(l => l.id != null && l.item && l.qty > 0 && l.price > 0 && l.at > 0);
+            } finally { db.close(); }
+        } catch (error) { TOOLASHA.status = "unavailable: " + String(error && error.message || error); return null; }
+    }
+    function taxRateNow() { for (let i = state.timeline.length - 1; i >= 0; i--) { const e = state.timeline[i]; if (e.kind === "sell" && !e.imported && num(e.gross) > 0 && e.tax != null) return e.tax / e.gross; } return 0.04; }
+    let toolashaRunning = null;
+    function importToolasha(reason) {
+        if (toolashaRunning) return toolashaRunning;
+        toolashaRunning = (async () => {
+            if (!state.record || !state.ready || !state.meta.recordStart) return;
+            const listings = await readToolashaListings(); if (!listings) return;
+            const start = state.meta.recordStart;
+            // 1. Seed purchase prices for the stock the baseline priced at ask.
+            if (!state.meta.toolashaSeeded) {
+                const rows = [];
+                for (const [item, e] of state.ledger) {
+                    if (!(e.qty > 0)) continue;
+                    const buys = listings.filter(l => !l.isSell && l.item === item && l.level === 0 && l.at < start).sort((a, b) => b.at - a.at);
+                    if (!buys.length) continue;
+                    let left = e.qty, cost = 0, used = 0, ids = 0;
+                    for (const b of buys) { if (left <= 0) break; const t = Math.min(left, b.qty); cost += t * b.price; used += t; left -= t; ids++; }
+                    const prevAvg = e.cost / e.qty;
+                    const newCost = cost + left * prevAvg;
+                    rows.push({ item, qty: e.qty, covered: used, listings: ids, prevAvg, avg: newCost / e.qty, oldest: buys[Math.min(ids, buys.length) - 1].at });
+                    e.cost = newCost;
+                }
+                // Key lots priced from the recipe or at ask follow the materials.
+                const keyRows = [];
+                for (const [item, lots] of state.keyLots) for (const lot of lots) { if (lot.basis !== "recipe" && lot.basis !== "ask") continue; const rp = recipePriceNow(item); if (!rp) continue; keyRows.push({ item, qty: lot.qty, prev: lot.unitCost, unitCost: rp.unitCost, basis: rp.basis }); lot.unitCost = rp.unitCost; lot.basis = "recipe"; }
+                state.meta.toolashaSeeded = serverNow(); state.record.queue("meta", { key: "toolashaSeeded", value: state.meta.toolashaSeeded });
+                state.record.queue("meta", { key: "ledger", value: ledgerState() });
+                TOOLASHA.seeded = rows.length;
+                if (rows.length || keyRows.length) emit("reprice", { from: "toolasha", items: rows, keys: keyRows, listings: listings.length }, "toolasha");
+            }
+            // 2. Fills inside the record window that the script never recorded.
+            const seen = new Map();
+            for (const e of state.timeline) if ((e.kind === "buy" || e.kind === "sell") && e.listingId != null) seen.set(e.listingId, (seen.get(e.listingId) || 0) + num(e.qty));
+            const rate = taxRateNow(); let imported = 0;
+            for (const l of listings) {
+                if (l.at < start) continue;
+                const missing = l.qty - (seen.get(l.id) || 0); if (missing <= 0) continue;
+                if (l.isSell) { const gross = missing * l.price; const tax = Math.round(gross * rate); emit("sell", { listingId: l.id, item: l.item, level: l.level, qty: missing, unitPrice: l.price, gross, tax, net: gross - tax, taxBasis: "rate", imported: true, instant: false }, "toolasha", l.at); }
+                else { emit("buy", { listingId: l.id, item: l.item, level: l.level, qty: missing, unitPrice: l.price, coins: missing * l.price, imported: true, instant: false }, "toolasha", l.at); if (l.level === 0) { ledgerAdd(l.item, missing, l.price); if (ref.keyItems.has(l.item)) keyLotAdd(l.item, missing, l.price, "bought", null); } }
+                imported++;
+            }
+            TOOLASHA.imported += imported;
+            if (imported) { state.timeline.sort((a, b) => a.at - b.at); state.timelineRev++; }
+            info(`toolasha history (${reason}): ${listings.length} listings, ${TOOLASHA.seeded} items seeded, ${imported} fills imported`);
+            panel.touch();
+        })().catch(error => { warn("toolasha import failed", error); TOOLASHA.status = "failed: " + String(error && error.message || error); }).finally(() => { toolashaRunning = null; });
+        return toolashaRunning;
+    }
     async function openRecord(id) {
         try {
             const db = await openDb(id);
@@ -950,7 +1025,7 @@
             }
         }
         // Tax: the rate the game charged on the latest recorded sale, 4% until one has been recorded.
-        const taxed = sells.filter(s => n(s.gross) > 0 && s.tax != null).sort((a, b) => b.at - a.at);
+        const taxed = sells.filter(s => n(s.gross) > 0 && s.tax != null && !s.imported).sort((a, b) => b.at - a.at);
         const tax = { rate: taxed.length ? n(taxed[0].tax) / n(taxed[0].gross) : 0.04, measured: taxed.length };
         // Cash out: buys and craft coins.
         const buyBy = {}; let buyTotal = 0;
@@ -1221,6 +1296,7 @@
  <button id="mds-export">Export record (JSON)</button>
  <button id="mds-export-frames">Export raw frames</button>
  <button id="mds-prices">Refresh prices</button>
+ <button id="mds-toolasha" title="Re-price stock held at record start from your own purchases and catch up fills the script did not see">Import Toolasha history</button>
  <button id="mds-reset" class="danger">Reset record</button>
  <span class="mds-note">Newest first. Source = the game message the event came from. Consumable uses are recorded but shown only under "consume".</span>
 </div>
@@ -1253,6 +1329,7 @@
             root.querySelector("#mds-export-frames").addEventListener("click", exportFrames);
             root.querySelector("#mds-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
             root.querySelector("#mds-reset").addEventListener("click", resetRecord);
+            root.querySelector("#mds-toolasha").addEventListener("click", () => importToolasha("manual").then(() => render()));
             // Rows are held while the reader is scrolled down; they catch up at the top.
             els.wrap.addEventListener("scroll", () => { if (rowsHeld && els.wrap.scrollTop <= 8) renderRows(true); }, { passive: true });
             els.runsWrap.addEventListener("scroll", () => { if (runsHeld && els.runsWrap.scrollTop <= 8) renderRuns(true); }, { passive: true });
@@ -1393,8 +1470,8 @@
                 case "fail": return `${esc(shortAction(ev.zone))} T${ev.tier} failed on wave ${ev.waves} after ${fmtDur(ev.durationMs)}`;
                 case "stop": return `${esc(shortAction(ev.zone))} stopped at wave ${ev.waves ?? ev.waveReached ?? "?"} · ${esc(ev.reason || "")}`;
                 case "craft": return `${esc(shortAction(ev.action))} ×${(ev.outputs || []).reduce((s, o) => s + o.qty, 0)} · ${(ev.inputs || []).map(i => `${i.qty} ${it(i.item)}${i.unitCost != null ? ` @${fmtCoins(i.unitCost)}` : " @?"}`).join(", ")}${ev.coins ? ` + ${fmtCoins(ev.coins)} coins` : ""} · ${ev.unitCost != null ? `${fmtCoins(ev.unitCost)} per key` : "cost unknown"}`;
-                case "buy": return `${ev.qty}× ${it(ev.item)} ${ev.unitPrice != null ? `@ ${fmtCoins(ev.unitPrice)} = ${fmtCoins(ev.coins)}` : "price unresolved"}${ev.instant ? " · instant" : ""}`;
-                case "sell": return `${ev.qty}× ${it(ev.item)} ${ev.unitPrice != null ? `@ ${fmtCoins(ev.unitPrice)}` : ""} · net ${fmtCoins(ev.net)}${ev.tax != null ? ` (tax ${fmtCoins(ev.tax)})` : ""}${ev.instant ? " · instant" : ""}`;
+                case "buy": if (ev.imported) return `imported from Toolasha: ${ev.qty} ${it(ev.item)} @ ${fmtCoins(ev.unitPrice)} = ${fmtCoins(ev.coins)}`; return `${ev.qty}× ${it(ev.item)} ${ev.unitPrice != null ? `@ ${fmtCoins(ev.unitPrice)} = ${fmtCoins(ev.coins)}` : "price unresolved"}${ev.instant ? " · instant" : ""}`;
+                case "sell": if (ev.imported) return `imported from Toolasha: ${ev.qty} ${it(ev.item)} @ ${fmtCoins(ev.unitPrice)} = ${fmtCoins(ev.gross)} gross, tax at ${((ev.tax / ev.gross) * 100).toFixed(1)}% (rate, not measured), net ${fmtCoins(ev.net)}`; return `${ev.qty}× ${it(ev.item)} ${ev.unitPrice != null ? `@ ${fmtCoins(ev.unitPrice)}` : ""} · net ${fmtCoins(ev.net)}${ev.tax != null ? ` (tax ${fmtCoins(ev.tax)})` : ""}${ev.instant ? " · instant" : ""}`;
                 case "open": return `${ev.count}× ${it(ev.chest)} → ${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}`).join(", ")} · value at bid ${fmtCoins(ev.valueBid)}${ev.coinsGained ? ` + ${fmtCoins(ev.coinsGained)} coins` : ""}${ev.unpriced && ev.unpriced.length ? ` · unpriced: ${ev.unpriced.map(it).join(", ")}` : ""}${(ev.gains || []).some(g => g.counted || isCounted(g.item)) ? ` · counted: ${(ev.gains || []).filter(g => g.counted || isCounted(g.item)).map(g => `${g.qty} ${it(g.item)}`).join(", ")}` : ""}`;
                 case "consume": return `${ev.qty}× ${it(ev.item)}${ev.unitCost != null ? ` @ ${fmtCoins(ev.unitCost)}` : ` (purchase price known for ${ev.covered || 0} of ${ev.qty})`}`;
                 case "redeem": return `${ev.qty}× ${it(ev.token)} → ${ev.itemQty}× ${it(ev.item)}`;
@@ -1402,6 +1479,9 @@
                 case "offline": { const to = Math.min(ev.to || ev.at, ev.at); return `${fmtDur(to - (ev.from || 0))} offline (${fmtTime(ev.from)} to ${fmtTime(to)}) · ${(ev.items || []).length} item deltas · XP ${fmtCoins(xpSum(ev.xpBySkill))}`; }
                 case "chat": return `${esc(ev.m)}${ev.keyCounts ? " · " + esc(Object.entries(ev.keyCounts).map(([n, k]) => `${n} ${k}`).join(", ")) : ""}${ev.replay ? " · replayed" : ""}`;
                 case "review": return `${esc(ev.reason)}`;
+                case "reprice": return `from ${esc(ev.from)} (${ev.listings} listings): ${(ev.items || []).map(r => `${it(r.item)} ${fmtCoins(r.prevAvg)} → ${fmtCoins(r.avg)} (${r.covered} of ${r.qty} from ${r.listings} buys)`).join(", ") || "no stock matched"}${(ev.keys || []).length ? ` · keys: ${ev.keys.map(k => `${k.qty} ${it(k.item)} ${fmtCoins(k.prev)} → ${fmtCoins(k.unitCost)}`).join(", ")}` : ""}`;
+                case "keep": return `${it(ev.item)}: kept ${ev.total} for future runs`;
+                case "value": return `${ev.qty} ${it(ev.item)} valued at ${fmtCoins(ev.unitValue)} each (bid ${fmtCoins(ev.bidNow)}, at open ${fmtCoins(ev.bidAtOpen)})`;
                 default: return esc(JSON.stringify(ev).slice(0, 200));
             }
         }
@@ -1510,6 +1590,7 @@
                 els["mds-diag"].textContent = [
                     `frames heard ${state.counts.frames} · ${state.sockets} socket${state.sockets === 1 ? "" : "s"}${state.viaData ? ` · ${state.viaData} via data getter` : ""}`,
                     `game data: ${ref.ready ? Object.keys(ref.dungeons).length + " dungeons" : "not loaded"} · ${ref.source || "waiting"}${ref.version ? " · " + ref.version : ""}`,
+                    `toolasha history: ${TOOLASHA.status}${TOOLASHA.listings ? ` · ${TOOLASHA.listings} listings · ${TOOLASHA.seeded} items seeded · ${TOOLASHA.imported} fills imported` : ""}${state.meta.toolashaSeeded ? ` · seeded ${fmtTime(state.meta.toolashaSeeded)}` : ""}`,
                     `artisan: ${Object.entries(state.artisan).filter(([, a]) => a.rate > 0).map(([t, a]) => `${t.split("/").pop()} ${(a.rate * 100).toFixed(2)}% (${a.tea ? itemName(a.tea) : "?"})`).join(", ") || "none seen"}`,
                     `prices: ${prices.map ? Object.keys(prices.map).length : 0} items · ${prices.at ? "fetched " + fmtTime(prices.at) : "not fetched this session"}${prices.error ? " · " + prices.error : ""}`,
                     `record: ${state.record ? JSON.stringify(state.record.stats()) : "none"} · timeline ${state.timeline.length} events · device ${DEVICE} · v${VERSION}`,
@@ -1551,6 +1632,6 @@
     const boot = () => { panel.refresh(); };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { state, ref, prices, version: VERSION, panel, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { state, ref, prices, version: VERSION, panel, toolasha: TOOLASHA, importToolasha, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();
