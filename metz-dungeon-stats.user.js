@@ -412,11 +412,13 @@
         const run = state.run; if (!run) return null;
         run.endAt = at || serverNow(); run.result = result; Object.assign(run, fields || {});
         run.durationMs = run.endAt - run.startAt;
-        run.xpBySkill = xpDelta(run.xpStart || {}, state.lifetimeXp);
+        // A run the script joined at its very end (restarted mid-run, no battle seen) has no XP to report, not zero.
+        run.xpBySkill = run.partial && !run.battles ? null : xpDelta(run.xpStart || {}, state.lifetimeXp);
+        run.noBattleSeen = !run.battles;
         run.deaths = run.deathsTotal != null && run.deathsAtStart != null ? Math.max(0, run.deathsTotal - run.deathsAtStart) : null;
         delete run.xpStart;
         saveRun(run); state.run = null;
-        emit(result, { runId: run.id, zone: run.zone, tier: run.tier, battleId: run.battleId, waves: run.waves, durationMs: run.durationMs, chests: run.chests, keysCharged: run.keysUsed, keyCost: run.keyCost || null, xpBySkill: run.xpBySkill, deaths: run.deaths, deathsTotal: run.deathsTotal, partial: run.partial }, src, run.endAt);
+        emit(result, { runId: run.id, zone: run.zone, tier: run.tier, battleId: run.battleId, waves: run.waves, durationMs: run.durationMs, chests: run.chests, keysCharged: run.keysUsed, keyCost: run.keyCost || null, noBattleSeen: !run.battles, xpBySkill: run.xpBySkill, deaths: run.deaths, deathsTotal: run.deathsTotal, partial: run.partial }, src, run.endAt);
         return run;
     }
 
@@ -443,7 +445,7 @@
             openRun(zone, tier, battleId, at, party, true, "new_battle");
         }
         const run = state.run;
-        if (run) { run.waves = Math.max(run.waves, wave); if (self) { const d = num(self.deathCount); if (run.deathsAtStart == null) run.deathsAtStart = d; run.deathsTotal = d; } if (prev && prev.battleId === battleId && wave > 1) saveRun(run); }
+        if (run) { run.battles = (run.battles || 0) + 1; run.waves = Math.max(run.waves, wave); if (self) { const d = num(self.deathCount); if (run.deathsAtStart == null) run.deathsAtStart = d; run.deathsTotal = d; } if (prev && prev.battleId === battleId && wave > 1) saveRun(run); }
     }
 
     // The current combat action from the queue (actions_updated / action_completed keep it current).
@@ -472,7 +474,8 @@
                 let keyCost = null;
                 if (keysCharged) { const k = keyLotTake(d.keyItem, keysCharged); keyCost = { unitCost: k.unitCost, basis: k.basis }; }
                 if (!state.run) openRun(a.actionHrid, a.difficultyTier, state.lastBattle && state.lastBattle.battleId, at, [], true, "action_completed");
-                state.run.waves = Math.max(state.run.waves, wave);
+                // A clear means every wave was fought, whether or not the script saw them (it may have started mid-run).
+                state.run.waves = Math.max(state.run.waves, wave, num(d.maxWaves));
                 closeRun("clear", { chests, keysUsed: keysCharged, keyCost, serverEnd: parseServerTime(a.updatedAt) ? at : null }, "action_completed", at);
                 if (chestDiffs.length === 0) review("clear seen by wave count but no chest row in the message", { zone: a.actionHrid, wave, diffs }, "action_completed");
             } else if (a.isDone && state.run) {
@@ -1029,8 +1032,12 @@
             else { run.result = "unknown"; run.gapTo = null; run.note = "no end seen"; }
             if (liveEnd) {
                 if (liveEnd.kind === "clear") run.clearAt = liveEnd.at;
-                if (liveEnd.waves != null) run.waves = liveEnd.waves;
-                run.chests = Array.isArray(liveEnd.chests) ? liveEnd.chests : null; run.deaths = deathsOf.get(liveEnd.id) ?? null; run.xpBySkill = liveEnd.xpBySkill || null; run.keyCost = liveEnd.keyCost || null;
+                // A clear is every wave even when the script saw none of them (it started mid-run); XP and deaths it did not
+                // see are unknown, not zero.
+                if (liveEnd.waves > 0) run.waves = liveEnd.waves; else if (liveEnd.kind === "clear" && C.maxWavesOf) run.waves = C.maxWavesOf(run.zone) || null;
+                const blind = !!liveEnd.noBattleSeen || (liveEnd.kind === "clear" && !(liveEnd.waves > 0));
+                run.chests = Array.isArray(liveEnd.chests) ? liveEnd.chests : null; run.deaths = blind ? null : (deathsOf.get(liveEnd.id) ?? null); run.xpBySkill = blind || !liveEnd.xpBySkill || !Object.keys(liveEnd.xpBySkill).length ? null : liveEnd.xpBySkill; run.keyCost = liveEnd.keyCost || null;
+                if (blind) run.note = "script was not running for the battles of this run; waves, deaths and XP not seen";
                 if (liveEnd.keysCharged != null) { run.keysCharged = n(liveEnd.keysCharged); run.keysSrc = "clear message"; }
             }
             if (run.result === "clear" && run.keysCharged == null && run.keysBefore != null && run.keysAfter != null && end) {
@@ -1358,7 +1365,7 @@
             if (!money || moneyRev !== state.timelineRev || moneyPrices !== prices.at || Date.now() - moneyAt > 5000) { money = deriveMoney(state.timeline, moneyCtx()); moneyAt = Date.now(); moneyRev = state.timelineRev; moneyPrices = prices.at; }
             return money;
         }
-        const deriveCfg = () => ({ selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null });
+        const deriveCfg = () => ({ selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null });
         function getDerived() {
             if (!derived || derivedRev !== state.timelineRev || Date.now() - derivedAt > 30000) { derived = derive(state.timeline, serverNow(), deriveCfg()); derivedAt = Date.now(); derivedRev = state.timelineRev; }
             return derived;
@@ -1824,6 +1831,6 @@
     const boot = () => { panel.refresh(); };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { state, ref, prices, version: VERSION, panel, toolasha: TOOLASHA, importToolasha, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { state, ref, prices, version: VERSION, panel, toolasha: TOOLASHA, importToolasha, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();
