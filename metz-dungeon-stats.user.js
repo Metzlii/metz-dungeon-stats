@@ -228,6 +228,7 @@
         lastChatAt: 0,
         chatSeen: new Set(),            // "id:<chat id>" and "tm:<t>|<m>" of recorded party system messages (replay dedupe)
         timeline: [], timelineRev: 0,   // every non-consume event, oldest first: what derive() reads
+        consumeTotals: new Map(),       // itemHrid -> {qty, cost, unknownQty} over every consume event (they stay out of the timeline)
         ledger: new Map(),              // itemHrid -> {qty, cost} running purchase ledger (average cost)
         keyLots: new Map(),             // keyItem -> [{qty, unitCost, basis, craftId}]
         counts: { frames: 0, byType: new Map(), events: 0 },
@@ -241,12 +242,13 @@
     // Events
     // ---------------------------------------------------------------------------------------------------------------
     const listeners = new Set();
+    function addConsume(ev) { const t = state.consumeTotals.get(ev.item) || { qty: 0, cost: 0, unknownQty: 0 }; t.qty += num(ev.qty); if (ev.unitCost != null) t.cost += ev.unitCost * num(ev.qty); else t.unknownQty += num(ev.qty); state.consumeTotals.set(ev.item, t); }
     function emit(kind, fields, src, at, clockKind) {
         const ev = { id: newId(), kind, at: at || serverNow(), clock: clockKind || (at ? "server" : (clock.known ? "local+offset" : "local")), src: src || null, v: 1, ...fields };
         if (state.record) state.record.queue("events", ev);
         state.counts.events++;
         state.events.unshift(ev); if (state.events.length > 400) state.events.length = 400;
-        if (kind !== "consume") { state.timeline.push(ev); state.timelineRev++; }
+        if (kind !== "consume") { state.timeline.push(ev); state.timelineRev++; } else addConsume(ev);
         for (const l of listeners) { try { l(ev); } catch (_e) { /* a panel error never stops recording */ } }
         return ev;
     }
@@ -316,6 +318,8 @@
     }
     function held(itemHrid, level = 0) { let n = 0; for (const r of state.inventory.values()) if (r.itemHrid === itemHrid && r.itemLocationHrid === INV && r.enhancementLevel === level) n += r.count; return n; }
     function coins() { return held("/items/coin", 0); }
+    // Quantity sitting on your own open sell orders (left the bag, not sold yet).
+    function listedQty(itemHrid, level = 0) { let n = 0; for (const l of state.listings.values()) if (l.isSell && l.itemHrid === itemHrid && l.level === level && !/cancel|filled|expired/i.test(String(l.status || "")) && l.orderQuantity > l.filledQuantity) n += l.orderQuantity - l.filledQuantity; return n; }
 
     // ---------------------------------------------------------------------------------------------------------------
     // Purchase ledger (running average per item) and key lots (first crafted, first used)
@@ -376,7 +380,7 @@
         run.deaths = run.deathsTotal != null && run.deathsAtStart != null ? Math.max(0, run.deathsTotal - run.deathsAtStart) : null;
         delete run.xpStart;
         saveRun(run); state.run = null;
-        emit(result, { runId: run.id, zone: run.zone, tier: run.tier, battleId: run.battleId, waves: run.waves, durationMs: run.durationMs, chests: run.chests, keysCharged: run.keysUsed, xpBySkill: run.xpBySkill, deaths: run.deaths, deathsTotal: run.deathsTotal, partial: run.partial }, src, run.endAt);
+        emit(result, { runId: run.id, zone: run.zone, tier: run.tier, battleId: run.battleId, waves: run.waves, durationMs: run.durationMs, chests: run.chests, keysCharged: run.keysUsed, keyCost: run.keyCost || null, xpBySkill: run.xpBySkill, deaths: run.deaths, deathsTotal: run.deathsTotal, partial: run.partial }, src, run.endAt);
         return run;
     }
 
@@ -620,7 +624,9 @@
         const from = parseServerTime(ch.lastOfflineTime), loginAt = serverTs || serverNow(), horizon = parseServerTime(ch.inactiveTime);
         const to = horizon && horizon < loginAt ? horizon : loginAt;
         if ((offItems && offItems.length) || (offSkills && offSkills.length && from && to - from >= 60000)) {
-            emit("offline", { from, to, loginAt, horizon, items: offItems ? offItems.map(r => ({ item: r.itemHrid, level: num(r.enhancementLevel), delta: num(r.offlineCount), raw: r.count })) : [], xpBySkill: offSkills ? Object.fromEntries(offSkills.map(r => [r.skillHrid, num(r.offlineExperience)])) : {}, keys: Object.keys(m).filter(k => /offline/i.test(k)) }, "init_character_data");
+            // Consumables used while away leave the purchase ledger here, at the average they were bought at.
+            const offRows = offItems ? offItems.map(r => { const row = { item: r.itemHrid, level: num(r.enhancementLevel), delta: num(r.offlineCount), raw: r.count }; if (row.delta < 0 && isConsumable(row.item)) { const t = ledgerTake(row.item, -row.delta); row.unitCost = t.covered === -row.delta ? t.avg : null; row.covered = t.covered; } return row; }) : [];
+            emit("offline", { from, to, loginAt, horizon, items: offRows, xpBySkill: offSkills ? Object.fromEntries(offSkills.map(r => [r.skillHrid, num(r.offlineExperience)])) : {}, keys: Object.keys(m).filter(k => /offline/i.test(k)) }, "init_character_data");
         }
         // Party chat replay.
         const chat = m.partyChatHistory || (m.chatHistoryByChannelMap && m.chatHistoryByChannelMap["/chat_channel_types/party"]);
@@ -632,7 +638,7 @@
     function ledgerState() { return { ledger: [...state.ledger.entries()], keyLots: [...state.keyLots.entries()], keyAverages: [...keyAverages.entries()], listings: [...state.listings.values()], lifetimeXp: state.lifetimeXp }; }
     function restoreLedger(v) { if (!isObj(v)) return; state.ledger = new Map(v.ledger || []); state.keyLots = new Map(v.keyLots || []); for (const [k, e] of (v.keyAverages || [])) keyAverages.set(k, e); if (Array.isArray(v.listings)) for (const l of v.listings) state.listings.set(l.id, l); }
 
-    const TIMELINE_KINDS = ["start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "redeem", "baseline", "offline", "chat", "review", "value", "note"];
+    const TIMELINE_KINDS = ["start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "redeem", "baseline", "offline", "chat", "review", "value", "keep", "note"];
     async function openRecord(id) {
         try {
             const db = await openDb(id);
@@ -645,6 +651,7 @@
             state.events = (await state.record.getAll("events", "at", null, "prev", 200));
             const perKind = await Promise.all(TIMELINE_KINDS.map(k => state.record.getAll("events", "kind", IDBKeyRange.only(k))));
             state.timeline = perKind.flat().sort((a, b) => a.at - b.at); state.timelineRev++;
+            state.consumeTotals = new Map(); for (const c of await state.record.getAll("events", "kind", IDBKeyRange.only("consume"))) addConsume(c);
             state.counts.events = await state.record.count("events");
             state.run = null;
             const openRuns = (await state.record.getAll("runs")).filter(r => r.result === "open");
@@ -883,6 +890,148 @@
     // </derive>
 
     // ---------------------------------------------------------------------------------------------------------------
+    // Money: spent, loot value at open, sold, net, and the per-item rows behind them. A pure function of the recorded
+    // events plus what the bag holds now, so test/money.test.mjs can run it over an exported record.
+    // ---------------------------------------------------------------------------------------------------------------
+    // <money>
+    function deriveMoney(events, X) {
+        const n = v => (typeof v === "number" && isFinite(v)) ? v : 0;
+        const ws = X.recordStart || 0;
+        const bump = (o, k, f) => { const e = o[k] || (o[k] = f()); return e; };
+        // Old records hold an instant order twice (once from the item rows, once from the listing); the listing wins.
+        const listed = events.filter(e => (e.kind === "buy" || e.kind === "sell") && e.listingId != null);
+        const dup = e => (e.kind === "buy" || e.kind === "sell") && e.listingId == null && listed.some(l => l.kind === e.kind && l.item === e.item && l.qty === e.qty && Math.abs(l.at - e.at) < 20000);
+        const buys = [], sells = [], crafts = [], opens = [], redeems = [], offline = [], clears = [], keeps = [], values = [];
+        let baseline = null;
+        for (const e of events) {
+            if (e.kind === "baseline") { baseline = e; continue; }
+            if (e.at < ws || dup(e)) continue;
+            switch (e.kind) {
+                case "buy": buys.push(e); break; case "sell": sells.push(e); break; case "craft": crafts.push(e); break;
+                case "open": opens.push(e); break; case "redeem": redeems.push(e); break; case "offline": offline.push(e); break;
+                case "clear": clears.push(e); break; case "keep": keeps.push(e); break; case "value": values.push(e); break;
+                default: break;
+            }
+        }
+        // Tax: the rate the game charged on the latest recorded sale, 4% until one has been recorded.
+        const taxed = sells.filter(s => n(s.gross) > 0 && s.tax != null).sort((a, b) => b.at - a.at);
+        const tax = { rate: taxed.length ? n(taxed[0].tax) / n(taxed[0].gross) : 0.04, measured: taxed.length };
+        // Cash out: buys and craft coins.
+        const buyBy = {}; let buyTotal = 0;
+        for (const b of buys) { const r = bump(buyBy, b.item, () => ({ qty: 0, coins: 0 })); r.qty += n(b.qty); r.coins += n(b.coins); buyTotal += n(b.coins); }
+        const craftCoins = crafts.reduce((s, c) => s + n(c.coins), 0);
+        const spent = { buys: buyTotal, craftCoins, total: buyTotal + craftCoins, buyBy };
+        // Chests opened: value at bid when opened, coins, the key each opening consumed, items only counted.
+        const gained = {}, chestBy = {};
+        for (const o of opens) {
+            const cb = bump(chestBy, o.chest, () => ({ opened: 0, value: 0, coins: 0, keyCost: 0, keyBasis: {}, counted: {}, keyItem: o.keyItem || null }));
+            const cnt = n(o.count) || 1; cb.opened += cnt; cb.coins += n(o.coinsGained);
+            if (o.keyCost && o.keyCost.unitCost != null) { cb.keyCost += o.keyCost.unitCost * cnt; cb.keyBasis[o.keyCost.basis || "?"] = (cb.keyBasis[o.keyCost.basis || "?"] || 0) + cnt; }
+            let v = 0;
+            for (const g of (o.gains || [])) {
+                if (g.item === "/items/coin") continue;
+                if (g.counted || X.isCounted(g.item)) { cb.counted[g.item] = (cb.counted[g.item] || 0) + n(g.qty); continue; }
+                const gi = bump(gained, g.item, () => ({ qty: 0, value: 0, priced: 0, chests: {} }));
+                gi.qty += n(g.qty); gi.chests[o.chest] = (gi.chests[o.chest] || 0) + n(g.qty);
+                if (n(g.bid) > 0) { gi.value += g.bid * n(g.qty); gi.priced += n(g.qty); v += g.bid * n(g.qty); }
+            }
+            cb.value += v;
+        }
+        // A container that came out of a chest and was opened later (Large Treasure Chest) is worth its contents, not its
+        // own bid as well: whatever bid it carried when gained comes off the total once it is opened.
+        let revalued = 0;
+        for (const [chest, cb] of Object.entries(chestBy)) { const gi = gained[chest]; if (!gi) continue; const avgBid = gi.priced ? gi.value / gi.priced : 0; const opened = Math.min(cb.opened, gi.qty); gi.opened = cb.opened; revalued += avgBid * opened; }
+        const chestValue = Object.values(chestBy).reduce((s, c) => s + c.value, 0), chestCoins = Object.values(chestBy).reduce((s, c) => s + c.coins, 0);
+        const loot = { atOpen: chestValue - revalued, atOpenRaw: chestValue, revalued, coins: chestCoins, opened: Object.values(chestBy).reduce((s, c) => s + c.opened, 0) };
+        // Redemptions: tokens out, items in. What came in is dungeon loot too.
+        const tokens = {};
+        for (const [item, gi] of Object.entries(gained)) if (X.isToken(item)) { const t = bump(tokens, item, () => ({ gained: 0, redeemed: 0, received: {} })); t.gained += gi.qty; }
+        for (const r of redeems) { const t = bump(tokens, r.token, () => ({ gained: 0, redeemed: 0, received: {} })); t.redeemed += n(r.qty); t.received[r.item] = (t.received[r.item] || 0) + n(r.itemQty); const gi = bump(gained, r.item, () => ({ qty: 0, value: 0, priced: 0, chests: {} })); gi.redeemed = (gi.redeemed || 0) + n(r.itemQty); if (n(r.bid) > 0) { gi.value += r.bid * n(r.itemQty); gi.priced += n(r.itemQty); } }
+        for (const [k, t] of Object.entries(tokens)) t.held = X.held(k);
+        // Sold: loot (anything the record saw come out of a chest or a redemption) against everything else.
+        const lootItems = new Set(Object.keys(gained));
+        const sellBy = {}; const sold = { loot: { qty: 0, gross: 0, tax: 0, net: 0 }, other: { qty: 0, gross: 0, tax: 0, net: 0 } };
+        for (const s of sells) {
+            const r = bump(sellBy, s.item, () => ({ qty: 0, gross: 0, tax: 0, net: 0, loot: lootItems.has(s.item) }));
+            const net = s.net != null ? n(s.net) : n(s.gross) * (1 - tax.rate);
+            r.qty += n(s.qty); r.gross += n(s.gross); r.tax += n(s.tax); r.net += net;
+            const b = r.loot ? sold.loot : sold.other; b.qty += n(s.qty); b.gross += n(s.gross); b.tax += n(s.tax); b.net += net;
+        }
+        // Used in runs, at ledger cost: entry keys (live clears carry the lot cost; offline and older clears fall back
+        // to the craft average, then the ask), chest keys at the opening, consumables (live uses plus offline deltas).
+        const keysUsed = {};
+        for (const c of clears) { const k = X.keyOf(c.zone); if (!k || !n(c.keysCharged)) continue; const r = bump(keysUsed, k, () => ({ qty: 0, cost: 0, exact: 0, fallback: 0 })); r.qty += c.keysCharged; if (c.keyCost && c.keyCost.unitCost != null) { r.cost += c.keyCost.unitCost * c.keysCharged; r.exact += c.keysCharged; } else r.fallback += c.keysCharged; }
+        for (const o of offline) for (const it of (o.items || [])) if (X.isKey(it.item) && n(it.delta) < 0) { const r = bump(keysUsed, it.item, () => ({ qty: 0, cost: 0, exact: 0, fallback: 0 })); r.qty += -it.delta; r.fallback += -it.delta; }
+        for (const [chest, cb] of Object.entries(chestBy)) if (cb.keyItem) { const r = bump(keysUsed, cb.keyItem, () => ({ qty: 0, cost: 0, exact: 0, fallback: 0 })); r.qty += cb.opened; const exact = Object.entries(cb.keyBasis).filter(([b]) => b !== "unknown").reduce((s, [, q]) => s + q, 0); r.cost += cb.keyCost; r.exact += exact; r.fallback += cb.opened - exact; }
+        for (const [k, r] of Object.entries(keysUsed)) { if (r.fallback) { const u = X.keyAvg(k); const a = u != null ? u : X.askOf(k); r.fallbackBasis = u != null ? "craft average" : (a != null ? "ask now" : "unknown"); if (a != null) r.cost += a * r.fallback; else r.unknown = r.fallback; } }
+        const consUsed = {};
+        for (const [item, t] of (X.consumeTotals || new Map())) { const r = bump(consUsed, item, () => ({ qty: 0, cost: 0, unknown: 0, offline: 0 })); r.qty += t.qty; r.cost += t.cost; r.unknown += t.unknownQty; }
+        for (const o of offline) for (const it of (o.items || [])) if (X.isConsumable(it.item) && n(it.delta) < 0) { const r = bump(consUsed, it.item, () => ({ qty: 0, cost: 0, unknown: 0, offline: 0 })); const q = -it.delta; r.qty += q; r.offline += q; const u = it.unitCost != null ? it.unitCost : X.avgOf(it.item); if (u != null) r.cost += u * q; else r.unknown += q; }
+        const used = { keys: keysUsed, consumables: consUsed, keyCost: Object.values(keysUsed).reduce((s, r) => s + r.cost, 0), consumableCost: Object.values(consUsed).reduce((s, r) => s + r.cost, 0) };
+        used.total = used.keyCost + used.consumableCost;
+        // Per-item loot rows: what came in, what left, what is still here, what is unaccounted for.
+        const keptBy = {}; for (const k of keeps) keptBy[k.item] = (keptBy[k.item] || 0) + n(k.qty);
+        const valuedBy = {}; for (const v of values) { const r = bump(valuedBy, v.item, () => ({ qty: 0, value: 0 })); r.qty += n(v.qty); r.value += n(v.qty) * n(v.unitValue); }
+        const rows = [];
+        for (const [item, gi] of Object.entries(gained)) {
+            if (X.isToken(item)) continue;
+            const s = sellBy[item] || { qty: 0, net: 0 };
+            const held = X.held(item), onMarket = X.listed(item), kept = keptBy[item] || 0, opened = gi.opened || 0;
+            const gainedQty = gi.qty + (gi.redeemed || 0);
+            const missing = Math.max(0, gainedQty - s.qty - opened - held - onMarket - kept);
+            const bidNow = X.bidOf(item), bidAtOpen = gi.priced ? gi.value / gi.priced : null;
+            // An accepted valuation covers at most what is still missing (a later Keep or sale shrinks it).
+            const acc = valuedBy[item] || { qty: 0, value: 0 };
+            const accepted = { qty: Math.min(acc.qty, missing), value: acc.qty ? acc.value * Math.min(acc.qty, missing) / acc.qty : 0 };
+            const remaining = Math.max(0, missing - accepted.qty);
+            const drift = bidNow != null && bidAtOpen ? Math.abs(bidNow - bidAtOpen) / bidAtOpen : null;
+            const review = remaining > 0 && (bidNow == null || (drift != null && drift > (X.reviewPct != null ? X.reviewPct : 0.5)));
+            const netBid = bidNow != null ? bidNow * (1 - tax.rate) : null;
+            rows.push({
+                item, gained: gainedQty, fromChests: gi.qty, redeemed: gi.redeemed || 0, opened, sold: s.qty, soldNet: s.net, held, listed: onMarket, kept, missing,
+                bidNow, bidAtOpen, heldValue: bidNow != null ? (held + onMarket) * bidNow : null, valueAtOpen: gi.value, unpricedAtOpen: gi.qty - gi.priced,
+                acceptedQty: accepted.qty, acceptedValue: accepted.value, remaining, netBid, drift, review,
+                missingValue: accepted.value + (!review && netBid != null ? remaining * netBid : 0),
+                kind: X.isKey(item) ? "key" : X.isChest(item) ? "chest" : X.isOpenable(item) ? "container" : X.isTradable(item) ? "loot" : "untradable",
+            });
+        }
+        rows.sort((a, b) => (b.valueAtOpen + b.soldNet) - (a.valueAtOpen + a.soldNet));
+        const heldLoot = rows.filter(r => r.kind === "loot").reduce((s, r) => s + n(r.heldValue), 0);
+        const missingLoot = rows.filter(r => r.kind === "loot" || r.kind === "container").reduce((s, r) => s + r.missingValue, 0);
+        const reviewRows = rows.filter(r => r.review).length;
+        // Supplies: keys, consumables and key materials still on hand, at ledger cost.
+        const keyItems = new Set([...Object.keys(keysUsed), ...crafts.flatMap(c => (c.outputs || []).map(o => o.item)), ...Object.keys(buyBy).filter(X.isKey), ...((baseline && baseline.keys) || []).map(k => k.item), ...X.heldKeys()]);
+        const keys = {};
+        for (const k of keyItems) {
+            const crafted = crafts.reduce((s, c) => s + (c.outputs || []).filter(o => o.item === k).reduce((a, o) => a + n(o.qty), 0), 0);
+            const bought = buyBy[k] ? buyBy[k].qty : 0, boughtCoins = buyBy[k] ? buyBy[k].coins : 0;
+            const u = keysUsed[k] || { qty: 0, cost: 0, exact: 0, fallback: 0 };
+            const avg = X.keyAvg(k), ask = X.askOf(k);
+            const base = ((baseline && baseline.keys) || []).find(b => b.item === k);
+            keys[k] = { crafted, bought, boughtAvg: bought ? boughtCoins / bought : null, used: u.qty, usedCost: u.cost, usedExact: u.exact, usedFallback: u.fallback, fallbackBasis: u.fallbackBasis || null, held: X.held(k), costPerKey: avg != null ? avg : ask, costBasis: avg != null ? "craft average" : (ask != null ? "ask now" : "unknown"), craftAvg: avg, baseline: base ? base.qty : 0, dropped: gained[k] ? gained[k].qty : 0 };
+        }
+        const materials = {};
+        for (const [action, recipe] of Object.entries(X.keyRecipes || {})) {
+            for (const inp of recipe.inputs) {
+                if (inp.item === "/items/coin") continue;
+                const m = bump(materials, inp.item, () => ({ item: inp.item, recipes: [], perCraft: n(inp.qty), bought: 0, boughtCoins: 0, consumed: 0, consumedCost: 0, held: X.held(inp.item), avg: X.avgOf(inp.item), baseline: 0 }));
+                m.recipes.push(action);
+                if (buyBy[inp.item]) { m.bought = buyBy[inp.item].qty; m.boughtCoins = buyBy[inp.item].coins; }
+                const base = ((baseline && baseline.items) || []).find(b => b.item === inp.item); if (base) m.baseline = base.qty;
+            }
+        }
+        for (const c of crafts) for (const i of (c.inputs || [])) { const m = materials[i.item]; if (!m) continue; m.consumed += n(i.qty); if (i.unitCost != null) m.consumedCost += i.unitCost * n(i.covered != null ? i.covered : i.qty); }
+        const consumables = {};
+        const consNames = new Set([...Object.keys(consUsed), ...((baseline && baseline.items) || []).filter(b => b.kind === "consumable").map(b => b.item), ...Object.keys(buyBy).filter(X.isConsumable)]);
+        for (const item of consNames) { const u = consUsed[item] || { qty: 0, cost: 0, unknown: 0, offline: 0 }; consumables[item] = { used: u.qty, usedCost: u.cost, unknown: u.unknown, offline: u.offline, held: X.held(item), avg: X.avgOf(item), bought: buyBy[item] ? buyBy[item].qty : 0 }; }
+        const keptRows = Object.entries(keptBy).filter(([, q]) => q > 0).map(([item, qty]) => ({ item, qty, held: X.held(item), bidNow: X.bidOf(item) }));
+        const net = sold.loot.net + loot.coins - spent.total;
+        return { tax, spent, loot, sold, sellBy, used, net, heldLoot, missingLoot, reviewRows, rows, tokens, chests: chestBy, keys, materials, consumables, kept: keptRows, counts: { buys: buys.length, sells: sells.length, crafts: crafts.length, opens: opens.length, redeems: redeems.length, dropped: events.filter(dup).length } };
+    }
+    // </money>
+
+
+    // ---------------------------------------------------------------------------------------------------------------
     // Panel: Overview, Runs, Data. Docked as a "Dungeon Stats" tab in the game's Combat tab strip when that strip is on
     // screen; a small floating button opens it anywhere else.
     // ---------------------------------------------------------------------------------------------------------------
@@ -925,6 +1074,11 @@
 #mds-root tr.cancelled td.k,#mds-root tr.offline td{color:#b9a9d6}
 #mds-root tr.offline td{font-style:italic}
 #mds-root tr.open td.k{color:#ffcf7a}
+#mds-root h4{margin:12px 0 6px;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#c0acd9}
+#mds-root .mds-pane h4:first-child{margin-top:0}
+#mds-root td small{display:block;color:#b9a9d6;font-size:10px}
+#mds-root button.mds-act{background:rgba(44,33,64,.8);border:1px solid rgba(190,160,255,.25);color:#e6ddf5;border-radius:6px;padding:2px 7px;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
+#mds-root .mds-wrap-chests{max-height:420px}
 #mds-toggle[hidden]{display:none}
 #mds-root.docked{position:static;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;backdrop-filter:none;margin:0}
 #mds-root.docked .mds-head .mds-x{display:none}
@@ -941,7 +1095,21 @@
         const els = {};
         let derived = null, derivedAt = 0, derivedRev = -1;
         const KINDS = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
-        const TABS = [["overview", "Overview"], ["runs", "Runs"], ["data", "Data"]];
+        const TABS = [["overview", "Overview"], ["runs", "Runs"], ["keys", "Keys"], ["loot", "Loot"], ["chests", "Chests"], ["data", "Data"]];
+        let money = null, moneyAt = 0, moneyRev = -1, moneyPrices = 0;
+        const isToken = h => /_token$/.test(h);
+        const moneyCtx = () => ({
+            recordStart: state.meta.recordStart || 0, reviewPct: 0.5,
+            isCounted, isKey: h => ref.keyItems.has(h), isChest: h => !!ref.chestItems[h], isConsumable, isToken,
+            isOpenable: h => !!(ref.items[h] && ref.items[h].openable), isTradable: h => !(ref.items[h] && ref.items[h].tradable === false),
+            held: h => held(h, 0), listed: h => listedQty(h, 0), bidOf, askOf, avgOf: ledgerAvg, keyAvg: keyAverage,
+            keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, keyRecipes: ref.keyActions, consumeTotals: state.consumeTotals,
+            heldKeys: () => [...state.inventory.values()].filter(r => r.itemLocationHrid === INV && ref.keyItems.has(r.itemHrid)).map(r => r.itemHrid),
+        });
+        function getMoney() {
+            if (!money || moneyRev !== state.timelineRev || moneyPrices !== prices.at || Date.now() - moneyAt > 5000) { money = deriveMoney(state.timeline, moneyCtx()); moneyAt = Date.now(); moneyRev = state.timelineRev; moneyPrices = prices.at; }
+            return money;
+        }
         const deriveCfg = () => ({ selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null });
         function getDerived() {
             if (!derived || derivedRev !== state.timelineRev || Date.now() - derivedAt > 30000) { derived = derive(state.timeline, serverNow(), deriveCfg()); derivedAt = Date.now(); derivedRev = state.timelineRev; }
@@ -966,6 +1134,28 @@
  <div class="mds-wrap mds-wrap-runs"><table><thead><tr><th>Start</th><th>Result</th><th>Run time</th><th>Waves</th><th>Chests</th><th>Keys</th><th>Deaths</th><th>XP</th><th>Seen by</th></tr></thead><tbody id="mds-runs"></tbody></table></div>
  <p class="mds-note" id="mds-runsnote"></p>
 </div>
+<div class="mds-pane" data-pane="keys" hidden>
+ <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Held</th><th>Crafted</th><th>Bought</th><th>Dropped</th><th>Used</th><th>Cost per key</th><th>Used at cost</th><th>At start</th></tr></thead><tbody id="mds-keys"></tbody></table></div>
+ <h4>Materials</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Material</th><th>Recipe</th><th>Bought</th><th>Avg price</th><th>Bought total</th><th>Used by crafts</th><th>Held</th><th>At start</th></tr></thead><tbody id="mds-mats"></tbody></table></div>
+ <p class="mds-note" id="mds-keysnote"></p>
+</div>
+<div class="mds-pane" data-pane="loot" hidden>
+ <h4>Loot to sell</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Gained</th><th>Sold</th><th>Sold net</th><th>Held</th><th>Listed</th><th>Kept</th><th>Held at bid</th><th></th></tr></thead><tbody id="mds-loot"></tbody></table></div>
+ <h4>Dungeon tokens</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Token</th><th>Gained</th><th>Redeemed</th><th>Received</th><th>Held</th></tr></thead><tbody id="mds-tokens"></tbody></table></div>
+ <h4>Supplies kept for future runs</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Kind</th><th>Held</th><th>Ledger cost</th><th>Held at cost</th><th>Used in the record</th></tr></thead><tbody id="mds-supplies"></tbody></table></div>
+ <h4>Loot no longer held</h4>
+ <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Missing</th><th>Bid at open</th><th>Bid now</th><th>Value (net of tax)</th><th>Status</th><th></th></tr></thead><tbody id="mds-missing"></tbody></table></div>
+ <p class="mds-note" id="mds-lootnote"></p>
+</div>
+<div class="mds-pane" data-pane="chests" hidden>
+ <div class="mds-cards" id="mds-chestcards"></div>
+ <div class="mds-wrap mds-wrap-chests"><table><thead><tr><th>Time</th><th>Chest</th><th>#</th><th>Contents</th><th>Value at bid</th><th>Coins</th><th>Key cost</th></tr></thead><tbody id="mds-chests"></tbody></table></div>
+ <p class="mds-note" id="mds-chestsnote"></p>
+</div>
 <div class="mds-pane" data-pane="data" hidden>
 <div class="mds-bar">
  <label>Show <select id="mds-filter">${KINDS.map(k => `<option value="${k}">${k}</option>`).join("")}</select></label>
@@ -979,7 +1169,23 @@
 <details><summary>Diagnostics</summary><pre id="mds-diag"></pre></details>
 </div>
 </div>`;
-            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-tbody", "mds-diag", "mds-filter"]) els[id] = root.querySelector("#" + id);
+            for (const id of ["mds-status", "mds-cards", "mds-ovnote", "mds-runs", "mds-runsnote", "mds-tbody", "mds-diag", "mds-filter", "mds-keys", "mds-mats", "mds-keysnote", "mds-loot", "mds-tokens", "mds-supplies", "mds-missing", "mds-lootnote", "mds-chestcards", "mds-chests", "mds-chestsnote"]) els[id] = root.querySelector("#" + id);
+            // Row actions: Keep N (moves loot into supplies), Accept (freezes a valuation of loot no longer held).
+            root.addEventListener("click", e => {
+                const b = e.target.closest("button[data-act]"); if (!b) return;
+                const item = b.dataset.item;
+                if (b.dataset.act === "keep") {
+                    const cur = Number(b.dataset.kept) || 0;
+                    const v = W.prompt(`Keep how many ${itemName(item)} for future runs? (now ${cur}; 0 clears it)`, String(cur || held(item, 0)));
+                    if (v == null) return; const q = Math.max(0, Math.floor(Number(v))); if (!isFinite(q)) return;
+                    emit("keep", { item, qty: q - cur, total: q }, "panel");
+                } else if (b.dataset.act === "accept") {
+                    const qty = Number(b.dataset.qty), unitValue = Number(b.dataset.unit);
+                    if (!(qty > 0) || !(unitValue >= 0)) return;
+                    emit("value", { item, qty, unitValue, bidNow: Number(b.dataset.bid) || null, bidAtOpen: Number(b.dataset.open) || null, taxRate: Number(b.dataset.tax) || null }, "panel");
+                }
+                render();
+            });
             els.wrap = root.querySelector(".mds-pane[data-pane=data] .mds-wrap"); els.runsWrap = root.querySelector(".mds-wrap-runs");
             root.querySelector(".mds-x").addEventListener("click", () => setOpen(false));
             root.querySelector(".mds-tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (b) setTab(b.dataset.tab); });
@@ -1163,8 +1369,54 @@
             ];
             for (const [h, c] of Object.entries(S.counted || {})) if (c.qty > 0) cards.push(card(it(h) + "s", c.qty, Object.entries(c.byChest).filter(([, b]) => b.qty > 0).map(([chest, b]) => `${b.opened ? (b.qty / b.opened).toFixed(2) : "?"} per ${it(chest)}`).join(" · ")));
             if (S.unknownMs > 0) cards.push(card("Unaccounted", fmtHm(S.unknownMs), "runs whose end the chat ledger does not show"));
+            const M = getMoney();
+            cards.push(
+                card("Spent", fmtCoins(M.spent.total), `buys ${fmtCoins(M.spent.buys)} · craft coins ${fmtCoins(M.spent.craftCoins)} · used in runs ${fmtCoins(M.used.total)} at ledger cost`),
+                card("Loot at open", fmtCoins(M.loot.atOpen), `${M.loot.opened} chests opened, at bid · + ${fmtCoins(M.loot.coins)} coins from chests${M.loot.revalued ? " · containers re-valued at their contents" : ""}`),
+                card("Sold", fmtCoins(M.sold.loot.net), `${M.sold.loot.qty} items · ${fmtCoins(M.sold.loot.tax)} tax (${(M.tax.rate * 100).toFixed(1)}%${M.tax.measured ? "" : " assumed"})${M.sold.other.net ? ` · other sales ${fmtCoins(M.sold.other.net)} not counted` : ""}`),
+                card("Net", fmtCoins(M.net), `sold + chest coins − spent · held loot ${fmtCoins(M.heldLoot)} at bid · no longer held ${fmtCoins(M.missingLoot)}${M.reviewRows ? ` · ${M.reviewRows} to review` : ""}`),
+            );
             els["mds-cards"].innerHTML = cards.join("");
             els["mds-ovnote"].textContent = `Since ${fmtTime(S.windowStart)}. A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.${S.open ? " One run is in progress." : ""}`;
+        }
+        const fmtQ = q => (q == null ? "–" : Number.isInteger(q) ? q.toLocaleString() : q.toFixed(1));
+        const coinsOr = (v, dash = "–") => (v == null ? dash : fmtCoins(v));
+        function renderKeys() {
+            const M = getMoney();
+            const keyRows = Object.entries(M.keys).sort((a, b) => b[1].used - a[1].used);
+            els["mds-keys"].innerHTML = keyRows.map(([h, k]) => `<tr><td class="k">${it(h)}</td><td>${fmtQ(k.held)}</td><td>${fmtQ(k.crafted)}</td><td>${k.bought ? `${fmtQ(k.bought)} @ ${fmtCoins(k.boughtAvg)}` : "–"}</td><td>${k.dropped || "–"}</td><td>${fmtQ(k.used)}</td><td>${coinsOr(k.costPerKey, "?")}<small> ${esc(k.costBasis)}</small></td><td>${fmtCoins(k.usedCost)}${k.usedFallback ? `<small> ${k.usedFallback} at ${esc(k.fallbackBasis || "?")}</small>` : ""}</td><td>${fmtQ(k.baseline)}</td></tr>`).join("") || `<tr><td colspan="9" class="t">No keys seen yet.</td></tr>`;
+            const mats = Object.values(M.materials).sort((a, b) => (b.boughtCoins + b.consumedCost) - (a.boughtCoins + a.consumedCost));
+            els["mds-mats"].innerHTML = mats.map(m => `<tr><td class="k">${it(m.item)}</td><td class="t">${m.recipes.map(r => esc(shortAction(r))).join(", ")} ×${m.perCraft}</td><td>${m.bought ? fmtQ(m.bought) : "–"}</td><td>${m.bought ? fmtCoins(m.boughtCoins / m.bought) : "–"}</td><td>${m.bought ? fmtCoins(m.boughtCoins) : "–"}</td><td>${m.consumed ? `${fmtQ(m.consumed)} (${fmtCoins(m.consumedCost)})` : "–"}</td><td>${fmtQ(m.held)}${m.avg != null ? `<small> @ ${fmtCoins(m.avg)}</small>` : ""}</td><td>${m.baseline ? fmtQ(m.baseline) : "–"}</td></tr>`).join("") || `<tr><td colspan="8" class="t">No key recipes loaded yet.</td></tr>`;
+            els["mds-keysnote"].textContent = "Cost per key = the average of the key crafts this record has seen (materials at their purchase price, plus the recipe's coins), or the current ask when none. Used at cost charges each live clear the exact lot it took; offline and older clears use the craft average. At start = held when the record began, priced at ask then.";
+        }
+        function renderLoot() {
+            const M = getMoney();
+            const lootRows = M.rows.filter(r => r.kind === "loot" || r.kind === "container");
+            els["mds-loot"].innerHTML = lootRows.map(r => `<tr><td class="k">${it(r.item)}${r.kind === "container" ? `<small> opened ${r.opened}</small>` : ""}</td><td>${fmtQ(r.gained)}${r.redeemed ? `<small> ${r.redeemed} redeemed</small>` : ""}</td><td>${r.sold ? fmtQ(r.sold) : "–"}</td><td>${r.sold ? fmtCoins(r.soldNet) : "–"}</td><td>${fmtQ(r.held)}</td><td>${r.listed || "–"}</td><td>${r.kept || "–"}</td><td>${coinsOr(r.heldValue, "no bid")}</td><td><button class="mds-act" data-act="keep" data-item="${esc(r.item)}" data-kept="${r.kept}">Keep…</button></td></tr>`).join("") || `<tr><td colspan="9" class="t">No loot opened yet.</td></tr>`;
+            const tok = Object.entries(M.tokens);
+            els["mds-tokens"].innerHTML = tok.map(([h, t]) => `<tr><td class="k">${it(h)}</td><td>${fmtQ(t.gained)}</td><td>${t.redeemed ? fmtQ(t.redeemed) : "–"}</td><td>${Object.entries(t.received).map(([i, q]) => `${q} ${it(i)}`).join(", ") || "–"}</td><td>${fmtQ(t.held)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No tokens yet.</td></tr>`;
+            const sup = [];
+            for (const [h, k] of Object.entries(M.keys)) if (k.held > 0 || k.used > 0) sup.push({ item: h, kind: "key", held: k.held, cost: k.costPerKey, used: `${k.used} used` });
+            for (const [h, c] of Object.entries(M.consumables)) if (c.held > 0 || c.used > 0) sup.push({ item: h, kind: "consumable", held: c.held, cost: c.avg, used: `${c.used} used${c.offline ? ` (${c.offline} offline)` : ""}${c.unknown ? ` · ${c.unknown} unpriced` : ""}` });
+            for (const m of Object.values(M.materials)) if (m.held > 0) sup.push({ item: m.item, kind: "key material", held: m.held, cost: m.avg, used: m.consumed ? `${m.consumed} in crafts` : "–" });
+            for (const k of M.kept) sup.push({ item: k.item, kind: "kept loot", held: k.qty, cost: k.bidNow, used: `${k.held} in the bag` });
+            sup.sort((a, b) => (b.held * (b.cost || 0)) - (a.held * (a.cost || 0)));
+            els["mds-supplies"].innerHTML = sup.map(r => `<tr><td class="k">${it(r.item)}</td><td class="t">${r.kind}</td><td>${fmtQ(r.held)}</td><td>${coinsOr(r.cost, "?")}</td><td>${r.cost != null ? fmtCoins(r.held * r.cost) : "?"}</td><td class="t">${r.used}</td></tr>`).join("") || `<tr><td colspan="6" class="t">Nothing on hand.</td></tr>`;
+            const miss = M.rows.filter(r => r.missing > 0 && (r.kind === "loot" || r.kind === "container"));
+            els["mds-missing"].innerHTML = miss.map(r => {
+                const status = r.acceptedQty >= r.missing ? `accepted ${fmtQ(r.acceptedQty)}` : r.review ? (r.bidNow == null ? "review: no bid now" : `review: bid moved ${Math.round(r.drift * 100)}%`) : "valued at bid now";
+                const act = r.remaining > 0 && r.netBid != null ? `<button class="mds-act" data-act="accept" data-item="${esc(r.item)}" data-qty="${r.remaining}" data-unit="${r.netBid}" data-bid="${r.bidNow}" data-open="${r.bidAtOpen || ""}" data-tax="${M.tax.rate}">Accept ${fmtCoins(r.remaining * r.netBid)}</button>` : "";
+                return `<tr class="${r.review ? "review" : ""}"><td class="k">${it(r.item)}</td><td>${fmtQ(r.missing)}${r.acceptedQty ? `<small> ${r.acceptedQty} accepted</small>` : ""}</td><td>${coinsOr(r.bidAtOpen)}</td><td>${coinsOr(r.bidNow, "none")}</td><td>${fmtCoins(r.missingValue)}</td><td class="t">${status}</td><td>${act}</td></tr>`;
+            }).join("") || `<tr><td colspan="7" class="t">Everything gained is sold, held, listed or kept.</td></tr>`;
+            els["mds-lootnote"].textContent = `Loot = what this record saw come out of a chest or a token redemption. Held = in the bag now; Listed = on your sell orders. No longer held = gained − sold − opened − held − listed − kept, valued at the current bid less ${(M.tax.rate * 100).toFixed(1)}% tax; a bid that moved more than 50% since opening (or no bid) is marked for review and left out of the totals until accepted. Accepting freezes that value as a recorded event.`;
+        }
+        function renderChests() {
+            const M = getMoney();
+            const cards = Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(it(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`));
+            els["mds-chestcards"].innerHTML = cards.join("") || "";
+            const opens = state.timeline.filter(e => e.kind === "open" && e.at >= (state.meta.recordStart || 0)).slice(-300).reverse();
+            els["mds-chests"].innerHTML = opens.map(ev => `<tr><td class="t">${fmtTime(ev.at)}</td><td class="k">${it(ev.chest)}</td><td>${ev.count}</td><td class="d">${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}${(g.counted || isCounted(g.item)) ? " (counted)" : (g.item !== "/items/coin" && !g.bid) ? " (no bid)" : ""}`).join(", ")}</td><td>${fmtCoins((ev.gains || []).filter(g => g.item !== "/items/coin" && !g.counted && !isCounted(g.item)).reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0))}</td><td>${ev.coinsGained ? fmtCoins(ev.coinsGained) : "–"}</td><td>${ev.keyCost && ev.keyCost.unitCost != null ? `${fmtCoins(ev.keyCost.unitCost * ev.count)}<small> ${esc(ev.keyCost.basis || "")}</small>` : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">No chest opened yet.</td></tr>`;
+            els["mds-chestsnote"].textContent = "Newest first. Value at bid = each item's highest bid when the chest was opened; counted items (cowbells) and unpriced items carry no value. Key cost = the chest key's lot cost; a basis of ask means the key was held before the record began.";
         }
         function renderRuns(force) {
             if (!els["mds-runs"]) return;
@@ -1189,6 +1441,9 @@
             els["mds-status"].textContent = `${state.characterName || "waiting for login"}${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}`;
             if (tab === "overview") renderOverview();
             else if (tab === "runs") renderRuns(false);
+            else if (tab === "keys") renderKeys();
+            else if (tab === "loot") renderLoot();
+            else if (tab === "chests") renderChests();
             else {
                 renderRows(false);
                 const byType = [...state.counts.byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t} ${n}`).join(" · ");
@@ -1202,7 +1457,7 @@
                 ].join("\n");
             }
         }
-        return { refresh, touch, render, dock: () => ({ docked: !!dock.strip, active: dock.active, worked: dock.worked }), show: () => setOpen(true) };
+        return { refresh, touch, render, moneyCtx, dock: () => ({ docked: !!dock.strip, active: dock.active, worked: dock.worked }), show: () => setOpen(true) };
     })();
 
     function download(name, text) { const blob = new Blob([text], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
@@ -1223,7 +1478,7 @@
         if (!state.record) return;
         if (!W.confirm("Delete this character's whole Dungeon Stats record? Export it first if you want to keep it.")) return;
         await state.record.flush(); await state.record.clearAll();
-        state.meta = {}; state.events = []; state.timeline = []; state.timelineRev++; state.chatSeen.clear(); state.counts.events = 0; state.ledger.clear(); state.keyLots.clear(); keyAverages.clear(); state.run = null;
+        state.meta = {}; state.events = []; state.timeline = []; state.timelineRev++; state.consumeTotals.clear(); state.chatSeen.clear(); state.counts.events = 0; state.ledger.clear(); state.keyLots.clear(); keyAverages.clear(); state.run = null;
         panel.render();
     }
 
@@ -1235,6 +1490,6 @@
     const boot = () => { panel.refresh(); };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { state, ref, prices, version: VERSION, panel, derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { state, ref, prices, version: VERSION, panel, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();

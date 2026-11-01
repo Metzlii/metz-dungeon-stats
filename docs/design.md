@@ -110,6 +110,8 @@ The game keeps running dungeons while logged out, so offline time is ordinary ti
 What offline cannot give: per-run chest counts (the block covers them), consumable use per run, and deaths. The Runs table marks offline runs so the difference is visible. Whether a solo dungeon produces the same system messages is one of the open questions; if it does not, solo offline runs are counted from `offlineItems` chests and timed as a block.
 
 ### 4.6 Cash flow
+**Built 2026-11-01** as `deriveMoney()` (between the `<money>` markers; `node test/money.test.mjs <record.json> --market marketplace.json` runs it over an export). Old records hold each instant order twice (rows + listing); the derivation keeps the listing one. A container that came out of a chest and was opened later (Large Treasure Chest) is worth its contents: the bid it carried when gained comes off the total once it is opened. Sales of items the record never saw come out of a chest or a redemption are shown as "other sales" and kept out of Net. Consumables used while offline are charged to the purchase ledger at login and count as used. "Used in runs" (keys at lot cost, consumables at ledger cost) is shown beside Spent, never added to it: keys held before the record began were priced at ask then, so the first night shows 1.2b of keys used against 1.5m spent.
+
 Spent = buys (materials, keys, consumables) + craft coins. Loot sold = Σ sell.net. Loot held = loot quantity still in the bag or on sell orders, shown at current bid as a separate line. Loot no longer held = section 5.4. Net = sold + cash from chests − spent, with held and valued lines shown beside it, never added into it without saying so.
 
 ## 5. The interface
@@ -135,10 +137,10 @@ Cards (built in milestone 2 as plain cards; the detail tables come with the late
 The runs table, newest first: start time, result (clear, fail, cancelled, in progress), run time, waves, chests, keys charged (marked when read from the key counts rather than a clear message), deaths (the player's count over the run; `new_battle.deathCount` is cumulative for the whole party action, so the run's figure is a delta), XP (marked when counted from a mid-run join), and what the run was seen by (chat, live, or both). Offline blocks sit in the same list with their length, chests, keys and XP from the login summary, and how many of their runs the chat ledger shows. Filters by dungeon and result come when there is more than one dungeon in a record.
 
 ### 5.3 Keys
-Insight's key crafting idea kept as tracked data only: per key type, keys crafted, keys bought, keys used, keys held, cost per key (ledger), and the materials table: for each recipe input, bought (qty, average price, total), consumed by crafts, held. No planner.
+**Built 2026-11-01.** Insight's key crafting idea kept as tracked data only: per key type, keys crafted, keys bought, keys used, keys held, cost per key (ledger), and the materials table: for each recipe input, bought (qty, average price, total), consumed by crafts, held. No planner.
 
 ### 5.4 Loot & supplies
-Four sections, as in Insight's tab but tracked only:
+**Built 2026-11-01** (tab named Loot; Keep N writes a `keep` event, Accept a `value` event, both from the panel). Four sections, as in Insight's tab but tracked only:
 
 - **Loot to sell**: items gained from chests that are tradable and not keys or chests: gained, sold, held (bag + listed), held value at current bid. Row actions: "Keep N" moves quantity into Supplies kept.
 - **Dungeon tokens**: per token, gained, redeemed (with what was received), held. No valuation.
@@ -146,7 +148,7 @@ Four sections, as in Insight's tab but tracked only:
 - **Loot no longer held**: automatic. For each loot item, `gained − sold − held − listed − kept`. When positive, the missing quantity is valued at the current bid less the tax rate in force (4.5), as the net an instant sell would have paid, and shown with its open-time value beside it. If current bid differs from the open-time value by more than the review threshold (default 50%), the row is marked "review" and excluded from totals until accepted. Accepting writes a `value` event so it stops changing. An import that brings the real sale replaces the valuation automatically.
 
 ### 5.5 Chests
-The opening history: time, chest, how many, contents with quantities, value at open (bid), coins gained. Totals per chest type. Nothing expected, nothing lucky.
+**Built 2026-11-01.** The opening history: time, chest, how many, contents with quantities, value at open (bid), coins gained. Totals per chest type. Nothing expected, nothing lucky.
 
 ### 5.6 XP
 The tracker, modelled on Insight's: a session with Start, Pause, Reset. Per skill: XP gained, XP per hour, share of total. Sources: the self player's cumulative `totalSkillExperienceMap` from each `new_battle` while in combat (works outside dungeons too), and `action_completed.endCharacterSkills` lifetime totals for everything else, so skilling XP counts as well. Offline XP from `init_character_data.offlineSkills` attaches to the open session when the session was live within 15 minutes of going offline, else it is shown as a separate offline block. Gaps of more than 15 minutes between messages do not count toward elapsed time. Sessions are kept (last 50) and exported with the record.
@@ -174,7 +176,7 @@ Everything else Insight does: combat simulator, planet sessions, skilling ledger
 
 1. **Capture and record** (first deliverable). Socket hook, inventory mirror, event derivation for all kinds, IndexedDB stores, the Data tab with the capture log and export. Run it for a day of dungeons and compare the log against what the game showed. Resolve every "to confirm" row in section 2 from the captured frames.
 2. **Runs and time.** Runs table, clear and fail detection, run time and time-not-dungeoning accounting, Overview cards for clears and time.
-3. **Cash flow.** Purchase ledger, baseline, keys, consumes, opens with prices, sales, Loot & supplies with the automatic no-longer-held section and review flags, Chests tab, Overview money cards.
+3. **Cash flow** (built 2026-11-01). Purchase ledger, baseline, keys, consumes, opens with prices, sales, Loot & supplies with the automatic no-longer-held section and review flags, Chests tab, Overview money cards.
 4. **XP tracker.**
 5. **Import** and the review list, then interface polish and the release to Greasy Fork, synced from this repository.
 
