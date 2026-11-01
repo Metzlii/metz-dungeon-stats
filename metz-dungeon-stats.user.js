@@ -763,7 +763,7 @@
 `;
 
     const panel = (() => {
-        let root = null, body = null, toggle = null, dirty = false, timer = null, filter = "all", open = false;
+        let root = null, body = null, toggle = null, dirty = false, timer = null, filter = "all", open = false, hover = false;
         function ensure() {
             if (root || !document.body) return;
             const style = document.createElement("style"); style.textContent = CSS; document.documentElement.appendChild(style);
@@ -771,6 +771,10 @@
             root = document.createElement("section"); root.id = "mds-root"; root.hidden = true;
             root.innerHTML = `<div class="mds-head"><strong>Metz Dungeon Stats</strong><span class="mds-sub">v${VERSION} · milestone 1: capture and record</span><button class="mds-x" title="Close">×</button></div><div class="mds-tabs"><button role="tab" aria-selected="true">Data</button></div><div class="mds-body"></div>`;
             root.querySelector(".mds-x").addEventListener("click", () => setOpen(false));
+            // The panel never rebuilds under the pointer or a focused control (an open dropdown would be torn down).
+            root.addEventListener("mouseenter", () => { hover = true; });
+            root.addEventListener("mouseleave", () => { hover = false; if (deferred) render(); });
+            root.addEventListener("focusout", () => { setTimeout(() => { if (deferred && !hover && !root.contains(document.activeElement)) render(); }, 0); });
             body = root.querySelector(".mds-body");
             document.body.appendChild(toggle); document.body.appendChild(root);
             try { open = localStorage.getItem(PANEL_KEY) === "open"; } catch (_e) { open = false; }
@@ -806,7 +810,8 @@
             // Never rebuild the feed under a reader: while the list is scrolled down, hold the refresh until they
             // return to the top (new events arrive at the top anyway).
             const wrapBefore = body.querySelector(".mds-wrap");
-            if (wrapBefore && wrapBefore.scrollTop > 8) { deferred = true; return; }
+            const busy = (wrapBefore && wrapBefore.scrollTop > 8) || hover || (root && root.contains(document.activeElement) && document.activeElement !== root);
+            if (busy && body.childElementCount) { deferred = true; return; }
             deferred = false;
             const kinds = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
             // The default feed leaves consumable uses out: they are kept for cost tracking, not for reading.
