@@ -1093,7 +1093,7 @@
         const mean = a => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : null);
         S.avgClearMs = mean(S.clearMs); S.avgRunMs = mean(S.runMs); S.fastestMs = S.clearMs.length ? Math.min(...S.clearMs) : null; S.slowestMs = S.clearMs.length ? Math.max(...S.clearMs) : null;
         S.failRate = S.clears + S.fails ? S.fails / (S.clears + S.fails) : null;
-        const blocks = offline.map(o => { const b = { from: o.from, to: o.to, ms: o.to - o.from, chests: {}, chestTotal: 0, keys: {}, xp: o.xp, runsInLedger: kept.filter(r => r.startAt >= o.from && r.startAt <= o.to).length }; for (const it of o.items) { if (C.isChest(it.item)) { b.chests[it.item] = (b.chests[it.item] || 0) + n(it.delta); b.chestTotal += n(it.delta); } else if (C.isKey(it.item)) b.keys[it.item] = (b.keys[it.item] || 0) + n(it.delta); } return b; }).filter(b => b.ms >= C.offlineMinMs);
+        const blocks = offline.map(o => { const b = { from: o.from, to: o.to, ms: o.to - o.from, chests: {}, chestTotal: 0, keys: {}, xp: o.xp, runsInLedger: kept.filter(r => r.startAt >= o.from && r.startAt <= o.to).length }; for (const it of o.items) { if (C.isChest(it.item)) { b.chests[it.item] = (b.chests[it.item] || 0) + n(it.delta); b.chestTotal += n(it.delta); } else if (C.isKey(it.item)) b.keys[it.item] = (b.keys[it.item] || 0) + n(it.delta); } return b; }).filter(b => b.ms >= C.offlineMinMs && b.from >= windowStart); // a block that ended at the record's first login is before the record: its chests were in the baseline stock
         return { runs: kept, summary: S, offline: blocks, markers: markers.length };
     }
     // </derive>
