@@ -356,7 +356,7 @@
             let cost = 0, asks = 0;
             for (const i of r.inputs) { if (i.item === "/items/coin") { cost += i.qty * cut; continue; } const a = ledgerAvg(i.item); const p = a != null ? a : askOf(i.item); if (p == null) return null; if (a == null) asks++; cost += p * i.qty * cut; }
             if (art && art.tea) { const a = ledgerAvg(art.tea); const p = a != null ? a : askOf(art.tea); if (p != null) cost += p * art.seconds / art.teaSeconds; }
-            return { unitCost: cost / out.qty, basis: `recipe-at-start${art ? ` artisan ${(art.rate * 100).toFixed(1)}%` : ""}${asks ? ` (${asks} at ask)` : ""}` };
+            return { unitCost: cost / out.qty, basis: `craft price${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ""}` };
         }
         return null;
     }
@@ -1223,7 +1223,7 @@
                 for (const i of r.inputs || []) { if (i.item === "/items/coin") { cost += n(i.qty) * cut; continue; } const a = X.avgOf(i.item); const p = a != null ? a : X.askOf(i.item); if (p == null) { missing++; continue; } if (a == null) asks++; cost += p * n(i.qty) * cut; }
                 if (missing) return null;
                 if (art && art.tea) { const a = X.avgOf(art.tea); const p = a != null ? a : X.askOf(art.tea); if (p != null) cost += p * (art.seconds || 10) / (art.teaSeconds || 300); }
-                return { unitCost: cost / out.qty, basis: `recipe at purchase prices${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan seen"}${asks ? ` (${asks} at ask)` : ""}` };
+                return { unitCost: cost / out.qty, basis: `craft price${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ""}` };
             }
             return null;
         };
