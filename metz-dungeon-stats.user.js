@@ -1806,8 +1806,10 @@
         const CARDS_KEY = PANEL_KEY + "-cards";
         let cardOrders = {};
         try { cardOrders = JSON.parse(localStorage.getItem(CARDS_KEY) || "{}") || {}; } catch (_e) { cardOrders = {}; }
+        // Default order of the Overview cards (operator's, 2026-11-01); a saved order replaces it, unknown cards follow.
+        const DEFAULT_CARD_ORDER = { cards: ["clears", "average-run", "chests-earned", "holdover-chests", "loot-at-open", "spent", "net", "sold", "cowbells", "in-dungeons", "between-runs"] };
         function sortCards(container, htmls) {
-            const order = cardOrders[container] || []; const keyOf = h => (h.match(/data-card="([^"]*)"/) || [])[1] || "";
+            const order = cardOrders[container] || DEFAULT_CARD_ORDER[container] || []; const keyOf = h => (h.match(/data-card="([^"]*)"/) || [])[1] || "";
             return htmls.map((h, i) => ({ h, i, pos: order.indexOf(keyOf(h)) })).sort((a, b) => (a.pos < 0 ? 1e9 + a.i : a.pos) - (b.pos < 0 ? 1e9 + b.i : b.pos)).map(x => x.h);
         }
         function setCardOrder(container, order) { cardOrders[container] = order; try { localStorage.setItem(CARDS_KEY, JSON.stringify(cardOrders)); } catch (_e) { /* fine */ } render(); }
