@@ -802,7 +802,9 @@
         function render() {
             ensure(); if (!body) return;
             const kinds = ["all", "start", "clear", "fail", "stop", "craft", "buy", "sell", "open", "consume", "redeem", "chat", "offline", "baseline", "review"];
-            const rows = state.events.filter(e => filter === "all" ? e.kind !== "chat" || true : e.kind === filter).slice(0, 200);
+            // The default feed leaves consumable uses out: they are kept for cost tracking, not for reading.
+            const rows = state.events.filter(e => filter === "all" ? e.kind !== "consume" : e.kind === filter).slice(0, 200);
+            const used = state.events.filter(e => e.kind === "consume").reduce((s, e) => { s.n += e.qty; s.cost += e.unitCost != null ? e.unitCost * e.qty : 0; return s; }, { n: 0, cost: 0 });
             const byType = [...state.counts.byType.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t} ${n}`).join(" · ");
             body.innerHTML = `
 <div class="mds-cards">
@@ -812,6 +814,7 @@
  <div class="mds-card"><div class="l">Game data</div><div class="n">${ref.ready ? Object.keys(ref.dungeons).length + " dungeons" : "not loaded"}</div><small>${ref.source || "waiting"}${ref.version ? " · " + esc(ref.version) : ""}</small></div>
  <div class="mds-card"><div class="l">Prices</div><div class="n">${prices.map ? Object.keys(prices.map).length : 0}</div><small>${prices.at ? fmtTime(prices.at) : "not fetched"}${prices.error ? " · " + esc(prices.error) : ""}</small></div>
  <div class="mds-card"><div class="l">Run</div><div class="n">${state.run ? `wave ${state.run.waves}` : "none"}</div><small>${state.run ? esc(shortAction(state.run.zone)) + " T" + state.run.tier + " · " + fmtDur(serverNow() - state.run.startAt) : "between runs"}</small></div>
+ <div class="mds-card"><div class="l">Consumables used</div><div class="n">${used.n}</div><small>${fmtCoins(used.cost)} at purchase price · recent events only</small></div>
 </div>
 <div class="mds-bar">
  <label>Show <select id="mds-filter">${kinds.map(k => `<option value="${k}"${k === filter ? " selected" : ""}>${k}</option>`).join("")}</select></label>
@@ -819,7 +822,7 @@
  <button id="mds-export-frames">Export raw frames</button>
  <button id="mds-prices">Refresh prices</button>
  <button id="mds-reset" class="danger">Reset record</button>
- <span class="mds-note">Newest first. Source = the game message the event came from.</span>
+ <span class="mds-note">Newest first. Source = the game message the event came from. Consumable uses are recorded but shown only under "consume".</span>
 </div>
 <div class="mds-wrap"><table><thead><tr><th>Time</th><th>Kind</th><th>What</th><th>Source</th></tr></thead><tbody>
 ${rows.map(ev => `<tr class="${ev.kind}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${ev.kind}</td><td class="d">${describe(ev)}</td><td class="t">${esc(ev.src || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="t">Nothing recorded yet.</td></tr>`}
