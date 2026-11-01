@@ -1836,7 +1836,7 @@
  <h4 data-noun="keys">Key crafts, from the game's Loot &amp; XP Log</h4>
  <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Sessions</th><th>Crafted</th><th>Essence</th><th>First</th><th>Last</th><th>Materials bought on this PC</th><th>Cost per key</th></tr></thead><tbody id="mds-life-keys"></tbody></table></div>
  <h4 data-noun="skills">Combat skills, from the game's Loot &amp; XP Log</h4>
- <div class="mds-wrap"><table><thead><tr><th>Skill</th><th>Sessions</th><th>Time in sessions</th><th>XP</th><th>XP / h</th><th title="The dungeon and tier where this skill's rate was highest, over at least an hour of sessions">Best rate</th><th>From</th><th>To</th></tr></thead><tbody id="mds-life-skills"></tbody></table></div>
+ <div class="mds-wrap"><table><thead><tr><th title="Each session counts for the combat skill it trained: the one with the most XP in it">Skill</th><th>Sessions</th><th>Time in sessions</th><th>XP</th><th>XP / h</th><th title="The dungeon and tier where this skill's rate was highest, over at least an hour of sessions training it">Best rate</th><th>From</th><th>To</th></tr></thead><tbody id="mds-life-skills"></tbody></table></div>
  <p class="mds-note" id="mds-lifenote"></p>
 </div>
 <div class="mds-pane" data-pane="xp" hidden>
@@ -2392,9 +2392,10 @@
             const skills = Object.entries(S.since).sort((a, b) => b[1] - a[1]);
             els["mds-xp-skills"].innerHTML = skills.map(([h, v]) => `<tr><td class="k">${skillIcon(h)}${esc(skillName(h))}</td><td>${fmtCoins(v)}</td><td>${S.today && S.today.bySkill[h] ? fmtCoins(S.today.bySkill[h]) : "–"}</td><td>${S.activeMs > 0 ? fmtCoins(v / (S.activeMs / 3600e3)) : "–"}</td><td>${pct(v, S.total)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No XP since the record began.</td></tr>`;
             // Abilities that gained since the record, with the books the next level takes and their price at ask.
-            const abRows = S.abilities.filter(a => a.since > 0).map(a => { const toNext = toNextLevel(a.xp, a.level); const book = ref.books[a.hrid] || null; const need = book && toNext != null ? Math.ceil(toNext / book.xp) : null; const ask = book ? askOf(book.item) : null; return { ...a, need, price: need != null && ask != null ? need * ask : null }; });
+            const abRows = S.abilities.filter(a => a.since > 0).map(a => { const toNext = toNextLevel(a.xp, a.level); const book = ref.books[a.hrid] || null; const need = book && toNext != null ? Math.ceil(toNext / book.xp) : null; const ask = book ? askOf(book.item) : null; return { ...a, need, price: need != null && ask != null ? need * ask : null }; }).sort((x, y) => y.since - x.since);
             const abTotal = abRows.reduce((t, a) => t + a.since, 0);
-            els["mds-xp-abilities"].innerHTML = abRows.map(a => `<tr><td class="k">${abilityIcon(a.hrid)}${esc(abilityName(a.hrid))}</td><td>${a.level != null ? a.level : "–"}</td><td>${fmtCoins(a.since)}</td><td>${S.activeMs > 0 ? fmtCoins(a.since / (S.activeMs / 3600e3)) : "–"}</td><td>${pct(a.since, abTotal)}</td><td>${a.need != null ? fmtQ(a.need) : "–"}</td><td>${a.price != null ? fmtCoins(a.price) : a.need != null ? "<small>no ask</small>" : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">${S.abilStartAt ? `No ability XP since ${fmtTime(S.abilStartAt)}.` : "Waiting for the game's ability totals."}</td></tr>`;
+            const fmtAb = v => Math.abs(v) < 1000 ? (Math.round(v * 10) / 10).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : fmtCoins(v);
+            els["mds-xp-abilities"].innerHTML = abRows.map(a => `<tr><td class="k">${abilityIcon(a.hrid)}${esc(abilityName(a.hrid))}</td><td>${a.level != null ? a.level : "–"}</td><td>${fmtAb(a.since)}</td><td>${S.activeMs > 0 ? fmtAb(a.since / (S.activeMs / 3600e3)) : "–"}</td><td>${pct(a.since, abTotal)}</td><td>${a.need != null ? fmtQ(a.need) : "–"}</td><td>${a.price != null ? fmtCoins(a.price) : a.need != null ? "<small>no ask</small>" : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">${S.abilStartAt ? `No ability XP since ${fmtTime(S.abilStartAt)}.` : "Waiting for the game's ability totals."}</td></tr>`;
             if (S.abilStartAt && S.startAt && S.abilStartAt - S.startAt > 60e3) els["mds-xp-abilities"].insertAdjacentHTML("beforeend", `<tr><td colspan="7" class="t">Ability XP counted since ${fmtTime(S.abilStartAt)}, when this build first saw the abilities; the Loot &amp; XP Log has no ability XP to back that to the record start.</td></tr>`);
             const skillList = by => Object.entries(by || {}).sort((a, b) => b[1] - a[1]).map(([h, v]) => `${fmtCoins(v)} ${esc(skillName(h))}`).join(", ") || "–";
             els["mds-xp-days"].innerHTML = S.days.map(d => `<tr><td class="t">${fmtDate(Date.parse(d.day + "T12:00:00Z"))}</td><td>${fmtCoins(d.total)}</td><td>${fmtHm(d.activeMs)}${d.offlineMs ? `<small> ${fmtHm(d.offlineMs)} offline</small>` : ""}</td><td>${d.activeMs > 0 ? fmtCoins(d.total / (d.activeMs / 3600e3)) : "–"}</td><td class="d">${skillList(d.bySkill)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No days yet.</td></tr>`;
@@ -2452,18 +2453,21 @@
                 return `<tr><td class="k">${itIcon(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtDate(g.from)}</td><td class="t">${fmtDate(g.to)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.paid != null ? ` @ ${fmtCoins(m.paid)}` : " (none here)"}`).join(", ")}<small>${Math.round(coverage * 100)}% of what these crafts consumed is in the merged history (${devices} source${devices === 1 ? "" : "s"})</small></td><td>${cost != null ? `${fmtCoins(cost)}<small>${esc(basis)}</small>` : "–"}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="t">No key crafts in the log yet.</td></tr>`;
             {
-                // Per combat skill: XP over every combat session in the log where it gained, XP/h over those sessions'
-                // time (the action's running time, offline included), and the dungeon where its rate was best.
+                // Per combat skill: each session counts for the skill it trained, the combat skill with the most XP in it,
+                // with the session's time and that skill's XP; XP/h over that time (the action's running time, offline
+                // included), and the dungeon where its rate was best. Time spent levelling another skill never dilutes
+                // a rate (2026-11-01: Magic's T2D4 rate had been dragged under a short Infernal Abyss stint by Attack
+                // sessions in which Magic picked up a little XP).
                 const per = {};
                 for (const e of all) {
                     if (!(ref.dungeons[e.action] || /\/combat\//.test(e.action))) continue;
                     const ms = Math.max(0, endOf(e) - e.start); if (!(ms > 0)) continue;
-                    for (const [sk, v] of Object.entries(e.xp || {})) {
-                        if (!(v > 0) || sk === "/skills/total_level" || (ref.skills[sk] && !ref.skills[sk].combat)) continue;
-                        const p = per[sk] || (per[sk] = { skill: sk, n: 0, ms: 0, xp: 0, from: e.start, to: endOf(e), by: {} });
-                        p.n++; p.ms += ms; p.xp += v; p.from = Math.min(p.from, e.start); p.to = Math.max(p.to, endOf(e));
-                        const k = `${e.action}|${e.tier}`; const b = p.by[k] || (p.by[k] = { action: e.action, tier: e.tier, ms: 0, xp: 0 }); b.ms += ms; b.xp += v;
-                    }
+                    let top = null, topXp = 0;
+                    for (const [sk, v] of Object.entries(e.xp || {})) { if (!(v > 0) || sk === "/skills/total_level" || (ref.skills[sk] && !ref.skills[sk].combat)) continue; if (v > topXp) { top = sk; topXp = v; } }
+                    if (!top) continue;
+                    const p = per[top] || (per[top] = { skill: top, n: 0, ms: 0, xp: 0, from: e.start, to: endOf(e), by: {} });
+                    p.n++; p.ms += ms; p.xp += topXp; p.from = Math.min(p.from, e.start); p.to = Math.max(p.to, endOf(e));
+                    const k = `${e.action}|${e.tier}`; const b = p.by[k] || (p.by[k] = { action: e.action, tier: e.tier, ms: 0, xp: 0 }); b.ms += ms; b.xp += topXp;
                 }
                 const rows = Object.values(per).sort((a, b) => b.xp - a.xp);
                 els["mds-life-skills"].innerHTML = rows.map(p => {
