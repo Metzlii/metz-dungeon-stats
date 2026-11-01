@@ -1348,7 +1348,7 @@
  <h4>Dungeons, from the game's Loot &amp; XP Log</h4>
  <div class="mds-wrap"><table><thead><tr><th>Dungeon</th><th>Sessions</th><th>Clears</th><th>Chests</th><th>Time in sessions</th><th>Per clear</th><th>XP</th><th>XP / h</th><th>From</th><th>To</th></tr></thead><tbody id="mds-life-dungeons"></tbody></table></div>
  <h4>Key crafts, from the game's Loot &amp; XP Log</h4>
- <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Sessions</th><th>Crafted</th><th>Essence</th><th>First</th><th>Last</th><th>Materials bought on this PC</th><th>Spend per key</th></tr></thead><tbody id="mds-life-keys"></tbody></table></div>
+ <div class="mds-wrap"><table><thead><tr><th>Key</th><th>Sessions</th><th>Crafted</th><th>Essence</th><th>First</th><th>Last</th><th>Materials bought on this PC</th><th>Cost per key</th></tr></thead><tbody id="mds-life-keys"></tbody></table></div>
  <p class="mds-note" id="mds-lifenote"></p>
 </div>
 <div class="mds-pane" data-pane="data" hidden>
@@ -1653,11 +1653,20 @@
             for (const e of all) { const r = ref.keyActions[e.action]; if (!r) continue; const key = (r.outputs[0] || {}).item; if (!key) continue; const g = craftGroups[key] || (craftGroups[key] = { key, action: e.action, n: 0, crafted: 0, essence: 0, from: e.start, to: e.end }); g.n++; g.crafted += e.drops[key] || e.count; g.essence += Object.entries(e.drops).filter(([h]) => /essence/.test(h)).reduce((s, [, q]) => s + q, 0); g.from = Math.min(g.from, e.start); g.to = Math.max(g.to, e.end); }
             const buys = (TOOLASHA.rows || []).filter(l => !l.isSell);
             els["mds-life-keys"].innerHTML = Object.values(craftGroups).sort((a, b) => b.to - a.to).map(g => {
-                const mats = ref.keyActions[g.action].inputs.filter(i => i.item !== "/items/coin").map(i => { const b = buys.filter(l => l.item === i.item); return { item: i.item, qty: b.reduce((s, l) => s + l.qty, 0), coins: b.reduce((s, l) => s + l.qty * l.price, 0) }; });
-                const spend = mats.reduce((s, m) => s + m.coins, 0); const coinsIn = (ref.keyActions[g.action].inputs.find(i => i.item === "/items/coin") || {}).qty || 0;
-                return `<tr><td class="k">${it(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtTime(g.from).slice(0, 10)}</td><td class="t">${fmtTime(g.to).slice(0, 10)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.qty ? ` (${fmtCoins(m.coins)})` : ""}`).join(", ")}</td><td>${spend && g.crafted ? `${fmtCoins(spend / g.crafted + coinsIn * (1 - (artisanOf(g.action) ? artisanOf(g.action).rate : 0)))}<small>this PC's buys ÷ crafted, + recipe coins</small>` : "–"}</td></tr>`;
+                // Prices from this PC's buys (an average paid is a price, whatever share of the quantity was bought here),
+                // quantities from the recipe at the current artisan rate: the history has no consumption per craft.
+                const art = artisanOf(g.action); const cut = art ? 1 - art.rate : 1;
+                const recipe = ref.keyActions[g.action];
+                const mats = recipe.inputs.filter(i => i.item !== "/items/coin").map(i => { const b = buys.filter(l => l.item === i.item); const qty = b.reduce((s, l) => s + l.qty, 0), coins = b.reduce((s, l) => s + l.qty * l.price, 0); const paid = qty ? coins / qty : null; const price = paid != null ? paid : askOf(i.item); return { item: i.item, qty, coins, paid, price, perKey: i.qty * cut, needed: g.crafted * i.qty * cut }; });
+                const coinsIn = ((recipe.inputs.find(i => i.item === "/items/coin") || {}).qty || 0) * cut;
+                const priced = mats.every(m => m.price != null);
+                let cost = priced ? mats.reduce((s, m) => s + m.price * m.perKey, 0) + coinsIn : null;
+                if (cost != null && art && art.tea) { const tp = ledgerAvg(art.tea) != null ? ledgerAvg(art.tea) : askOf(art.tea); if (tp != null) cost += tp * art.seconds / art.teaSeconds; }
+                const asks = mats.filter(m => m.paid == null && m.price != null).length;
+                const coverage = mats.reduce((s, m) => s + m.needed, 0) > 0 ? mats.reduce((s, m) => s + Math.min(m.qty, m.needed), 0) / mats.reduce((s, m) => s + m.needed, 0) : 0;
+                return `<tr><td class="k">${it(g.key)}</td><td>${g.n}</td><td>${fmtQ(g.crafted)}</td><td>${g.essence || "–"}</td><td class="t">${fmtTime(g.from).slice(0, 10)}</td><td class="t">${fmtTime(g.to).slice(0, 10)}</td><td class="d">${mats.map(m => `${fmtQ(m.qty)} ${it(m.item)}${m.paid != null ? ` @ ${fmtCoins(m.paid)}` : " (none here)"}`).join(", ")}<small>${Math.round(coverage * 100)}% of what these crafts consumed was bought on this PC</small></td><td>${cost != null ? `${fmtCoins(cost)}<small>recipe at your average paid price${asks ? ` (${asks} at ask)` : ""}${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan"}${art && art.tea ? " + tea" : ""}</small>` : "–"}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="t">No key crafts in the log yet.</td></tr>`;
-            els["mds-lifenote"].textContent = `The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: ${all.length} sessions${all.length ? ` from ${fmtTime(Math.min(...all.map(e => e.start))).slice(0, 10)}` : ""}. Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device: materials bought elsewhere are missing here, so the spend per key is a floor, and no lifetime income is shown until the records from both PCs are merged (import, milestone 5).`;
+            els["mds-lifenote"].textContent = `The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: ${all.length} sessions${all.length ? ` from ${fmtTime(Math.min(...all.map(e => e.start))).slice(0, 10)}` : ""}. Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device: the cost per key takes this PC's average paid prices (prices hold whatever share was bought here) with recipe quantities at your current artisan rate, since the log has no consumption per craft; no lifetime income is shown until the records from both PCs are merged (import, milestone 5).`;
         }
         function renderChests() {
             const M = getMoney();
