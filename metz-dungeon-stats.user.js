@@ -1196,7 +1196,7 @@
         const tokens = {};
         for (const [item, gi] of Object.entries(gained)) if (X.isToken(item)) { const t = bump(tokens, item, () => ({ gained: 0, redeemed: 0, received: {} })); t.gained += gi.qty; }
         for (const r of redeems) { const t = bump(tokens, r.token, () => ({ gained: 0, redeemed: 0, received: {} })); t.redeemed += n(r.qty); t.received[r.item] = (t.received[r.item] || 0) + n(r.itemQty); const gi = bump(gained, r.item, () => ({ qty: 0, value: 0, priced: 0, chests: {} })); gi.redeemed = (gi.redeemed || 0) + n(r.itemQty); if (n(r.bid) > 0) { gi.value += r.bid * n(r.itemQty); gi.priced += n(r.itemQty); } }
-        for (const [k, t] of Object.entries(tokens)) t.held = X.held(k);
+        for (const [k, t] of Object.entries(tokens)) { t.bag = X.held(k); t.held = Math.min(t.bag, Math.max(0, t.gained - t.redeemed)); t.holdover = t.bag - t.held; }
         // Sold: loot (anything the record saw come out of a chest or a redemption) against everything else.
         const lootItems = new Set(Object.keys(gained));
         const sellBy = {}; const sold = { loot: { qty: 0, gross: 0, tax: 0, net: 0 }, other: { qty: 0, gross: 0, tax: 0, net: 0 } };
@@ -1248,6 +1248,8 @@
             const held = X.held(item), onMarket = X.listed(item), kept = keptBy[item] || 0, opened = gi.opened || 0;
             const gainedQty = gi.qty + (gi.redeemed || 0);
             const missing = Math.max(0, gainedQty - s.qty - opened - held - onMarket - kept);
+            const recordStock = Math.max(0, gainedQty - s.qty - opened - kept);
+            const holdover = Math.max(0, held + onMarket - recordStock), heldRecord = Math.max(0, held - holdover);
             const bidNow = X.bidOf(item), bidAtOpen = gi.priced ? gi.value / gi.priced : null;
             // An accepted valuation covers at most what is still missing (a later Keep or sale shrinks it).
             const acc = valuedBy[item] || { qty: 0, value: 0 };
@@ -1257,8 +1259,8 @@
             const review = remaining > 0 && (bidNow == null || (drift != null && drift > (X.reviewPct != null ? X.reviewPct : 0.5)));
             const netBid = bidNow != null ? bidNow * (1 - tax.rate) : null;
             rows.push({
-                item, gained: gainedQty, fromChests: gi.qty, redeemed: gi.redeemed || 0, opened, sold: s.qty, soldNet: s.net, held, listed: onMarket, kept, missing,
-                bidNow, bidAtOpen, heldValue: bidNow != null ? (held + onMarket) * bidNow : null, valueAtOpen: gi.value, unpricedAtOpen: gi.qty - gi.priced,
+                item, gained: gainedQty, fromChests: gi.qty, redeemed: gi.redeemed || 0, opened, sold: s.qty, soldNet: s.net, held: heldRecord, bag: held, holdover, listed: onMarket, kept, missing,
+                bidNow, bidAtOpen, heldValue: bidNow != null ? (held + onMarket - holdover) * bidNow : null, holdoverValue: bidNow != null ? holdover * bidNow : null, valueAtOpen: gi.value, unpricedAtOpen: gi.qty - gi.priced,
                 acceptedQty: accepted.qty, acceptedValue: accepted.value, remaining, netBid, drift, review,
                 missingValue: accepted.value + (!review && netBid != null ? remaining * netBid : 0),
                 kind: X.isKey(item) ? "key" : X.isChest(item) ? "chest" : X.isOpenable(item) && X.isTradable(item) ? "container" : X.isTradable(item) ? "loot" : "untradable",
@@ -1266,6 +1268,7 @@
         }
         rows.sort((a, b) => (b.valueAtOpen + b.soldNet) - (a.valueAtOpen + a.soldNet));
         const heldLoot = rows.filter(r => r.kind === "loot").reduce((s, r) => s + n(r.heldValue), 0);
+        const holdoverLoot = rows.filter(r => r.kind === "loot" || r.kind === "container").reduce((s, r) => s + n(r.holdoverValue), 0);
         const missingLoot = rows.filter(r => r.kind === "loot" || r.kind === "container").reduce((s, r) => s + r.missingValue, 0);
         const reviewRows = rows.filter(r => r.review).length;
         // Supplies: keys, consumables and key materials still on hand, at ledger cost.
@@ -1297,7 +1300,7 @@
         for (const item of consNames) { const u = consUsed[item] || { qty: 0, cost: 0, unknown: 0, offline: 0 }; consumables[item] = { used: u.qty, usedCost: u.cost + (u.craftCost || 0), unknown: u.unknown, offline: u.offline, crafting: u.craftQty || 0, held: X.held(item), avg: X.avgOf(item), bought: buyBy[item] ? buyBy[item].qty : 0 }; }
         const keptRows = Object.entries(keptBy).filter(([, q]) => q > 0).map(([item, qty]) => ({ item, qty, held: X.held(item), bidNow: X.bidOf(item) }));
         const net = sold.loot.net + loot.coins - spent.total;
-        return { tax, spent, loot, sold, sellBy, used, net, heldLoot, missingLoot, reviewRows, rows, tokens, chests: chestBy, keys, materials, consumables, kept: keptRows, counts: { buys: buys.length, sells: sells.length, crafts: crafts.length, opens: opens.length, redeems: redeems.length, dropped: events.filter(dup).length } };
+        return { tax, spent, loot, sold, sellBy, used, net, heldLoot, holdoverLoot, missingLoot, reviewRows, rows, tokens, chests: chestBy, keys, materials, consumables, kept: keptRows, counts: { buys: buys.length, sells: sells.length, crafts: crafts.length, opens: opens.length, redeems: redeems.length, dropped: events.filter(dup).length } };
     }
     // </money>
 
@@ -1582,9 +1585,9 @@
 </div>
 <div class="mds-pane" data-pane="loot" hidden>
  <h4 data-noun="items">Loot to sell</h4>
- <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Gained</th><th>Sold</th><th>Sold net</th><th>Held</th><th>Listed</th><th>Kept</th><th>Held at bid</th><th></th></tr></thead><tbody id="mds-loot"></tbody></table></div>
+ <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Gained</th><th>Sold</th><th>Sold net</th><th>Held</th><th title="In the bag before the record began; sellable from here, but not counted in held loot or net">Holdover</th><th>Listed</th><th>Kept</th><th>Held at bid</th><th></th></tr></thead><tbody id="mds-loot"></tbody></table></div>
  <h4 data-noun="tokens">Dungeon tokens</h4>
- <div class="mds-wrap"><table><thead><tr><th>Token</th><th>Gained</th><th>Redeemed</th><th>Received</th><th>Held</th></tr></thead><tbody id="mds-tokens"></tbody></table></div>
+ <div class="mds-wrap"><table><thead><tr><th>Token</th><th>Gained</th><th>Redeemed</th><th>Received</th><th>Held</th><th title="In the bag before the record began">Holdover</th></tr></thead><tbody id="mds-tokens"></tbody></table></div>
  <h4 data-noun="items">Supplies kept for future runs</h4>
  <div class="mds-wrap"><table><thead><tr><th>Item</th><th>Kind</th><th>Held</th><th>Ledger cost</th><th>Held at cost</th><th>Used in the record</th></tr></thead><tbody id="mds-supplies"></tbody></table></div>
  <h4 data-noun="items">Loot no longer held</h4>
@@ -1907,7 +1910,7 @@
                 card("Spent", fmtCoins(M.spent.total), [`Buys ${fmtCoins(M.spent.buys)}`, `Craft coins ${fmtCoins(M.spent.craftCoins)}`, `Used in runs ${fmtCoins(M.used.total)} at ledger cost`]),
                 card("Loot at open", fmtCoins(M.loot.atOpen), [`${M.loot.opened} Dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid`, M.loot.nestedOpened ? `${M.loot.nestedOpened} Chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : "", `+ ${fmtCoins(M.loot.coins)} Coins`]),
                 card("Sold", fmtCoins(M.sold.loot.net), [`${M.sold.loot.qty} Items`, `${fmtCoins(M.sold.loot.tax)} Tax (${(M.tax.rate * 100).toFixed(1)}%${assumed})`, M.sold.other.net ? `Other sales ${fmtCoins(M.sold.other.net)} not counted` : ""]),
-                card("Net", fmtCoins(M.net), [`Sold ${fmtCoins(M.sold.loot.net)}`, `+ Chest coins ${fmtCoins(M.loot.coins)}`, `− Spent ${fmtCoins(M.spent.total)}`, `Held loot ${fmtCoins(M.heldLoot)} at bid`, `No longer held ${fmtCoins(M.missingLoot)}`, M.reviewRows ? `${M.reviewRows} To review` : ""]),
+                card("Net", fmtCoins(M.net), [`Sold ${fmtCoins(M.sold.loot.net)}`, `+ Chest coins ${fmtCoins(M.loot.coins)}`, `− Spent ${fmtCoins(M.spent.total)}`, `Held loot ${fmtCoins(M.heldLoot)} at bid`, M.holdoverLoot ? `Holdover ${fmtCoins(M.holdoverLoot)} not counted` : "", `No longer held ${fmtCoins(M.missingLoot)}`, M.reviewRows ? `${M.reviewRows} To review` : ""]),
             );
             els["mds-cards"].innerHTML = sortCards("cards", cards).join("");
             // Consumables as Insight laid them out: icon, quantity held, name; the tile opens the item in the marketplace.
@@ -2019,9 +2022,9 @@
         function renderLoot() {
             const M = getMoney();
             const lootRows = M.rows.filter(r => r.kind === "loot" || r.kind === "container");
-            els["mds-loot"].innerHTML = lootRows.map(r => `<tr><td class="k">${itemLink(r.item)}${r.kind === "container" ? `<small> opened ${r.opened}</small>` : ""}</td><td>${fmtQ(r.gained)}${r.redeemed ? `<small> ${r.redeemed} redeemed</small>` : ""}</td><td>${r.sold ? fmtQ(r.sold) : "–"}</td><td>${r.sold ? fmtCoins(r.soldNet) : "–"}</td><td>${fmtQ(r.held)}</td><td>${r.listed || "–"}</td><td>${r.kept || "–"}</td><td>${coinsOr(r.heldValue, "no bid")}</td><td class="mds-acts">${r.held > 0 && !(ref.items[r.item] && ref.items[r.item].tradable === false) ? `<button class="mds-act" data-act="market" data-item="${esc(r.item)}" title="Open this item in the marketplace">Sell</button>` : ""}<button class="mds-act" data-act="keep" data-item="${esc(r.item)}" data-kept="${r.kept}">Keep…</button></td></tr>`).join("") || `<tr><td colspan="9" class="t">No loot opened yet.</td></tr>`;
+            els["mds-loot"].innerHTML = lootRows.map(r => `<tr><td class="k">${itemLink(r.item)}${r.kind === "container" ? `<small> opened ${r.opened}</small>` : ""}</td><td>${fmtQ(r.gained)}${r.redeemed ? `<small> ${r.redeemed} redeemed</small>` : ""}</td><td>${r.sold ? fmtQ(r.sold) : "–"}</td><td>${r.sold ? fmtCoins(r.soldNet) : "–"}</td><td>${fmtQ(r.held)}</td><td>${r.holdover ? fmtQ(r.holdover) : "–"}</td><td>${r.listed || "–"}</td><td>${r.kept || "–"}</td><td>${coinsOr(r.heldValue, "no bid")}</td><td class="mds-acts">${r.bag > 0 && !(ref.items[r.item] && ref.items[r.item].tradable === false) ? `<button class="mds-act" data-act="market" data-item="${esc(r.item)}" title="Open this item in the marketplace">Sell</button>` : ""}<button class="mds-act" data-act="keep" data-item="${esc(r.item)}" data-kept="${r.kept}">Keep…</button></td></tr>`).join("") || `<tr><td colspan="10" class="t">No loot opened yet.</td></tr>`;
             const tok = Object.entries(M.tokens);
-            els["mds-tokens"].innerHTML = tok.map(([h, t]) => `<tr><td class="k">${itIcon(h)}</td><td>${fmtQ(t.gained)}</td><td>${t.redeemed ? fmtQ(t.redeemed) : "–"}</td><td>${Object.entries(t.received).map(([i, q]) => `${q} ${it(i)}`).join(", ") || "–"}</td><td>${fmtQ(t.held)}</td></tr>`).join("") || `<tr><td colspan="5" class="t">No tokens yet.</td></tr>`;
+            els["mds-tokens"].innerHTML = tok.map(([h, t]) => `<tr><td class="k">${itIcon(h)}</td><td>${fmtQ(t.gained)}</td><td>${t.redeemed ? fmtQ(t.redeemed) : "–"}</td><td>${Object.entries(t.received).map(([i, q]) => `${q} ${it(i)}`).join(", ") || "–"}</td><td>${fmtQ(t.held)}</td><td>${t.holdover ? fmtQ(t.holdover) : "–"}</td></tr>`).join("") || `<tr><td colspan="6" class="t">No tokens yet.</td></tr>`;
             const sup = [];
             for (const [h, k] of Object.entries(M.keys)) if (k.held > 0 || k.used > 0) sup.push({ item: h, kind: "key", held: k.held, cost: k.costPerKey, used: `${k.used} used` });
             for (const [h, c] of Object.entries(M.consumables)) if (c.held > 0 || c.used > 0) sup.push({ item: h, kind: "consumable", held: c.held, cost: c.avg, used: `${c.used} used${c.offline ? ` (${c.offline} offline)` : ""}${c.unknown ? ` · ${c.unknown} unpriced` : ""}` });
