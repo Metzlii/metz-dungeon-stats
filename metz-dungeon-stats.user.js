@@ -1357,6 +1357,9 @@
 #mds-root .mds-flag{border-bottom:1px dotted rgba(230,239,243,.5);cursor:help;white-space:nowrap}
 #mds-root th.mds-dragging{opacity:.5}
 #mds-root th.mds-drop{box-shadow:inset 2px 0 0 #45c8d8}
+#mds-root .mds-set{margin:4px 0 10px;padding:8px 10px;background:#1c2a35;border-radius:8px;box-shadow:0 0 0 1px #3f424d}
+#mds-root .mds-set-title{display:block;font-size:.929em;font-weight:500;margin-bottom:6px}
+#mds-root .mds-set .mds-bar{margin:0}
 #mds-tab{white-space:nowrap}
 `;
 
@@ -1371,18 +1374,33 @@
         let scale = 1;
         try { const v = Number(localStorage.getItem(SCALE_KEY)); if (v >= 0.7 && v <= 1.8) scale = v; } catch (_e) { /* fine */ }
         function applyScale() { if (!root) return; root.style.fontSize = `${Math.round(BASE_PX * scale * 10) / 10}px`; const el = root.querySelector("#mds-fs-val"); if (el) el.textContent = `${Math.round(scale * 100)}%`; }
-        // Runs table columns. Seen-by is diagnostic and off by default. Saved per browser.
-        const RUN_COLS = [["start", "Start"], ["result", "Result"], ["dungeon", "Dungeon"], ["time", "Run time"], ["waves", "Waves"], ["chests", "Chests"], ["keys", "Keys"], ["deaths", "Deaths"], ["xp", "XP"], ["seen", "Seen by"]];
-        const COLS_KEY = PANEL_KEY + "-cols";
-        let cols = Object.fromEntries(RUN_COLS.map(([k]) => [k, k !== "seen"]));
-        try { const saved = JSON.parse(localStorage.getItem(COLS_KEY) || "null"); if (saved && typeof saved === "object") for (const [k] of RUN_COLS) if (typeof saved[k] === "boolean") cols[k] = saved[k]; } catch (_e) { /* fine */ }
+        // Column switches, every table: a checkbox per column, grouped by tab in Settings. Keyed by the table (its
+        // tbody id) and the column's original index; everything on by default except the Runs table's Seen-by.
+        const COLS_KEY = PANEL_KEY + "-cols2";
+        const TABLE_TITLES = { runs: "Runs", sessions: "Sessions in the game's Loot & XP Log", keys: "Keys", mats: "Materials", loot: "Loot to sell", tokens: "Dungeon tokens", supplies: "Supplies kept for future runs", missing: "Loot no longer held", chests: "Openings", "life-dungeons": "Dungeons", "life-keys": "Key crafts", tbody: "Capture log" };
+        const DEFAULT_OFF = { runs: ["Seen by"] };
+        let colVis = {};
+        try { colVis = JSON.parse(localStorage.getItem(COLS_KEY) || "{}") || {}; } catch (_e) { colVis = {}; }
+        const colVisible = (key, oi, label) => { const v = colVis[key] && colVis[key][oi]; if (typeof v === "boolean") return v; return !((DEFAULT_OFF[key] || []).includes(label)); };
         function applyCols() {
             if (!root) return;
-            const hidden = RUN_COLS.map(([k], i) => (cols[k] ? null : i + 1)).filter(Boolean);
-            root.querySelector("#mds-cols-style").textContent = hidden.map(i => `#mds-root .mds-wrap-runs th[data-oi="${i - 1}"],#mds-root .mds-wrap-runs td[data-oi="${i - 1}"]{display:none}`).join("");
-            for (const inp of root.querySelectorAll("#mds-cols-bar input")) inp.checked = !!cols[inp.dataset.col];
+            const rules = [];
+            for (const t of root.querySelectorAll("table[data-key]")) { const key = t.dataset.key; const head = t.tHead && t.tHead.rows[0]; if (!head) continue; for (const th of head.children) { const oi = Number(th.dataset.oi); if (!colVisible(key, oi, th.textContent.trim())) rules.push(`#mds-root table[data-key="${key}"] th[data-oi="${oi}"],#mds-root table[data-key="${key}"] td[data-oi="${oi}"]{display:none}`); } }
+            root.querySelector("#mds-cols-style").textContent = rules.join("");
+            for (const inp of root.querySelectorAll("#mds-settings-tables input[data-key]")) { const th = root.querySelector(`table[data-key="${inp.dataset.key}"] th[data-oi="${inp.dataset.oi}"]`); inp.checked = colVisible(inp.dataset.key, Number(inp.dataset.oi), th ? th.textContent.trim() : ""); }
         }
-        function setCol(k, v) { cols[k] = !!v; try { localStorage.setItem(COLS_KEY, JSON.stringify(cols)); } catch (_e) { /* fine */ } applyCols(); if (tab === "runs") renderRuns(true); }
+        function setColVis(key, oi, v) { (colVis[key] = colVis[key] || {})[oi] = !!v; try { localStorage.setItem(COLS_KEY, JSON.stringify(colVis)); } catch (_e) { /* fine */ } applyCols(); if (tab === "runs") renderRuns(true); }
+        // Settings: one section per tab, one block per table, built from the headers themselves.
+        function buildColumnSettings() {
+            const host = root.querySelector("#mds-settings-tables"); const groups = [];
+            for (const [paneKey, paneLabel] of TABS) {
+                const pane = root.querySelector(`.mds-pane[data-pane="${paneKey}"]`); if (!pane) continue;
+                const tables = [...pane.querySelectorAll("table[data-key]")]; if (!tables.length) continue;
+                groups.push(`<h4>${esc(paneLabel)} tab</h4>` + tables.map(t => { const key = t.dataset.key; const ths = [...t.tHead.rows[0].children]; return `<div class="mds-set"><span class="mds-set-title">${esc(TABLE_TITLES[key] || key)}</span><div class="mds-bar">${ths.map(th => `<label><input type="checkbox" data-key="${esc(key)}" data-oi="${th.dataset.oi}"> ${esc(th.textContent.trim() || "(blank)")}</label>`).join("")}</div></div>`; }).join(""));
+            }
+            host.innerHTML = groups.join("");
+            host.addEventListener("change", e => { const inp = e.target.closest("input[data-key]"); if (inp) setColVis(inp.dataset.key, Number(inp.dataset.oi), inp.checked); });
+        }
         // Column order, every table: drag a header onto another to move it. Each table (keyed by its tbody id) keeps its
         // own order per browser. Cells carry their original index (data-oi) so an order and the Runs column switches
         // survive re-renders and reorders alike.
@@ -1498,14 +1516,15 @@
  <p class="mds-note" id="mds-lifenote"></p>
 </div>
 <div class="mds-pane" data-pane="settings" hidden>
- <h4>Text size</h4>
- <div class="mds-bar"><button id="mds-fs-down" title="Smaller">A −</button><span id="mds-fs-val" class="mds-note"></span><button id="mds-fs-up" title="Larger">A +</button><button id="mds-fs-reset">Reset</button></div>
- <p class="mds-note">Scales every size in the panel, from 70% to 180% in steps of 5%. Saved in this browser only.</p>
- <h4>Runs table columns</h4>
- <div class="mds-bar" id="mds-cols-bar"></div>
- <p class="mds-note">Seen by says which sources a run came from (chat, live, or both) and carries the notes; it is off by default, and a run with a note then shows a small flag next to its result instead.</p>
- <h4>Column order</h4>
- <div class="mds-bar"><button id="mds-order-reset">Reset column order</button><span class="mds-note">Drag any column header onto another to move it. Every table remembers its own order in this browser.</span></div>
+ <h4>General</h4>
+ <div class="mds-set"><span class="mds-set-title">Text size</span>
+  <div class="mds-bar"><button id="mds-fs-down" title="Smaller">A −</button><span id="mds-fs-val" class="mds-note"></span><button id="mds-fs-up" title="Larger">A +</button><button id="mds-fs-reset">Reset</button><span class="mds-note">Scales every size in the panel, 70% to 180% in steps of 5%.</span></div>
+ </div>
+ <div class="mds-set"><span class="mds-set-title">Column order</span>
+  <div class="mds-bar"><button id="mds-order-reset">Reset column order</button><span class="mds-note">Drag any column header onto another to move it. Every table remembers its own order.</span></div>
+ </div>
+ <p class="mds-note">Everything here is saved in this browser only. Below, untick a column to hide it in that table; the Runs table's Seen by (sources and notes) is off by default, and a run with a note then shows a small flag next to its result.</p>
+ <div id="mds-settings-tables"></div>
 </div>
 <style id="mds-cols-style"></style>
 <div class="mds-pane" data-pane="data" hidden>
@@ -1554,9 +1573,8 @@
             root.querySelector("#mds-fs-up").addEventListener("click", () => setScale(scale + 0.05));
             root.querySelector("#mds-fs-reset").addEventListener("click", () => setScale(1));
             applyScale();
-            const bar = root.querySelector("#mds-cols-bar");
-            bar.innerHTML = RUN_COLS.map(([k, label]) => `<label><input type="checkbox" data-col="${k}"> ${label}</label>`).join("");
-            bar.addEventListener("change", e => { const inp = e.target.closest("input[data-col]"); if (inp) setCol(inp.dataset.col, inp.checked); });
+            for (const t of root.querySelectorAll("table")) { const key = tableKey(t); if (key) { t.dataset.key = key; if (t.tHead && t.tHead.rows[0]) tagCells(t.tHead.rows[0]); } }
+            buildColumnSettings();
             applyCols();
             wireColumnDrag();
             root.querySelector("#mds-order-reset").addEventListener("click", () => { orders = {}; try { localStorage.removeItem(ORDER_KEY); } catch (_e) { /* fine */ } for (const tr of root.querySelectorAll("tr")) { const cells = [...tr.children].sort((a, b) => Number(a.dataset.oi) - Number(b.dataset.oi)); for (const c of cells) tr.appendChild(c); } });
@@ -1919,7 +1937,7 @@
                 const r = x.run;
                 const dur = r.result === "open" ? `${fmtDur(now - r.startAt)} so far` : (r.durationMs != null ? fmtDur(r.durationMs) : "–");
                 const result = r.result === "open" ? "in progress" : r.result;
-                return `<tr class="${r.result}"><td class="t">${fmtTime(r.startAt)}${r.spansRecordStart ? " ↰" : ""}</td><td class="k">${result}${!cols.seen && r.note ? ` <span class="mds-flag" title="${esc(r.note)}">?</span>` : ""}</td><td class="t">${dungeonCode(r.zone, r.tier, r.startAt)}</td><td>${dur}</td><td>${r.waves ?? "–"}</td><td>${chestText(r)}</td><td>${r.keysCharged ?? "–"}${r.keysSrc === "key count" ? "*" : ""}</td><td>${r.deaths ?? "–"}</td><td>${r.xpBySkill ? fmtCoins(xpSum(r.xpBySkill)) + (r.xpPartial ? "†" : "") : "–"}</td><td class="t">${r.source}${r.note ? ` · <span class="mds-flag" title="${esc(r.note)}">${esc(noteLabel(r.note))}</span>` : ""}</td></tr>`;
+                return `<tr class="${r.result}"><td class="t">${fmtTime(r.startAt)}${r.spansRecordStart ? " ↰" : ""}</td><td class="k">${result}${!colVisible("runs", 9, "Seen by") && r.note ? ` <span class="mds-flag" title="${esc(r.note)}">?</span>` : ""}</td><td class="t">${dungeonCode(r.zone, r.tier, r.startAt)}</td><td>${dur}</td><td>${r.waves ?? "–"}</td><td>${chestText(r)}</td><td>${r.keysCharged ?? "–"}${r.keysSrc === "key count" ? "*" : ""}</td><td>${r.deaths ?? "–"}</td><td>${r.xpBySkill ? fmtCoins(xpSum(r.xpBySkill)) + (r.xpPartial ? "†" : "") : "–"}</td><td class="t">${r.source}${r.note ? ` · <span class="mds-flag" title="${esc(r.note)}">${esc(noteLabel(r.note))}</span>` : ""}</td></tr>`;
             }).join("") || `<tr><td colspan="10" class="t">No runs yet.</td></tr>`;
             renderSessions(d);
             els["mds-runsnote"].textContent = "Newest first. * keys charged read from the party key counts (no clear message seen). † XP counted from when the script joined the run. ↰ the run was under way when the record started.";
