@@ -1298,7 +1298,7 @@
 #mds-toggle[hidden]{display:none}
 #mds-root{position:fixed;left:10px;bottom:46px;z-index:2147483000;width:min(840px,calc(100vw - 20px));max-height:min(72vh,700px);display:flex;flex-direction:column;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #595d6c,0 16px 40px rgba(0,0,0,.65);font:400 14px/1.5 "Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 #mds-root[hidden]{display:none}
-#mds-root.docked{position:static;z-index:auto;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;margin:0}
+#mds-root.docked{position:static;z-index:auto;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;margin:0;text-align:left}
 /* z-index:auto matters: the strip is a flex container, and a flex item's z-index makes a stacking context even when static, which put the docked panel above the game's popups (z 300). */
 #mds-root *{box-sizing:border-box}
 #mds-root .mds-head{display:flex;align-items:center;gap:10px;padding:10px 14px 8px}
@@ -1332,7 +1332,8 @@
 #mds-root .mds-bar .mds-note{color:#c5d4de;font-size:.857em}
 #mds-root table{width:100%;border-collapse:collapse;font-size:1em;font-variant-numeric:tabular-nums}
 #mds-root th{position:sticky;top:0;background:#1c2a35;text-align:left;font-size:.786em;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:7px 9px;border-bottom:1px solid rgba(230,239,243,.16)}
-#mds-root td{padding:6px 9px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top;line-height:1.4}
+#mds-root td{padding:6px 9px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top;line-height:1.4;text-align:left}
+#mds-root .mds-card,#mds-root .mds-cards,#mds-root p,#mds-root h4,#mds-root .mds-bar{text-align:left}
 #mds-root tbody tr:hover td{background:rgba(230,239,243,.04)}
 #mds-root td.k{white-space:nowrap;font-weight:500}
 #mds-root td.t{white-space:nowrap;color:#c5d4de}
