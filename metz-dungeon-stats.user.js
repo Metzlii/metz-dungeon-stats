@@ -2191,9 +2191,12 @@
             const perType = { ...S.chests }; for (const b of d.offline) for (const [h, q] of Object.entries(b.chests)) perType[h] = (perType[h] || 0) + q;
             const Mc = getMoney().chests; const baseRows = holdover().rows; const earnedNow = {}, holdNow = {};
             for (const h of new Set([...Object.keys(perType), ...baseRows.map(c => c.item)])) { const base = (baseRows.find(c => c.item === h) || {}).qty || 0; const opened = Mc[h] ? Mc[h].opened : 0; holdNow[h] = Math.max(0, base - opened); earnedNow[h] = perType[h] || 0; } // earned since the record began, opened or not (operator 2026-11-01: it has to line up with Loot at open, Spent, Sold and Net)
-            const chestLines = Object.entries(earnedNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${chestName(h)}`);
+            // Containers that came out of those chests (Large Treasure Chest) count as chests earned too: a dungeon runner
+            // gets nearly all of them from dungeon chests (operator, 2026-11-01).
+            const nested = getMoney().rows.filter(r => r.fromChests > 0 && ref.items[r.item] && ref.items[r.item].openable && !(ref.chestItems[r.item] && ref.chestItems[r.item].zone)).sort((a, b) => b.fromChests - a.fromChests);
+            const chestLines = [...Object.entries(earnedNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${chestName(h)}`), ...nested.map(r => `${r.fromChests} ${it(r.item)}`)];
             const holdLines = Object.entries(holdNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${chestName(h)}`);
-            const holdTotal = Object.values(holdNow).reduce((a, b) => a + b, 0), earnedTotal = Object.values(earnedNow).reduce((a, b) => a + b, 0);
+            const holdTotal = Object.values(holdNow).reduce((a, b) => a + b, 0), earnedTotal = Object.values(earnedNow).reduce((a, b) => a + b, 0) + nested.reduce((a, r) => a + r.fromChests, 0);
             const M = getMoney();
             const assumed = M.tax.measured ? "" : " assumed";
             const cards = [
