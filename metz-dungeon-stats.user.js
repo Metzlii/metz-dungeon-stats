@@ -2190,7 +2190,7 @@
             // first, then out of the earned ones, so the two blocks add up to what the bag holds.
             const perType = { ...S.chests }; for (const b of d.offline) for (const [h, q] of Object.entries(b.chests)) perType[h] = (perType[h] || 0) + q;
             const Mc = getMoney().chests; const baseRows = holdover().rows; const earnedNow = {}, holdNow = {};
-            for (const h of new Set([...Object.keys(perType), ...baseRows.map(c => c.item)])) { const base = (baseRows.find(c => c.item === h) || {}).qty || 0; const opened = Mc[h] ? Mc[h].opened : 0; holdNow[h] = Math.max(0, base - opened); earnedNow[h] = Math.max(0, (perType[h] || 0) - Math.max(0, opened - base)); }
+            for (const h of new Set([...Object.keys(perType), ...baseRows.map(c => c.item)])) { const base = (baseRows.find(c => c.item === h) || {}).qty || 0; const opened = Mc[h] ? Mc[h].opened : 0; holdNow[h] = Math.max(0, base - opened); earnedNow[h] = perType[h] || 0; } // earned since the record began, opened or not (operator 2026-11-01: it has to line up with Loot at open, Spent, Sold and Net)
             const chestLines = Object.entries(earnedNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${chestName(h)}`);
             const holdLines = Object.entries(holdNow).filter(([, q]) => q > 0).map(([h, q]) => `${q} ${chestName(h)}`);
             const holdTotal = Object.values(holdNow).reduce((a, b) => a + b, 0), earnedTotal = Object.values(earnedNow).reduce((a, b) => a + b, 0);
