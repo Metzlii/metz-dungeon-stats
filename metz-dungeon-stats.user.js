@@ -434,11 +434,15 @@
     // that gap is 15 minutes or less, plus offline time that earned XP. A snapshot of the lifetime totals is kept at
     // the start of each day (server clock) so the tab can show today and the past days. Meta "xpRecord".
     const XP_GAP_MS = 15 * 60e3, XP_DAYS_KEEP = 90;
-    const xpDayKey = ms => new Date(ms).toISOString().slice(0, 10);
+    // Days are on the player's own clock (2026-11-01: UTC days restarted "today" at 5 pm for a UTC-7 player).
+    const xpDayKey = ms => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
     function xpRec() {
         if (!state.xpRec) {
             const m = state.meta && isObj(state.meta.xpRecord) ? state.meta.xpRecord : null;
             state.xpRec = m ? { startAt: num(m.startAt) || null, startSnap: isObj(m.startSnap) ? m.startSnap : null, activeMs: num(m.activeMs), offlineMs: num(m.offlineMs), lastTickAt: num(m.lastTickAt) || 0, days: isObj(m.days) ? m.days : {} } : { startAt: null, startSnap: null, activeMs: 0, offlineMs: 0, lastTickAt: 0, days: {} };
+            // Buckets keyed by a UTC day from the first build: one dated after today on this clock folds into today.
+            const R = state.xpRec, today = xpDayKey(serverNow());
+            for (const k of Object.keys(R.days)) if (k > today) { const b = R.days[k]; const t = R.days[today]; if (t) { t.activeMs += num(b.activeMs); t.offlineMs += num(b.offlineMs); } else R.days[today] = b; R.days[k] = undefined; delete R.days[k]; xpSave(); }
         }
         return state.xpRec;
     }
@@ -1856,7 +1860,7 @@
  <div class="mds-wrap"><table><thead><tr><th>Day</th><th>XP</th><th>Active time</th><th>XP / h</th><th>Skills</th></tr></thead><tbody id="mds-xp-days"></tbody></table></div>
  <h4 data-noun="abilities">Abilities</h4>
  <div class="mds-wrap"><table><thead><tr><th>Ability</th><th>Level</th><th>Since record</th><th>XP / h</th><th>Share</th><th title="Books the next level takes, at the game's XP per book">Books to next</th><th title="Those books at the marketplace ask">Price to next</th></tr></thead><tbody id="mds-xp-abilities"></tbody></table></div>
- <p class="mds-note">XP since the record began is the game's lifetime total now less the total when the record started, so it is exact whether or not the script was running, offline play included. XP per hour runs over active time: the time between XP messages when the gap is 15 minutes or less, plus offline time that earned XP. Days are on the server clock (UTC).</p>
+ <p class="mds-note">XP since the record began is the game's lifetime total now less the total when the record started, so it is exact whether or not the script was running, offline play included. XP per hour runs over active time: the time between XP messages when the gap is 15 minutes or less, plus offline time that earned XP. Days are on your own clock.</p>
 </div>
 <div class="mds-pane" data-pane="settings" hidden>
  <h4>General</h4>
