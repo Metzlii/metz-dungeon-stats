@@ -1030,6 +1030,12 @@
             if (!state.record || !state.ready || !state.meta.recordStart) return;
             const fresh = await readToolashaListings();
             const added = fresh ? addMarketHistory(fresh, "toolasha:" + DEVICE) : 0;
+            // Toolasha's copy of the Loot & XP Log, first and whatever else is found: the game only sends its current
+            // window when the panel opens, Toolasha keeps every session it has seen, and the log is this record's count
+            // of clears, chests and crafts (design 4.7). It used to sit after the market history and was skipped when
+            // there was none.
+            const history = await readToolashaStore("lootLogHistory", `lootLog_${state.characterId}`);
+            if (Array.isArray(history)) { const n = mergeLootLog(history, "toolasha"); TOOLASHA.sessions = history.length; if (n) { emit("note", { text: `Toolasha loot log history: ${history.length} sessions, ${n} new or updated` }, "toolasha"); panel.touch(); } }
             const listings = marketHistoryRows(); if (!listings.length) return;
             const start = state.meta.recordStart;
             // 1. Seed purchase prices for the stock the baseline priced at ask.
@@ -1066,9 +1072,6 @@
                 imported++;
             }
             TOOLASHA.imported += imported;
-            // 3. Toolasha's copy of the Loot & XP Log (the game only sends the current window when the panel opens).
-            const history = await readToolashaStore("lootLogHistory", `lootLog_${state.characterId}`);
-            if (Array.isArray(history)) { const n = mergeLootLog(history, "toolasha"); TOOLASHA.sessions = history.length; if (n) emit("note", { text: `Toolasha loot log history: ${history.length} sessions, ${n} new or updated` }, "toolasha"); }
             if (imported) { state.timeline.sort((a, b) => a.at - b.at); state.timelineRev++; }
             info(`toolasha history (${reason}): ${listings.length} listings, ${TOOLASHA.seeded} items seeded, ${imported} fills imported`);
             panel.touch();
@@ -1345,6 +1348,52 @@
         const blocks = offline.map(o => { const b = { from: o.from, to: o.to, ms: o.to - o.from, chests: {}, chestTotal: 0, keys: {}, xp: o.xp, runsInLedger: kept.filter(r => r.startAt >= o.from && r.startAt <= o.to).length }; for (const it of o.items) { if (C.isChest(it.item)) { b.chests[it.item] = (b.chests[it.item] || 0) + n(it.delta); b.chestTotal += n(it.delta); } else if (C.isKey(it.item)) b.keys[it.item] = (b.keys[it.item] || 0) + n(it.delta); } return b; }).filter(b => b.ms >= C.offlineMinMs && b.from >= windowStart); // a block that ended at the record's first login is before the record: its chests were in the baseline stock
         return { runs: kept, summary: S, offline: blocks, markers: markers.length };
     }
+    // The game's own count over the record (design 4.7: "The game's count is the reference; the record adds what the
+    // log does not have"). The Loot & XP Log is the server's tally of every session of a character action: clears,
+    // chests and crafted keys, whichever device played them and offline included. Until 2026-11-21 the Overview
+    // cards and the Keys table added up only what THIS browser had watched (plus the party chat and the offline
+    // summaries), and the log was shown beside it in the Runs tab: 271 watched clears stood where the game counted
+    // 2,211, and 1,093 entry keys where about 2,800 had gone (operator: "THE LOOT AND XP LOG WAS ALREADY SUPPOSED TO BE
+    // THE TRUSTED SOURCE. THAT WAS IN THE INITIAL DESIGN").
+    //
+    // A session counts whole when it began inside the record. One that was already running when the record began
+    // reports only its total, so it counts from the log's first reading of it inside the record (`first`, an exact
+    // snapshot); with no such reading it is left to the record's own events and reported in `uncovered`. Outside
+    // what the log covers -- since its last reading, and before that first reading -- the record's own events count,
+    // so nothing is counted twice and nothing recent waits for the log to be opened.
+    //   sessions: the stored log entries. d: derive()'s result. C: { isDungeon(action), isKeyCraft(action),
+    //   isChest(item), isKey(item), crafts: the record's craft events }.
+    function logTotals(sessions, d, C) {
+        const n = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
+        const ws = d.summary.windowStart;
+        const T = { read: false, sessions: 0, uncovered: 0, lastEnd: 0, log: { clears: 0, chests: {}, crafted: {} }, own: { clears: 0, chests: {}, crafted: {} }, total: { clears: 0, chests: {}, crafted: {} } };
+        const add = (map, drops, sign, pick) => { for (const [k, q] of Object.entries(drops || {})) { const h = String(k).split("::")[0]; if (pick(h)) map[h] = (map[h] || 0) + sign * n(q); } };
+        const dungeonCover = [], craftCover = [];
+        for (const e of sessions || []) {
+            const dungeon = C.isDungeon(e.action), craft = !dungeon && C.isKeyCraft(e.action);
+            if ((!dungeon && !craft) || !(n(e.end) > ws)) continue;
+            let from = n(e.start), base = null;
+            if (from < ws) { if (!(e.first && n(e.first.at) >= ws)) { T.uncovered++; continue; } from = n(e.first.at); base = e.first; }
+            T.read = true; T.lastEnd = Math.max(T.lastEnd, n(e.end));
+            if (dungeon) {
+                T.sessions++; T.log.clears += n(e.count) - (base ? n(base.count) : 0);
+                add(T.log.chests, e.drops, 1, C.isChest); if (base) add(T.log.chests, base.drops, -1, C.isChest);
+                dungeonCover.push([from, n(e.end)]);
+            } else {
+                add(T.log.crafted, e.drops, 1, C.isKey); if (base) add(T.log.crafted, base.drops, -1, C.isKey);
+                craftCover.push([from, n(e.end)]);
+            }
+        }
+        const inside = (t, cover) => cover.some(([a, b]) => t >= a && t <= b);
+        for (const r of d.runs || []) if (r.result === "clear" && r.endAt != null && r.endAt >= ws && !inside(r.endAt, dungeonCover)) {
+            T.own.clears++; for (const c of r.chests || []) T.own.chests[c.item] = (T.own.chests[c.item] || 0) + n(c.qty);
+        }
+        for (const b of d.offline || []) if (b.to >= ws && !inside(b.to, dungeonCover)) for (const [h, q] of Object.entries(b.chests || {})) if (n(q) > 0) T.own.chests[h] = (T.own.chests[h] || 0) + n(q);
+        for (const c of C.crafts || []) if (n(c.at) >= ws && !inside(n(c.at), craftCover)) for (const o of c.outputs || []) if (C.isKey(o.item)) T.own.crafted[o.item] = (T.own.crafted[o.item] || 0) + n(o.qty);
+        T.total.clears = T.log.clears + T.own.clears;
+        for (const part of ["chests", "crafted"]) for (const src of [T.log, T.own]) for (const [h, q] of Object.entries(src[part])) T.total[part][h] = (T.total[part][h] || 0) + q;
+        return T;
+    }
     // </derive>
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -1460,6 +1509,12 @@
             return null;
         };
         const keyPrice = k => { const u = X.keyAvg(k); if (u != null) return { unitCost: u, basis: "craft average" }; const rc = recipeCost(k); if (rc) return rc; const a = X.askOf(k); return a != null ? { unitCost: a, basis: "key ask now" } : null; };
+        // Entry keys by the game's own count (design 4.7): the game charges one entry key for every chest a clear awards,
+        // so the log's chests are the keys that went, on any device. What this record watched keeps its exact lot cost;
+        // the rest is priced like every other use the record did not watch (craft average, then recipe, then ask).
+        const logKeys = (X.logKeys && X.logKeys()) || null;
+        for (const [k, q] of Object.entries(logKeys || {})) { const r = bump(keysUsed, k, () => ({ qty: 0, cost: 0, exact: 0, fallback: 0 })); r.watched = r.qty; r.log = q; if (q > r.qty) { r.fallback += q - r.qty; r.qty = q; } }
+        const logCrafted = (X.logCrafted && X.logCrafted()) || null;
         for (const [k, r] of Object.entries(keysUsed)) { if (r.fallback) { const p = keyPrice(k); r.fallbackBasis = p ? p.basis : "unknown"; if (p) r.cost += p.unitCost * r.fallback; else r.unknown = r.fallback; } }
         for (const cb of Object.values(chestBy)) if (cb.keyItem && cb.keyPending) { const p = keyPrice(cb.keyItem); if (p) { cb.keyCost += p.unitCost * cb.keyPending; cb.keyBasis[p.basis] = (cb.keyBasis[p.basis] || 0) + cb.keyPending; } }
         const consUsed = {};
@@ -1513,12 +1568,16 @@
         const keys = {};
         for (const k of keyItems) {
             if (X.isRealKey && !X.isRealKey(k)) continue;
-            const crafted = crafts.reduce((s, c) => s + (c.outputs || []).filter(o => o.item === k).reduce((a, o) => a + n(o.qty), 0), 0);
+            const craftedWatched = crafts.reduce((s, c) => s + (c.outputs || []).filter(o => o.item === k).reduce((a, o) => a + n(o.qty), 0), 0);
+            // Crafted by the game's own count when the log has been read (crafts on another device are in it); never
+            // fewer than this record watched.
+            const craftedByLog = !!(logCrafted && logCrafted[k] != null && logCrafted[k] >= craftedWatched);
+            const crafted = craftedByLog ? logCrafted[k] : craftedWatched;
             const bought = buyBy[k] ? buyBy[k].qty : 0, boughtCoins = buyBy[k] ? buyBy[k].coins : 0;
             const u = keysUsed[k] || { qty: 0, cost: 0, exact: 0, fallback: 0 };
             const avg = X.keyAvg(k), price = keyPrice(k);
             const base = ((baseline && baseline.keys) || []).find(b => b.item === k);
-            keys[k] = { crafted, bought, boughtAvg: bought ? boughtCoins / bought : null, used: u.qty, usedCost: u.cost, usedExact: u.exact, usedFallback: u.fallback, fallbackBasis: u.fallbackBasis || null, held: X.held(k), costPerKey: price ? price.unitCost : null, costBasis: price ? price.basis : "unknown", craftAvg: avg, baseline: base ? base.qty : 0, dropped: gained[k] ? gained[k].qty : 0 };
+            keys[k] = { craftedByLog, craftedWatched, usedByLog: u.log != null && u.qty === u.log, usedWatched: u.watched != null ? u.watched : u.qty, crafted, bought, boughtAvg: bought ? boughtCoins / bought : null, used: u.qty, usedCost: u.cost, usedExact: u.exact, usedFallback: u.fallback, fallbackBasis: u.fallbackBasis || null, held: X.held(k), costPerKey: price ? price.unitCost : null, costBasis: price ? price.basis : "unknown", craftAvg: avg, baseline: base ? base.qty : 0, dropped: gained[k] ? gained[k].qty : 0 };
         }
         const materials = {};
         for (const [action, recipe] of Object.entries(X.keyRecipes || {})) {
@@ -1763,7 +1822,28 @@
         function setScale(v) { scale = Math.max(0.7, Math.min(1.8, Math.round(v * 20) / 20)); try { localStorage.setItem(SCALE_KEY, String(scale)); } catch (_e) { /* fine */ } applyScale(); }
         let money = null, moneyAt = 0, moneyRev = -1, moneyPrices = 0;
         const isToken = h => /_token$/.test(h);
+        // The game's count over the record (logTotals), re-read when the log or the record changes.
+        let gameT = null, gameKey = "";
+        function gameTotals() {
+            const d = getDerived(), key = `${state.lootLogRev}|${state.timelineRev}|${d.summary.windowEnd}`;
+            if (!gameT || gameKey !== key) {
+                gameT = logTotals([...state.lootLog.values()], d, { isDungeon: a => !!ref.dungeons[a], isKeyCraft: a => !!ref.keyActions[a],
+                    isChest: h => !!(ref.chestItems[h] && ref.chestItems[h].zone), isKey: h => ref.keyItems.has(h), crafts: state.timeline.filter(e => e.kind === "craft") });
+                gameKey = key;
+            }
+            return gameT;
+        }
+        // Entry keys the game charged, by key item: one for every chest a clear awards. A dungeon's reward chests come
+        // together (a chest and, on the tiers that have one, a refinement chest), so the most numerous of them is the
+        // number of awards.
+        function logEntryKeys() {
+            const T = gameTotals(); if (!T.read) return null;
+            const out = {};
+            for (const dgn of Object.values(ref.dungeons)) { if (!dgn.keyItem) continue; const q = Math.max(0, ...dgn.chests.map(c => T.total.chests[c] || 0)); if (q > 0) out[dgn.keyItem] = (out[dgn.keyItem] || 0) + q; }
+            return out;
+        }
         const moneyCtx = () => ({
+            logKeys: logEntryKeys, logCrafted: () => { const T = gameTotals(); return T.read ? T.total.crafted : null; },
             recordStart: state.meta.recordStart || 0, reviewPct: 0.5,
             isCounted, isKey: h => ref.keyItems.has(h), isChest: h => !!ref.chestItems[h], isDungeonChest: h => !!(ref.chestItems[h] && ref.chestItems[h].zone), isDungeonLoot: h => ref.dungeonLoot.has(h), isConsumable, isToken, tokenShop: h => ref.tokenShop[h] || [], isEntryKey: h => Object.values(ref.dungeons).some(d => d.keyItem === h),
             isOpenable: h => !!(ref.items[h] && ref.items[h].openable), isTradable: h => !(ref.items[h] && ref.items[h].tradable === false),
@@ -2189,6 +2269,10 @@
             // Chests earned since the record started and chests held before it, with openings taken out of the holdover
             // first, then out of the earned ones, so the two blocks add up to what the bag holds.
             const perType = { ...S.chests }; for (const b of d.offline) for (const [h, q] of Object.entries(b.chests)) perType[h] = (perType[h] || 0) + q;
+            // The game's count is the reference (design 4.7): once the Loot & XP Log has been read, clears and dungeon
+            // chests are its totals, with this record's own events only for what the log does not cover yet.
+            const G = gameTotals();
+            if (G.read) { for (const h of Object.keys(perType)) if (ref.chestItems[h] && ref.chestItems[h].zone) delete perType[h]; for (const [h, q] of Object.entries(G.total.chests)) perType[h] = q; }
             const Mc = getMoney().chests; const baseRows = holdover().rows; const earnedNow = {}, holdNow = {};
             for (const h of new Set([...Object.keys(perType), ...baseRows.map(c => c.item)])) { const base = (baseRows.find(c => c.item === h) || {}).qty || 0; const opened = Mc[h] ? Mc[h].opened : 0; holdNow[h] = Math.max(0, base - opened); earnedNow[h] = perType[h] || 0; } // earned since the record began, opened or not (operator 2026-11-01: it has to line up with Loot at open, Spent, Sold and Net)
             // Containers that came out of those chests (Large Treasure Chest) count as chests earned too: a dungeon runner
@@ -2200,7 +2284,10 @@
             const M = getMoney();
             const assumed = M.tax.measured ? "" : " assumed";
             const cards = [
-                card("Clears", S.clears, [`${S.fails} Failed${S.failRate != null ? ` (${(S.failRate * 100).toFixed(1)}%)` : ""}`, `${S.cancelled} Cancelled`, S.unknown ? `${S.unknown} End unknown` : ""]),
+                card("Clears", G.read ? G.total.clears : S.clears, [
+                    G.read ? `Game's Loot & XP Log, read ${fmtClock(G.lastEnd)}${G.own.clears ? ` + ${G.own.clears} since` : ""}` : "This record only: open the Loot & XP Log for the game's count",
+                    G.read ? `${S.clears} timed by this record` : "", G.uncovered ? `${G.uncovered} session${G.uncovered === 1 ? "" : "s"} from before the record not in the count` : "",
+                    `${S.fails} Failed${S.failRate != null ? ` (${(S.failRate * 100).toFixed(1)}%)` : ""}`, `${S.cancelled} Cancelled`, S.unknown ? `${S.unknown} End unknown` : ""]),
                 card("Average run", S.avgClearMs != null ? fmtDur(S.avgClearMs) : "–", S.clearMs.length ? [S.avgRunMs != null && S.fails ? `${fmtDur(S.avgRunMs)} counting fails` : "", `Fastest ${fmtDur(S.fastestMs)}`, `Slowest ${fmtDur(S.slowestMs)}`] : ["No completed run yet"]),
                 card("Chests earned", earnedTotal, chestLines.length ? chestLines : ["None yet"]),
                 ...(holdTotal ? [card("Holdover chests", holdTotal, holdLines)] : []),
@@ -2367,7 +2454,7 @@
             const M = getMoney();
             renderPlan();
             const keyRows = Object.entries(M.keys).sort((a, b) => b[1].used - a[1].used);
-            els["mds-keys"].innerHTML = keyRows.map(([h, k]) => `<tr><td class="k">${itIcon(h)}</td><td>${fmtQ(k.held)}</td><td>${fmtQ(k.crafted)}</td><td>${k.bought ? `${fmtQ(k.bought)} @ ${fmtCoins(k.boughtAvg)}` : "–"}</td><td>${k.dropped || "–"}</td><td>${fmtQ(k.used)}</td><td>${coinsOr(k.costPerKey, "?")}<small> ${esc(k.costBasis)}</small></td><td>${fmtCoins(k.usedCost)}${k.usedFallback ? `<small> ${k.usedFallback} at ${esc(k.fallbackBasis || "?")}</small>` : ""}</td><td>${fmtQ(k.baseline)}</td><td>${lifetimeCrafted(h) || "–"}<small>loot log</small></td></tr>`).join("") || `<tr><td colspan="10" class="t">No keys seen yet.</td></tr>`;
+            els["mds-keys"].innerHTML = keyRows.map(([h, k]) => `<tr><td class="k">${itIcon(h)}</td><td>${fmtQ(k.held)}</td><td>${fmtQ(k.crafted)}${k.craftedByLog ? `<small> loot log${k.craftedWatched !== k.crafted ? `, ${fmtQ(k.craftedWatched)} watched` : ""}</small>` : ""}</td><td>${k.bought ? `${fmtQ(k.bought)} @ ${fmtCoins(k.boughtAvg)}` : "–"}</td><td>${k.dropped || "–"}</td><td>${fmtQ(k.used)}${k.usedByLog ? `<small> loot log, one per chest${k.usedWatched !== k.used ? `, ${fmtQ(k.usedWatched)} watched` : ""}</small>` : ""}</td><td>${coinsOr(k.costPerKey, "?")}<small> ${esc(k.costBasis)}</small></td><td>${fmtCoins(k.usedCost)}${k.usedFallback ? `<small> ${k.usedFallback} at ${esc(k.fallbackBasis || "?")}</small>` : ""}</td><td>${fmtQ(k.baseline)}</td><td>${lifetimeCrafted(h) || "–"}<small>loot log</small></td></tr>`).join("") || `<tr><td colspan="10" class="t">No keys seen yet.</td></tr>`;
             const mats = Object.values(M.materials).sort((a, b) => (b.boughtCoins + b.consumedCost) - (a.boughtCoins + a.consumedCost));
             els["mds-mats"].innerHTML = mats.map(m => `<tr><td class="k">${itIcon(m.item)}</td><td class="t">${m.recipes.map(r => esc(shortAction(r))).join(", ")} ×${m.perCraft}</td><td>${m.bought ? fmtQ(m.bought) : "–"}</td><td>${m.bought ? fmtCoins(m.boughtCoins / m.bought) : "–"}</td><td>${m.bought ? fmtCoins(m.boughtCoins) : "–"}</td><td>${m.consumed ? `${fmtQ(m.consumed)} (${fmtCoins(m.consumedCost)})` : "–"}</td><td>${fmtQ(m.held)}${m.avg != null ? `<small> @ ${fmtCoins(m.avg)}</small>` : ""}</td><td>${m.baseline ? fmtQ(m.baseline) : "–"}</td></tr>`).join("") || `<tr><td colspan="8" class="t">No key recipes loaded yet.</td></tr>`;
             els["mds-keysnote"].textContent = "Cost per key = the average of the key crafts this record has seen (materials at their purchase price, plus the recipe's coins); until one is seen, the recipe at the materials' purchase prices (asks for materials never bought) with every input cut by the game's artisan rate (tea × Guzzling Pouch, as the game reports it) plus the tea's share of the craft time, and the key's own ask only when a material has no price at all. Keys held before the record began are priced the same way. Used at cost charges each live clear the exact lot it took; offline and older clears use the craft average. At start = held when the record began, priced at ask then.";
