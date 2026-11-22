@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Metz Dungeon Stats
 // @namespace    metzlii
-// @version      0.1.0
+// @version      0.1.1
 // @description  One permanent record of your XP, your dungeon runs and the dungeon cash flow: keys crafted, consumables used, chests opened, loot sold. Tracked from the game's own messages, nothing estimated.
 // @author       Metzli
 // @license      MIT
@@ -32,7 +32,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.1.0";
+    const VERSION = "0.1.1";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
