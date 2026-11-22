@@ -7,6 +7,8 @@
 // @license      MIT
 // @homepageURL  https://github.com/Metzlii/metz-dungeon-stats
 // @supportURL   https://github.com/Metzlii/metz-dungeon-stats/issues
+// @downloadURL  https://update.greasyfork.org/scripts/603399/Metz%20Dungeon%20Stats.user.js
+// @updateURL    https://update.greasyfork.org/scripts/603399/Metz%20Dungeon%20Stats.meta.js
 // @match        https://www.milkywayidle.com/*
 // @match        https://milkywayidle.com/*
 // @match        https://www.milkywayidlecn.com/*
