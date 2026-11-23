@@ -1337,13 +1337,20 @@
         const intersect = (A, B) => { const out = []; for (const a of A) for (const b of B) { const x = Math.max(a[0], b[0]), y = Math.min(a[1], b[1]); if (y > x) out.push([x, y]); } return merge(out); };
         const dungeonIv = [], unknownIv = [];
         for (const r of kept) { if (r.result === "unknown") unknownIv.push(clip(r.startAt, r.gapTo || nowMs)); else dungeonIv.push(clip(r.startAt, r.endAt == null ? nowMs : r.endAt)); }
-        const dungeonMerged = merge(dungeonIv), unknownOnly = intersect(merge(unknownIv), complement(dungeonMerged, windowStart, windowEnd));
+        // The game's Loot & XP Log fills the time this record did not watch (operator, 2026-11-22). A log session is one
+        // action from its start to its end by the game's own clock, offline included: a dungeon session is time in
+        // dungeons, a key craft session is crafting, any other session is time between runs. What stays unaccounted is
+        // a stretch with no run end in the chat ledger AND no log session over it.
+        const logIv = { dungeon: [], craft: [], other: [] };
+        for (const e of (C.logSessions || [])) { const iv = clip(n(e.start), n(e.end) || n(e.start)); if (!(iv[1] > iv[0])) continue; (C.isDungeon && C.isDungeon(e.action) ? logIv.dungeon : C.isKeyCraft && C.isKeyCraft(e.action) ? logIv.craft : logIv.other).push(iv); }
+        const watchedMerged = merge(dungeonIv), dungeonMerged = merge([...dungeonIv, ...logIv.dungeon]);
+        const unknownOnly = intersect(merge(unknownIv), complement(merge([...dungeonMerged, ...logIv.craft, ...logIv.other]), windowStart, windowEnd));
         const between = complement(merge([...dungeonMerged, ...unknownOnly]), windowStart, windowEnd);
         const offlineIv = merge(offline.map(o => clip(o.from, o.to)));
         const bursts = []; for (const c of crafts) { const last = bursts[bursts.length - 1]; if (last && c.at - last.last <= C.craftBurstMs) { last.last = c.at; last.n++; } else bursts.push({ first: c.at, last: c.at, n: 1 }); }
-        const craftIv = merge(bursts.map(b => { const per = b.n > 1 ? (b.last - b.first) / (b.n - 1) : 10e3; return clip(b.first - per, b.last); }));
+        const craftIv = merge([...bursts.map(b => { const per = b.n > 1 ? (b.last - b.first) / (b.n - 1) : 10e3; return clip(b.first - per, b.last); }), ...logIv.craft]);
         const craftingBetween = intersect(between, craftIv), offlineBetween = intersect(between, offlineIv);
-        const S = { windowStart, windowEnd, totalMs: windowEnd - windowStart, clears: 0, fails: 0, cancelled: 0, open: 0, unknown: 0, chests: {}, chestTotal: 0, keysCharged: 0, deaths: 0, clearMs: [], runMs: [], dungeonMs: sum(dungeonMerged), unknownMs: sum(unknownOnly), betweenMs: sum(between), craftingMs: sum(craftingBetween), offlineBetweenMs: sum(offlineBetween), offlineMs: sum(offlineIv), crafts: crafts.length, keysCrafted: crafts.reduce((s, c) => s + (c.outputs || []).reduce((a, o) => a + n(o.qty), 0), 0), counted: {} };
+        const S = { windowStart, windowEnd, totalMs: windowEnd - windowStart, clears: 0, fails: 0, cancelled: 0, open: 0, unknown: 0, chests: {}, chestTotal: 0, keysCharged: 0, deaths: 0, clearMs: [], runMs: [], dungeonMs: sum(dungeonMerged), dungeonWatchedMs: sum(watchedMerged), dungeonLogMs: sum(dungeonMerged) - sum(watchedMerged), unknownMs: sum(unknownOnly), betweenMs: sum(between), craftingMs: sum(craftingBetween), offlineBetweenMs: sum(offlineBetween), offlineMs: sum(offlineIv), crafts: crafts.length, keysCrafted: crafts.reduce((s, c) => s + (c.outputs || []).reduce((a, o) => a + n(o.qty), 0), 0), counted: {} };
         // Items that are only counted (cowbells): total and per chest type, with how many chests of that type were opened.
         {
             const openedBy = {};
@@ -1916,9 +1923,10 @@
             if (!money || moneyRev !== state.timelineRev || moneyPrices !== prices.at || Date.now() - moneyAt > 5000) { money = deriveMoney(state.timeline, moneyCtx()); moneyAt = Date.now(); moneyRev = state.timelineRev; moneyPrices = prices.at; }
             return money;
         }
-        const deriveCfg = () => ({ selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null });
+        const deriveCfg = () => ({ selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null,
+            logSessions: [...state.lootLog.values()], isDungeon: a => !!ref.dungeons[a], isKeyCraft: a => !!ref.keyActions[a] });
         function getDerived() {
-            if (!derived || derivedRev !== state.timelineRev || Date.now() - derivedAt > 30000) { derived = derive(state.timeline, serverNow(), deriveCfg()); derivedAt = Date.now(); derivedRev = state.timelineRev; }
+            if (!derived || derivedRev !== `${state.timelineRev}|${state.lootLogRev}` || Date.now() - derivedAt > 30000) { derived = derive(state.timeline, serverNow(), deriveCfg()); derivedAt = Date.now(); derivedRev = `${state.timelineRev}|${state.lootLogRev}`; }
             return derived;
         }
         function ensure() {
@@ -2351,11 +2359,11 @@
                 card("Average run", S.avgClearMs != null ? fmtDur(S.avgClearMs) : "–", S.clearMs.length ? [S.avgRunMs != null && S.fails ? `${fmtDur(S.avgRunMs)} counting fails` : "", `Fastest ${fmtDur(S.fastestMs)}`, `Slowest ${fmtDur(S.slowestMs)}`] : ["No completed run yet"]),
                 card("Chests earned", earnedTotal, chestLines.length ? chestLines : ["None yet"]),
                 ...(holdTotal ? [card("Holdover chests", holdTotal, holdLines)] : []),
-                card("In dungeons", fmtHm(S.dungeonMs), [`${pct(S.dungeonMs, S.totalMs)} of ${fmtHm(S.totalMs)} recorded`]),
+                card("In dungeons", fmtHm(S.dungeonMs), [`${pct(S.dungeonMs, S.totalMs)} of ${fmtHm(S.totalMs)} recorded`, ...(S.dungeonLogMs > 0 ? [`${fmtHm(S.dungeonWatchedMs)} timed by this record`, `+ ${fmtHm(S.dungeonLogMs)} from the game's Loot & XP Log`] : [])]),
                 card("Between runs", fmtHm(S.betweenMs), [`Crafting ${fmtHm(S.craftingMs)}`, `Offline ${fmtHm(S.offlineBetweenMs)}`, `Other ${fmtHm(S.otherMs)}`]),
             ];
             for (const [h, c] of Object.entries(S.counted || {})) if (c.qty > 0) cards.push(card(icon(h) + it(h) + "s", c.qty, Object.entries(c.byChest).filter(([, b]) => b.qty > 0).map(([chest, b]) => `${b.opened ? (b.qty / b.opened).toFixed(2) : "?"} per ${chestName(chest)}`)));
-            if (S.unknownMs > 0) cards.push(card("Unaccounted", fmtHm(S.unknownMs), ["Runs whose end the chat ledger does not show"]));
+            if (S.unknownMs > 0) cards.push(card("Unaccounted", fmtHm(S.unknownMs), ["No run end in the chat ledger and no session in the game's Loot & XP Log"]));
             { const XS = xpSummary(serverNow()); if (XS && XS.total > 0) cards.push(card("XP", fmtCoins(XS.total), [XS.perHour != null ? `${fmtCoins(XS.perHour)} / h` : "", XS.today ? `Today ${fmtCoins(XS.today.total)}` : "", `Active ${fmtHm(XS.activeMs)}`])); }
             cards.push(
                 card("Spent", fmtCoins(M.spent.total), [`Entry keys ${fmtCoins(M.spent.entryKeys)}`, `Chest keys ${fmtCoins(M.spent.chestKeys)}`, `Consumables ${fmtCoins(M.spent.consumables)}`, `Bought ${fmtCoins(M.spent.buys + M.spent.craftCoins)} as stock, charged as used`]),
