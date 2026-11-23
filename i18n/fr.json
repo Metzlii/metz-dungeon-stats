@@ -444,5 +444,15 @@
  "Mana gained {n}": "Mana gagné {n}",
  "Food and drinks": "Nourriture et boissons",
  "Other": "Autre",
- "Times this source restored MP": "Nombre de fois où cette source a rendu des PM"
+ "Times this source restored MP": "Nombre de fois où cette source a rendu des PM",
+ "Entry keys": "Clés d'entrée",
+ "Food 1": "Nourriture 1",
+ "Food 2": "Nourriture 2",
+ "Food 3": "Nourriture 3",
+ "Drink 1": "Boisson 1",
+ "Drink 2": "Boisson 2",
+ "Drink 3": "Boisson 3",
+ "No battle seen on this page yet.": "Aucun combat vu sur cette page pour l'instant.",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "Quantités à la dernière vague, pour tous les joueurs du combat. Sous chaque quantité : sa durée au rythme auquel ce joueur l'a utilisée depuis l'ouverture de cette page (– avant 10 minutes et une utilisation). Les clés d'entrée viennent du message de groupe du jeu au début de chaque run, au temps de run moyen du donjon.",
+ "Drag a tab onto another to move it.": "Faites glisser un onglet sur un autre pour le déplacer."
 }

@@ -444,5 +444,15 @@
  "Mana gained {n}": "Maná ganado {n}",
  "Food and drinks": "Comida y bebidas",
  "Other": "Otros",
- "Times this source restored MP": "Veces que esta fuente restauró MP"
+ "Times this source restored MP": "Veces que esta fuente restauró MP",
+ "Entry keys": "Llaves de entrada",
+ "Food 1": "Comida 1",
+ "Food 2": "Comida 2",
+ "Food 3": "Comida 3",
+ "Drink 1": "Bebida 1",
+ "Drink 2": "Bebida 2",
+ "Drink 3": "Bebida 3",
+ "No battle seen on this page yet.": "Aún no se ha visto ninguna batalla en esta página.",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "Cantidades a la última oleada, para todos en la batalla. Bajo cada cantidad: cuánto dura al ritmo al que ese jugador la ha usado desde que se abrió esta página (– hasta 10 minutos y un uso). Las llaves de entrada vienen del mensaje de grupo del juego al inicio de cada partida, al tiempo medio de partida de la mazmorra.",
+ "Drag a tab onto another to move it.": "Arrastra una pestaña sobre otra para moverla."
 }

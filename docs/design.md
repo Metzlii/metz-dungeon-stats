@@ -256,3 +256,7 @@ Every new_battle carries each party member consumables with the count held. Per 
 ### Mana in the damage meter (0.2.8)
 
 The popup has two more folded tables per player: Mana spent (by ability: the MP lost in the message where the player acts) and Mana gained (the regeneration tick when two or more players gain at once, food and drinks when one player gains alone with nobody acting, other). Sessions saved before 0.2.8 have no mana tables. The party consumables hover is by slot: hovering an own consumable lists each member item in the same food or drink slot.
+
+### Consumables tab and tab order (0.2.8)
+
+A Consumables tab lists the party: one row a member, entry keys and the six consumable slots (food 1-3, drink 1-3), each with the count held and the time it lasts under it. The panel tabs can be dragged into any order, kept per browser.

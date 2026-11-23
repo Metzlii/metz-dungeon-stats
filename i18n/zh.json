@@ -444,5 +444,15 @@
  "Mana gained {n}": "回复法力 {n}",
  "Food and drinks": "食物和饮料",
  "Other": "其他",
- "Times this source restored MP": "此来源回复 MP 的次数"
+ "Times this source restored MP": "此来源回复 MP 的次数",
+ "Entry keys": "入场钥匙",
+ "Food 1": "食物 1",
+ "Food 2": "食物 2",
+ "Food 3": "食物 3",
+ "Drink 1": "饮料 1",
+ "Drink 2": "饮料 2",
+ "Drink 3": "饮料 3",
+ "No battle seen on this page yet.": "此页面尚未看到战斗。",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "截至上一波，战斗中每个人的持有数量。每个数量下方：按该玩家自本页面打开以来的使用速度还能用多久（满 10 分钟且使用一次之前显示 –）。入场钥匙来自每次开始时游戏的队伍消息，按该地下城的平均通关时间计算。",
+ "Drag a tab onto another to move it.": "将标签拖到另一个标签上即可移动。"
 }
