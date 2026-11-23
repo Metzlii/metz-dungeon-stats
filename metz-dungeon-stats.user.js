@@ -476,15 +476,24 @@
         const snap = state.meter.snapshot(); delete snap.live; delete snap.seq;
         state.record.queue("meta", { key: "meterOpen", value: snap }); meterCheckpointAt = s.lastAt;
     }
+    let meterZoneLast = null;   // the last place a session was tagged with: {zone, tier, at}
     function meterTag(s) {
         if (!s) return;
-        if (!s.zone) { const a = currentAction(); if (a) { s.zone = a.actionHrid; s.tier = num(a.difficultyTier); } }
+        if (!s.zone) {
+            const a = currentAction(), run = state.run && state.run.battleId === s.battleId ? state.run : null;
+            if (a) { s.zone = a.actionHrid; s.tier = num(a.difficultyTier); }
+            else if (run) { s.zone = run.zone; s.tier = run.tier; }
+            else if (meterZoneLast && serverNow() - meterZoneLast.at < METER_STALE_MS) { s.zone = meterZoneLast.zone; s.tier = meterZoneLast.tier; }
+        }
+        if (s.zone) meterZoneLast = { zone: s.zone, tier: s.tier, at: serverNow() };
         if (!s.runId && state.run && state.run.battleId === s.battleId) s.runId = state.run.id;
     }
+    const meterInCombat = () => { const s = state.meter.session; return !!(currentAction() || state.run || (s && serverNow() - num(s.lastAt) < 60e3)); };
     function meterSave(s, result) {
         if (!s || !s.waves || !s.players || !Object.keys(s.players).length) return null;
         delete s.live; delete s.seq; delete s.closeAfter;
         if (result) s.result = result;
+        meterTag(s);
         if (state.record) state.record.queue("meta", { key: "meterOpen", value: null });
         meterCheckpointAt = 0;
         if (!meterWhole(s)) { meterPartial(s); return null; }
@@ -503,7 +512,7 @@
     }
     function streakCheck() {
         const st = state.streak, s = state.meter.session; if (!st) return;
-        if (!currentAction() || (s && s.zone && `${s.zone}|${s.tier ?? ""}` !== st.key) || serverNow() - num(st.lastAt) > METER_STALE_MS && !(s && serverNow() - num(s.lastAt) < METER_STALE_MS)) state.streak = null;
+        if (!meterInCombat() || (s && s.zone && `${s.zone}|${s.tier ?? ""}` !== st.key) || serverNow() - num(st.lastAt) > METER_STALE_MS && !(s && serverNow() - num(s.lastAt) < METER_STALE_MS)) state.streak = null;
     }
     function meterClosed(s, result) { if (result) s.result = result; streakAdd(s); return meterSave(s); }
     // Off (Settings → Damage meter, 0.2.1, operator 2026-11-23: some play on very old PCs): battle messages are not read
@@ -1058,6 +1067,9 @@
         const serverTs = parseServerTime(m.currentTimestamp); if (serverTs) { clock.offset = serverTs - Date.now(); clock.known = true; }
         const switched = state.characterId && state.characterId !== id;
         state.characterId = id; state.characterName = ch.name || null;
+        // The action queue first: battle messages keep coming while the record opens, and the damage meter and the
+        // run tracker read the dungeon from the queue (0.2.1: sessions saved with no place after a reload).
+        applyActions(m.characterActions);
         if (!state.record || switched) await openRecord(id);
         applyRows(m.characterItems, true);
         noteBuffs(m);
@@ -1389,6 +1401,16 @@
             if (retaxed.length) { for (const e of retaxed) state.record.queue("events", e); for (const e of state.events) fixImportedTax(e); info(`imported sales re-taxed by the game's rule: ${retaxed.length}`); }
             state.consumeTotals = new Map(); for (const c of await state.record.getAll("events", "kind", IDBKeyRange.only("consume"))) addConsume(c);
             state.damage = await state.record.getAll("events", "kind", IDBKeyRange.only("damage"));
+            {   // Sessions saved with no place (the login race above): the run record that covers them names it.
+                const lost = state.damage.filter(e => !e.zone);
+                if (lost.length) {
+                    const runs = await state.record.getAll("runs");
+                    for (const e of lost) {
+                        const r = runs.find(x => (e.runId && x.id === e.runId) || (x.battleId === e.battleId && num(x.startAt) <= num(e.lastAt) && num(e.startAt) <= num(x.endAt || e.lastAt) + 60e3));
+                        if (r && r.zone) { e.zone = r.zone; e.tier = r.tier; e.runId = e.runId || r.id; state.record.queue("events", e); }
+                    }
+                }
+            }
             {
                 const mo = state.meta.meterOpen;
                 // A piece of another run than the one now in progress (the next run began during the reload, or its first
@@ -3142,9 +3164,12 @@
         const meterKeyIcon = k => { const h = /^dot:/.test(k) ? k.slice(4) : k; return /^\/abilities\//.test(h) ? abilityIcon(h) : ""; };
         const sessTotal = s => Object.values((s && s.players) || {}).reduce((a, p) => a + (p.dealt || 0), 0);
         const sessSecs = s => Math.max(1, num(s && s.combatMs) / 1000);
-        const placeName = z => (z ? (ref.dungeons[z] ? zoneLabel(z, null).replace(/^T?\d*/, "") : esc(shortAction(z).replace(/_/g, " ").replace(/^./, c => c.toUpperCase()))) : "?");
-        const meterWhere = s => (s.zone ? (ref.dungeons[s.zone] ? zoneLabel(s.zone, s.tier) : placeName(s.zone) + (s.tier ? ` T${s.tier}` : "")) : "?");
-        const meterResult = s => (s.streak ? `${s.runs} finished${s.live ? " + this one" : ""} since ${fmtClock(num(s.startAt))}` : s.aggregate ? `${s.runs} whole run${s.runs === 1 ? "" : "s"}${s.pieces ? ` + ${s.pieces} part${s.pieces === 1 ? "" : "s"}` : ""}` : s.live ? (s.result ? `${s.result}, closing` : serverNow() - num(s.lastAt) > METER_STALE_MS ? "paused" : "in progress") + (s.stitched ? " (stitched)" : "") : (s.result || "ended") + (s.stitched ? " (stitched)" : ""));
+        // Places and results in words (operator, 2026-11-23: the session list read as code): "T2 Pirate Cove", "cleared".
+        const placeName = z => (z ? (ref.dungeons[z] ? ref.dungeons[z].name : shortAction(z).replace(/_/g, " ").replace(/^./, c => c.toUpperCase())) : "Unknown place");
+        const meterWhere = s => esc(s.zone ? `${s.tier != null && (ref.dungeons[s.zone] || s.tier) ? `T${s.tier} ` : ""}${placeName(s.zone)}` : placeName(null));
+        const RESULT_WORDS = { clear: "cleared", fail: "failed", stop: "ended early", gap: "went quiet", interrupted: "cut short" };
+        const resultWord = r => RESULT_WORDS[r] || r || "ended";
+        const meterResult = s => (s.streak ? `${s.runs} finished${s.live ? " + this one" : ""} since ${fmtClock(num(s.startAt))}` : s.aggregate ? `totals: ${s.runs} full run${s.runs === 1 ? "" : "s"}${s.pieces ? `, ${s.pieces} partly seen` : ""}` : s.live ? (s.result ? `${resultWord(s.result)}, closing` : serverNow() - num(s.lastAt) > METER_STALE_MS ? "paused" : "in progress") + (s.stitched ? " (rejoined after a reload)" : "") : resultWord(s.result) + (s.stitched ? " (rejoined after a reload)" : ""));
         function meterHead(s) {
             if (!s) return "";
             const total = sessTotal(s), secs = sessSecs(s), c = s.check || {};
@@ -3200,13 +3225,19 @@ ${fold("taken", "Damage taken", p.taken, taken, `<th>Source</th><th class="n">Da
         function renderDamage() {
             if (!els["mds-dmg-meter"]) return;
             const live = state.meter.snapshot(), list = damageSessions(), totals = damageTotals();
-            const label = s => `${s.aggregate ? "All seen" : s.live ? "Now" : fmtTime(num(s.endAt || s.at))} · ${meterWhere(s).replace(/<[^>]+>/g, "")} · ${meterResult(s)}`;
-            const opts = [...(live ? [["live", label(live)]] : []), ...totals.map(t => [t.id, label(t)]), ...list.slice(0, 300).map(e => [e.id, label(e)])];
+            const plain = h => h.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+            const isRun = s => !!(s.zone && ref.dungeons[s.zone]);
+            const label = s => s.live ? `${isRun(s) ? "Current run" : "Current session"} · ${plain(meterWhere(s))} · ${meterResult(s)}`
+                : s.aggregate ? `${plain(meterWhere(s))} · ${meterResult(s)}`
+                : `${fmtTime(num(s.endAt || s.at))} · ${plain(meterWhere(s))} · ${meterResult(s)} · ${fmtDur(num(s.combatMs))}`;
+            // Grouped: what is happening now, the totals per place (every run seen, whole or in part), the saved runs.
+            const groups = [["Now", live ? [["live", label(live)]] : []], ["Totals per place (every run seen, full or in part)", totals.map(t => [t.id, label(t)])], [`Saved ${list.some(isRun) ? "runs" : "sessions"} (seen from start to end), newest first`, list.slice(0, 300).map(e => [e.id, label(e)])]];
+            const opts = groups.flatMap(g => g[1]);
             const known = id => list.some(e => e.id === id) || totals.some(t => t.id === id);
             if (dmgPick === "live" && !live) dmgPick = list.length ? list[0].id : totals.length ? totals[0].id : "live";
             if (dmgPick !== "live" && !known(dmgPick)) dmgPick = live ? "live" : list.length ? list[0].id : totals.length ? totals[0].id : "live";
             const sel = els["mds-dmg-pick"], optKey = opts.map(o => o.join("|")).join("\n") + "\n" + dmgPick;
-            if (sel.dataset.key !== optKey) { sel.innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join("") || `<option value="live">No sessions yet</option>`; sel.value = dmgPick; sel.dataset.key = optKey; }
+            if (sel.dataset.key !== optKey) { sel.innerHTML = groups.filter(g => g[1].length).map(([name, o]) => `<optgroup label="${esc(name)}">${o.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join("")}</optgroup>`).join("") || `<option value="live">No sessions yet</option>`; sel.value = dmgPick; sel.dataset.key = optKey; }
             const s = dmgPick === "live" ? live : list.find(e => e.id === dmgPick) || totals.find(t => t.id === dmgPick) || null;
             const html = meterView(s, dmgExpanded), head = s ? meterHead(s) : "No battle seen yet. Fight a wave with the script running and the meter fills in.";
             if (html + head !== dmgHtml) { morph(els["mds-dmg-meter"], html); morph(els["mds-dmg-head"], head); dmgHtml = html + head; }
