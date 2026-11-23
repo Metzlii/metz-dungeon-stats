@@ -430,8 +430,11 @@
  "{name} out of keys in {time}": "{name} sin llaves en {time}",
  "{name} is out of keys": "{name} no tiene llaves",
  "{name} has {n} keys": "{name} tiene {n} llaves",
- "Key times: amber under": "Tiempos de llaves: ámbar por debajo de",
  "red under": "rojo por debajo de",
  "hours": "horas",
- "Colours of the key times and the out-of-keys line in the battle window.": "Colores de los tiempos de llaves y de la línea de llaves agotadas en la ventana de batalla."
+ "Key and consumable times: amber under": "Tiempos de llaves y consumibles: ámbar por debajo de",
+ "Colours of the key and consumable times and warnings in the battle window.": "Colores de los tiempos y avisos de llaves y consumibles en la ventana de batalla.",
+ "{name} out of {item} in {time}": "{name} sin {item} en {time}",
+ "{name} is out of {item}": "{name} no tiene {item}",
+ "Party consumables": "Consumibles del grupo"
 }

@@ -430,8 +430,11 @@
  "{name} out of keys in {time}": "{name} 的钥匙将在 {time} 后用完",
  "{name} is out of keys": "{name} 的钥匙已用完",
  "{name} has {n} keys": "{name} 有 {n} 把钥匙",
- "Key times: amber under": "钥匙时间：低于此值显示黄色",
  "red under": "低于此值显示红色",
  "hours": "小时",
- "Colours of the key times and the out-of-keys line in the battle window.": "战斗窗口中钥匙时间和钥匙用完提示的颜色。"
+ "Key and consumable times: amber under": "钥匙和消耗品时间：低于此值显示黄色",
+ "Colours of the key and consumable times and warnings in the battle window.": "战斗窗口中钥匙和消耗品时间及提示的颜色。",
+ "{name} out of {item} in {time}": "{name} 的 {item} 将在 {time} 后用完",
+ "{name} is out of {item}": "{name} 的 {item} 已用完",
+ "Party consumables": "队伍消耗品"
 }

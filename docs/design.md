@@ -248,3 +248,7 @@ Version numbers: one bump per release, never per iteration.
 In a dungeon, the entry key and chest key(s) sit left of Consumables in the bottom frame: the count held and, under it, how long they last at the dungeon average run time (this tier when it has runs; fails counted in), in the form Toolasha uses for consumables. A chest key goes at the chests per run the record has seen (1 until then). Hovering the entry key lists the party counts from the newest party key-count message.
 
 The damage meter header also names the party member who runs out of entry keys first and when (fewest keys in the newest key-count message, at the average run time): amber under 72 hours, red under 24; both hours can be changed in Settings. With the meter hidden or switched off the same line sits beside the Keys label.
+
+### Party consumables (0.2.8)
+
+Every new_battle carries each party member consumables with the count held. Per member and item the script keeps the count and the amount used since this page first saw it (memory only; 10 minutes and one use before an estimate; a 5-minute gap starts over). The soonest to run out is named in the meter header beside the key line, same colours and Settings hours; the tooltip lists each member soonest item. With the meter hidden or off the line sits beside the Keys label (alone in that spot outside a dungeon).
