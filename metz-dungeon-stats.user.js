@@ -495,9 +495,9 @@
         meterLast = { battleId: m.battleId, wave: num(m.wave) };
         const closed = state.meter.newBattle(m, serverNow());
         if (closed) meterClosed(closed);
-        meterTag(state.meter.session); streakCheck(); meterCheckpoint();
+        meterTag(state.meter.session); streakCheck(); meterCheckpoint(); panel.meterPing();
     }
-    function meterOnUpdate(m) { state.meter.update(m, serverNow()); }
+    function meterOnUpdate(m) { state.meter.update(m, serverNow()); panel.meterPing(); }
     // A run that ended: its session closes once the last messages are in. A clear counts its last wave in the check.
     function meterRunEnded(run, result) {
         const s = state.meter.session; if (!s || !run || (s.runId !== run.id && s.battleId !== run.battleId)) return;
@@ -2053,7 +2053,7 @@
 :is(#mds-root,#mds-bm) .mds-meter tr.mds-me td.mds-mname{color:#a9e9f1}
 :is(#mds-root,#mds-bm) .mds-meter :is(th,td).n{text-align:right;white-space:nowrap}
 :is(#mds-root,#mds-bm) .mds-meter td.mds-mbar{position:relative;min-width:8em;width:30%}
-:is(#mds-root,#mds-bm) .mds-meter td.mds-mbar .fill{position:absolute;left:6px;top:22%;bottom:22%;max-width:calc(100% - 12px);background:rgba(69,200,216,.3);border-radius:3px}
+:is(#mds-root,#mds-bm) .mds-meter td.mds-mbar .fill{transition:width .3s ease-out;position:absolute;left:6px;top:22%;bottom:22%;max-width:calc(100% - 12px);background:rgba(69,200,216,.3);border-radius:3px}
 :is(#mds-root,#mds-bm) .mds-meter td.mds-mbar .v{position:relative;padding-left:4px}
 :is(#mds-root,#mds-bm) .mds-meter tr.mds-mdetail>td{background:rgba(0,0,0,.2);padding:6px 10px 10px}
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub{width:100%;border-collapse:collapse;font-size:.93em}
@@ -2083,6 +2083,7 @@
 #mds-bm th{position:sticky;top:0;z-index:1;background:#101b24;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:2px 6px;border-bottom:1px solid rgba(230,239,243,.16);text-align:left}
 #mds-bm td{padding:2px 6px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top;line-height:1.35}
 #mds-bm .mds-msub th{position:static;background:none}
+@media (prefers-reduced-motion: reduce){:is(#mds-root,#mds-bm) .mds-meter td.mds-mbar .fill{transition:none}}
 #mds-bm .mds-meter td.mds-mname::before{content:none}
 /* Clicking a player opens their details: said on every row (operator, 2026-11-23). */
 #mds-bm .mds-meter td.mds-mname::after{content:"details ›";display:inline-block;margin-left:8px;padding:0 7px;border:1px solid rgba(69,200,216,.4);border-radius:9px;font-size:10px;font-weight:500;line-height:1.5;color:#a9e9f1;opacity:.75;vertical-align:1px}
@@ -3060,6 +3061,32 @@
         }
         // Notes on a run are shown as a short label; the full sentence is the tooltip.
         const noteLabel = t => /not running/.test(t) ? "restarted mid-run" : /no end/.test(t) ? "end unknown" : /lifetime totals/.test(t) ? "XP from run ends" : t.length > 22 ? t.slice(0, 20) + "…" : t;
+        // Redrawn in place: the new markup is laid over the old node by node, so only the numbers and bar widths that
+        // moved change. Hover, scroll and an open dropdown survive, and the bars slide (operator, 2026-11-23: a 1 s
+        // rebuild of the whole table looked janky).
+        function morph(el, html) {
+            const t = document.createElement("template"); t.innerHTML = html;
+            const walk = (a, b) => {
+                while (a.childNodes.length > b.childNodes.length) a.removeChild(a.lastChild);
+                for (let i = 0; i < b.childNodes.length; i++) {
+                    const x = a.childNodes[i], y = b.childNodes[i];
+                    if (!x) { a.appendChild(y.cloneNode(true)); continue; }
+                    if (x.nodeType !== y.nodeType || x.nodeName !== y.nodeName) { a.replaceChild(y.cloneNode(true), x); continue; }
+                    if (x.nodeType === 3) { if (x.data !== y.data) x.data = y.data; continue; }
+                    if (x.nodeType !== 1) continue;
+                    for (const at of [...x.attributes]) if (!y.hasAttribute(at.name)) x.removeAttribute(at.name);
+                    for (const at of y.attributes) if (x.getAttribute(at.name) !== at.value) x.setAttribute(at.name, at.value);
+                    walk(x, y);
+                }
+            };
+            walk(el, t.content);
+        }
+        // A battle message changed the meter: redraw on the next frame, once however many messages came in it.
+        let meterFrame = 0;
+        function meterPing() {
+            if (meterFrame || document.hidden) return;
+            meterFrame = requestAnimationFrame(() => { meterFrame = 0; try { renderBattleMeter(); if (open && tab === "damage") renderDamage(); } catch (error) { warn("damage meter view", error); } });
+        }
         // -----------------------------------------------------------------------------------------------------------
         // Damage meter views (0.2.0): one table for the Damage tab and the block under the battle cards.
         // -----------------------------------------------------------------------------------------------------------
@@ -3120,7 +3147,7 @@
             if (sel.dataset.key !== optKey) { sel.innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join("") || `<option value="live">No sessions yet</option>`; sel.value = dmgPick; sel.dataset.key = optKey; }
             const s = dmgPick === "live" ? live : list.find(e => e.id === dmgPick) || totals.find(t => t.id === dmgPick) || null;
             const html = meterView(s, dmgExpanded), head = s ? meterHead(s) : "No battle seen yet. Fight a wave with the script running and the meter fills in.";
-            if (html + head !== dmgHtml) { els["mds-dmg-meter"].innerHTML = html; els["mds-dmg-head"].innerHTML = head; dmgHtml = html + head; }
+            if (html + head !== dmgHtml) { morph(els["mds-dmg-meter"], html); morph(els["mds-dmg-head"], head); dmgHtml = html + head; }
             const me = state.characterName, sessKey = `${list.length}|${list.length ? list[0].id : ""}|${dmgPick}|${me}`;
             if (s && s.aggregate) els["mds-dmg-head"].title = "Every whole session here plus the runs seen only in part (joined mid-run, or a wave missed): useful for averages, not kept as sessions of their own"; else els["mds-dmg-head"].title = "";
             if (sessKey !== dmgSessKey) {
@@ -3151,7 +3178,7 @@
             const p = s && s.players && s.players[bmPopName], secs = sessSecs(s), total = sessTotal(s);
             const sub = p ? `${fmtN(p.dealt)} damage · ${pct1(p.dealt, total)} of the party · ${Math.round(p.dealt / secs).toLocaleString()} DPS · taken ${fmtN(p.taken)} · healed ${fmtN(p.healed)}${p.deaths ? ` · ${p.deaths} death${p.deaths === 1 ? "" : "s"}` : ""}` : "";
             const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage"><div class="mds-pop-head"><strong>${esc(bmPopName)}</strong><small>${sub}</small><small>${s ? meterHead(s) : ""}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
-            if (html !== bmPopHtml) { const card = bmPop.querySelector(".mds-pop-card"), top = card ? card.scrollTop : 0; bmPop.innerHTML = html; bmPopHtml = html; const c = bmPop.querySelector(".mds-pop-card"); if (c) c.scrollTop = top; }
+            if (html !== bmPopHtml) { morph(bmPop, html); bmPopHtml = html; }
             bmPop.hidden = false;
         }
         function renderBattleMeter() {
@@ -3173,7 +3200,7 @@
             if (!bmPerRun() && st) { const t = meterAdd(JSON.parse(JSON.stringify(st)), s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key ? s : {}); t.live = !!(s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key); s = t; }
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
             const html = `<div class="mds-bm-head"><strong>Damage</strong><small>${s ? meterHead(s) : "starts with the next wave"}</small><span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
-            if (html !== bmHtml || !bmEl.firstChild) { const prev = bmEl.querySelector(".mds-bm-body"), top = prev ? prev.scrollTop : 0; bmEl.innerHTML = html; bmHtml = html; const body = bmEl.querySelector(".mds-bm-body"); if (body) body.scrollTop = top; }
+            if (html !== bmHtml || !bmEl.firstChild) { morph(bmEl, html); bmHtml = html; }
             // Players' details open in a popup, so the meter is only ever its rows high. Never more than half the battle
             // panel, whose height is what the chat panel leaves (a dump 2026-11-23: window 1197 px, panel 424 px).
             const want = `${Math.max(140, Math.round(host.clientHeight * 0.5))}px`;
@@ -3236,7 +3263,7 @@
                 ].join("\n");
             }
         }
-        return { refresh, touch, render, moneyCtx, dock: () => ({ docked: !!dock.strip, active: dock.active, worked: dock.worked }), show: () => setOpen(true) };
+        return { refresh, touch, render, moneyCtx, meterPing, dock: () => ({ docked: !!dock.strip, active: dock.active, worked: dock.worked }), show: () => setOpen(true) };
     })();
 
     function download(name, text) { const blob = new Blob([text], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
