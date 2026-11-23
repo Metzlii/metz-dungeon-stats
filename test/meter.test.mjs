@@ -141,6 +141,19 @@ assert.equal(bs.players.Tank.healBy.regen, 100, "the second gain in the cast's m
     assert.deepEqual(s3.players.Thief.mana.gain, { leech: { amt: 20, n: 1 } });
     assert.deepEqual(Object.keys(s3.players.Plain.healSub.regen), ["other"]);
 }
+// Vampirism: the cast gives life steal for its duration; a gain on the caster's own hit inside it is life steal.
+{
+    const vinfo = meterAbilityInfo({ abilityEffects: [{ effectType: "/ability_effect_types/buff", buffs: [{ typeHrid: "/buff_types/life_steal", flatBoost: 0.08, flatBoostLevelBonus: 0.0008, duration: 20e9 }] }] });
+    assert.deepEqual(vinfo.lifeSteal, { flat: 0.08, perLevel: 0.0008, ms: 20000 });
+    const m4 = createMeter({ ability: h => (h === "/abilities/vampirism" ? vinfo : null) });
+    const v = { ...player("Vamp", 7, 1000, "/abilities/vampirism"), currentHitpoints: 500, combatAbilities: [{ abilityHrid: "/abilities/vampirism", level: 50 }] };
+    m4.newBattle({ type: "new_battle", battleId: 4, wave: 1, players: [v], monsters: [monster("Imp", 9000)] }, 0);
+    m4.update(upd(4, { 0: { atkCounter: 1, isAutoAtk: true } }, {}), 1000);                                                  // casts Vampirism
+    m4.update(upd(4, { 0: { cHP: 560, atkCounter: 2, isAutoAtk: true } }, { 0: { cHP: 8500, dmgCounter: 1 } }), 5000);     // 500 damage x 0.12 = 60
+    m4.update(upd(4, { 0: { cHP: 620, atkCounter: 3, isAutoAtk: true } }, { 0: { cHP: 8000, dmgCounter: 2 } }), 30000);    // after the buff ran out
+    const s4 = m4.close();
+    assert.deepEqual(s4.players.Vamp.healSub.regen, { lifesteal: { amt: 60, hits: 0, misses: 0, n: 1 }, other: { amt: 60, hits: 0, misses: 0, n: 1 } });
+}
 console.log("meter: rules ok");
 
 const capture = arg("--capture");

@@ -433,6 +433,10 @@
         // acts in this message, monsters lose HP in it, and the gain is no more than that damage times the stat.
         // Anything that cannot be verified stays in "other", never folded into food or Bloom.
         const stolen = (stat, dmg, gain) => stat > 0 && dmg > 0 && gain <= Math.ceil(dmg * stat) + 1;
+        // Vampirism (game data: a self buff of type life_steal, 0.08 + 0.0008 a level, for 20 s) is life steal too:
+        // battle_updated carries no buffs, so the buff is kept from the cast, by player name across waves.
+        const vamp = {};
+        const lifeStealOf = (u, at) => u.lifeSteal + (vamp[u.name] && at <= vamp[u.name].until ? vamp[u.name].amt : 0);
         const blankPlayer = (name, id) => ({ name, id: id != null ? String(id) : null, dealt: 0, hits: 0, misses: 0, casts: 0, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: {}, takenBy: {}, healBy: {}, takenHits: {}, takenMiss: {}, healHits: {}, takenSub: {}, healSub: {}, mpSpent: 0, mpGain: 0, mana: { spent: {}, gain: {} } });
         const abilityRow = (p, key) => p.abilities[key] || (p.abilities[key] = { dmg: 0, hits: 0, misses: 0, casts: 0, heal: 0 });
         function open(m, at) {
@@ -461,7 +465,7 @@
         function unit(u, i, isPlayer) {
             const det = (u.combatDetails && u.combatDetails.combatStats) || {};
             return { i, isPlayer, name: (isPlayer ? (u.character && u.character.name) || u.name : u.name || String(u.hrid || "").split("/").pop()) || `#${i}`, id: isPlayer && u.character ? u.character.id : null,
-                hp: Number(u.currentHitpoints) || 0, mhp: Number(u.maxHitpoints) || 0, mp: Number(u.currentManapoints) || 0, mmp: Number(u.maxManapoints) || 0, lifeSteal: Number(det.lifeSteal) || 0, manaLeech: Number(det.manaLeech) || 0, bloom: Number(det.bloom) || 0, atk: Number(u.attackAttemptCounter) || 0, dmg: Number(u.damageSplatCounter) || 0,
+                hp: Number(u.currentHitpoints) || 0, mhp: Number(u.maxHitpoints) || 0, mp: Number(u.currentManapoints) || 0, mmp: Number(u.maxManapoints) || 0, lifeSteal: Number(det.lifeSteal) || 0, levels: Object.fromEntries((u.combatAbilities || []).filter(a => a && a.abilityHrid).map(a => [a.abilityHrid, Number(a.level) || 0])), manaLeech: Number(det.manaLeech) || 0, bloom: Number(det.bloom) || 0, atk: Number(u.attackAttemptCounter) || 0, dmg: Number(u.damageSplatCounter) || 0,
                 prep: u.isPreparingAutoAttack ? "auto" : (u.preparingAbilityHrid || "auto"), flags: Object.fromEntries(FLAGS.map(f => [f, !!u[f]])),
                 counters: (Number(det.parry) || 0) + (Number(det.thorns) || 0) + (Number(det.retaliation) || 0) > 0, dotBy: {}, dotFrom: null, hrid: isPlayer ? null : u.hrid || null };
         }
@@ -498,6 +502,7 @@
             const P = e => cur.players[e.s.name] || (cur.players[e.s.name] = blankPlayer(e.s.name, e.s.id));
             const actor = pa.length === 1 ? pa[0] : null;
             if (actor) { const row = abilityRow(P(actor), actor.used); row.casts++; P(actor).casts++; }
+            if (actor) { const inf = abilityOf(actor.used); if (inf && inf.lifeSteal) vamp[actor.s.name] = { until: at + inf.lifeSteal.ms + 1000, amt: inf.lifeSteal.flat + inf.lifeSteal.perLevel * ((actor.s.levels && actor.s.levels[actor.used]) || 0) }; }
             const monsterLoss = ch.reduce((a, x) => a + (x.side === "m" && x.dhp < 0 ? -x.dhp : 0), 0);
             // Mana: an ability's cost on the player acting, the regeneration tick, food and drink.
             {
@@ -579,7 +584,7 @@
                     const key = !healer ? "regen" : healer.s.name === e.s.name ? how : `${healer.s.name}: ${how}`;
                     if (healer) { const h = P(healer), row = abilityRow(h, how); h.healDone += gain; row.heal += gain; if (bloom) row.hits++; }
                     p.healBy[key] = (p.healBy[key] || 0) + gain; p.healHits[key] = (p.healHits[key] || 0) + 1;
-                    if (!healer) { const named = foodOf(e.s.name, at), quiet = !pa.length && !ma.length; const kind = plainGains >= 2 ? "regen" : onRegenClock(at) && regenTick(regenHp[e.s.name], gain, e.s.hp >= e.s.mhp) ? "regen" : quiet ? (listed.length >= 2 ? "regen" : named) : named !== "food" ? named : e === actor && stolen(e.s.lifeSteal, monsterLoss, gain) ? "lifesteal" : "other"; const r = sub(p.healSub || (p.healSub = {}), "regen", kind); r.amt += gain; r.n++; }
+                    if (!healer) { const named = foodOf(e.s.name, at), quiet = !pa.length && !ma.length; const kind = plainGains >= 2 ? "regen" : onRegenClock(at) && regenTick(regenHp[e.s.name], gain, e.s.hp >= e.s.mhp) ? "regen" : quiet ? (listed.length >= 2 ? "regen" : named) : named !== "food" ? named : e === actor && stolen(lifeStealOf(e.s, at), monsterLoss, gain) ? "lifesteal" : "other"; const r = sub(p.healSub || (p.healSub = {}), "regen", kind); r.amt += gain; r.n++; }
                 }
             }
             return true;
@@ -634,7 +639,10 @@
     // Ability facts the meter needs, from the game's abilityDetailMap: heals, drains, damage over time.
     function meterAbilityInfo(detail) {
         const fx = (detail && detail.abilityEffects) || [];
-        return { heal: fx.some(e => /\/(heal|revive)$/.test(String(e.effectType || ""))), drain: fx.some(e => Number(e.hpDrainRatio) > 0), dot: fx.some(e => Number(e.damageOverTimeRatio) > 0) };
+        const ls = fx.flatMap(e => e.buffs || []).find(b => b && b.typeHrid === "/buff_types/life_steal");
+        const out = { heal: fx.some(e => /\/(heal|revive)$/.test(String(e.effectType || ""))), drain: fx.some(e => Number(e.hpDrainRatio) > 0), dot: fx.some(e => Number(e.damageOverTimeRatio) > 0) };
+        if (ls) out.lifeSteal = { flat: Number(ls.flatBoost) || 0, perLevel: Number(ls.flatBoostLevelBonus) || 0, ms: (Number(ls.duration) || 0) / 1e6 };
+        return out;
     }
     // </meter>
 
