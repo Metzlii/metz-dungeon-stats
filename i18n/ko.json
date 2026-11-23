@@ -461,5 +461,6 @@
  "XP/hr": "XP/시간",
  "Experience per hour, all skills; hover a value for each skill": "모든 스킬의 시간당 경험치. 값에 마우스를 올리면 스킬별로 표시",
  "XP per hour since {time} ago": "{time} 전부터의 시간당 XP",
- "next level in {time}": "다음 레벨까지 {time}"
+ "next level in {time}": "다음 레벨까지 {time}",
+ "Meter columns": "미터 열"
 }

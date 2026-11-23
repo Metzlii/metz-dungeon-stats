@@ -461,5 +461,6 @@
  "XP/hr": "Опыт/ч",
  "Experience per hour, all skills; hover a value for each skill": "Опыт в час по всем навыкам; наведите на значение, чтобы увидеть каждый навык",
  "XP per hour since {time} ago": "Опыт в час за последние {time}",
- "next level in {time}": "следующий уровень через {time}"
+ "next level in {time}": "следующий уровень через {time}",
+ "Meter columns": "Столбцы счётчика"
 }

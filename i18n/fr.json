@@ -461,5 +461,6 @@
  "XP/hr": "XP/h",
  "Experience per hour, all skills; hover a value for each skill": "Expérience par heure, toutes compétences ; survolez une valeur pour chaque compétence",
  "XP per hour since {time} ago": "XP par heure depuis {time}",
- "next level in {time}": "niveau suivant dans {time}"
+ "next level in {time}": "niveau suivant dans {time}",
+ "Meter columns": "Colonnes du compteur"
 }

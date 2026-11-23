@@ -461,5 +461,6 @@
  "XP/hr": "XP/時",
  "Experience per hour, all skills; hover a value for each skill": "全スキル合計の 1 時間あたり経験値。値にカーソルを合わせるとスキル別に表示",
  "XP per hour since {time} ago": "{time} 前からの 1 時間あたり XP",
- "next level in {time}": "次のレベルまで {time}"
+ "next level in {time}": "次のレベルまで {time}",
+ "Meter columns": "メーターの列"
 }

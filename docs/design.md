@@ -264,3 +264,5 @@ A Consumables tab lists the party: one row a member, entry keys and the six cons
 ### XP/hr in the battle meter (0.2.9)
 
 The battle meter has an XP/hr column per player (all skills; the tooltip lists each skill, and for the own character the time to the next level). Rates are the experience gained since this page first saw the player over the time since, read at wave starts, kept across a reload. While the meter is shown the page carries data-mds-xp on the root element; the Combat Sim Helper (0.7.9) hides its XP lines above the cards while it is set.
+
+The meter columns can be dragged into any order, sorted by a click on the header (again to reverse, a third time for most damage first) and switched off in Settings (Meter columns). One choice for the battle meter and the Damage tab, kept per browser.
