@@ -2387,7 +2387,7 @@
 </div>
 <div class="mds-pane" data-pane="damage" hidden>
  <h4>Damage meter</h4>
- <div class="mds-bar"><label>Session <select id="mds-dmg-pick"></select></label></div>
+ <div class="mds-bar"><label>Session <select id="mds-dmg-pick"></select></label><button id="mds-dmg-reset" class="danger" title="Delete every saved damage session and total; the rest of the record stays">Reset damage data</button></div>
  <p class="mds-dmg-head" id="mds-dmg-head"></p>
  <div id="mds-dmg-meter"></div>
  <h4 data-noun="sessions">Sessions</h4>
@@ -2508,6 +2508,7 @@
             root.querySelector("#mds-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
             for (const b of root.querySelectorAll("button.mds-refresh-prices")) b.addEventListener("click", () => { for (const x of root.querySelectorAll("button.mds-refresh-prices")) x.disabled = true; fetchPrices(true).then(() => render(), () => render()).then(() => { for (const x of root.querySelectorAll("button.mds-refresh-prices")) x.disabled = false; }); });
             root.querySelector("#mds-reset").addEventListener("click", resetRecord);
+            root.querySelector("#mds-dmg-reset").addEventListener("click", () => resetDamage().then(() => { dmgPick = "live"; dmgHtml = ""; dmgSessKey = ""; renderDamage(); }));
             root.querySelector("#mds-toolasha").addEventListener("click", () => importToolasha("manual").then(() => render()));
             root.querySelector("#mds-history-file").addEventListener("click", () => root.querySelector("#mds-history-input").click());
             root.querySelector("#mds-record-file").addEventListener("click", () => root.querySelector("#mds-record-input").click());
@@ -3438,6 +3439,19 @@
         await state.record.flush();
         const frames = await state.record.getAll("frames");
         download(`metz-dungeon-stats-frames-${stamp()}.json`, JSON.stringify({ schema: "metz-dungeon-stats-frames/1", version: VERSION, exportedAt: serverNow(), gameVersion: ref.version, messageCounts: Object.fromEntries(state.counts.byType), frames }, null, 1));
+    }
+    // The damage meter's data alone (operator, 2026-11-23: no need to keep testing data): saved sessions, the totals
+    // per place, the session in progress and the battle tab's running total. The rest of the record is untouched.
+    async function resetDamage() {
+        if (!state.record) return;
+        if (!W.confirm(`Delete all damage meter data: ${state.damage.length} saved session${state.damage.length === 1 ? "" : "s"}, the totals per place and the run in progress? Runs, loot, XP and everything else stay.`)) return;
+        for (const e of state.damage) state.record.remove("events", e.id);
+        state.damage = []; state.meta.damagePartial = {}; state.streak = null;
+        state.record.queue("meta", { key: "damagePartial", value: {} }); state.record.queue("meta", { key: "meterOpen", value: null });
+        state.meter.restore(null);
+        state.events = state.events.filter(e => e.kind !== "damage");
+        await state.record.flush();
+        panel.render();
     }
     async function resetRecord() {
         if (!state.record) return;
