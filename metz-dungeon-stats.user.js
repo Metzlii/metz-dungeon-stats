@@ -152,7 +152,7 @@
         if (!isObj(data) || !isObj(data.actionDetailMap) || !isObj(data.itemDetailMap)) return false;
         ref.dungeons = {}; ref.keyActions = {}; ref.keyItems = new Set(); ref.realKeys = new Set(); ref.dungeonLoot = new Set(); ref.chestItems = {}; ref.items = {};
         for (const [hrid, item] of Object.entries(data.itemDetailMap)) {
-            ref.items[hrid] = { name: item.name, category: item.categoryHrid, openable: !!item.isOpenable, openKey: item.openKeyItemHrid || null, tradable: item.isTradable === true, sellPrice: num(item.sellPrice) };
+            ref.items[hrid] = { name: item.name, category: item.categoryHrid, openable: !!item.isOpenable, openKey: item.openKeyItemHrid || null, tradable: item.isTradable === true, sellPrice: num(item.sellPrice), hp: num(item.consumableDetail && item.consumableDetail.hitpointRestore), hpOverMs: num(item.consumableDetail && item.consumableDetail.recoveryDuration) / 1e6 };
             if (item.categoryHrid === "/item_categories/dungeon_key") ref.keyItems.add(hrid);
         }
         for (const [hrid, action] of Object.entries(data.actionDetailMap)) {
@@ -291,10 +291,10 @@
         const abilityOf = h => (cfg.ability && h && cfg.ability(h)) || null;
         const FLAGS = ["isBlinded", "isStunned", "isSilenced"];
         let cur = null, battle = null, seq = 0;
-        const blankPlayer = (name, id) => ({ name, id: id != null ? String(id) : null, dealt: 0, hits: 0, misses: 0, casts: 0, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: {}, takenBy: {}, healBy: {}, takenHits: {}, takenMiss: {}, healHits: {} });
+        const blankPlayer = (name, id) => ({ name, id: id != null ? String(id) : null, dealt: 0, hits: 0, misses: 0, casts: 0, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: {}, takenBy: {}, healBy: {}, takenHits: {}, takenMiss: {}, healHits: {}, takenSub: {}, healSub: {} });
         const abilityRow = (p, key) => p.abilities[key] || (p.abilities[key] = { dmg: 0, hits: 0, misses: 0, casts: 0, heal: 0 });
         function open(m, at) {
-            cur = { v: 1, battleId: m.battleId, startAt: at, lastAt: at, firstWave: Number(m.wave) || 0, lastWave: Number(m.wave) || 0, waves: 0, combatMs: 0, players: {}, monsterHpLost: 0, monsterHealed: 0, unassigned: 0, check: { waves: 0, balanced: 0, gap: 0 } };
+            cur = { v: 1, battleId: m.battleId, startAt: at, lastAt: at, firstWave: Number(m.wave) || 0, lastWave: Number(m.wave) || 0, waves: 0, combatMs: 0, players: {}, monsters: {}, monsterHpLost: 0, monsterHealed: 0, unassigned: 0, check: { waves: 0, balanced: 0, gap: 0 } };
             return cur;
         }
         // The check, for a wave that ended in a win (the next wave began, or the run was cleared): every monster was
@@ -319,7 +319,7 @@
             return { i, isPlayer, name: (isPlayer ? (u.character && u.character.name) || u.name : u.name || String(u.hrid || "").split("/").pop()) || `#${i}`, id: isPlayer && u.character ? u.character.id : null,
                 hp: Number(u.currentHitpoints) || 0, mhp: Number(u.maxHitpoints) || 0, bloom: Number(det.bloom) || 0, atk: Number(u.attackAttemptCounter) || 0, dmg: Number(u.damageSplatCounter) || 0,
                 prep: u.isPreparingAutoAttack ? "auto" : (u.preparingAbilityHrid || "auto"), flags: Object.fromEntries(FLAGS.map(f => [f, !!u[f]])),
-                counters: (Number(det.parry) || 0) + (Number(det.thorns) || 0) + (Number(det.retaliation) || 0) > 0, dotBy: {} };
+                counters: (Number(det.parry) || 0) + (Number(det.thorns) || 0) + (Number(det.retaliation) || 0) > 0, dotBy: {}, dotFrom: null, hrid: isPlayer ? null : u.hrid || null };
         }
         // A new wave. Returns the session it closed, if this battle is not the session's battle.
         function newBattle(m, at) {
@@ -331,6 +331,7 @@
             battle = { p: players, m: monsters, startAt: at, lastAt: at, spawnHp: monsters.reduce((s, u) => s + u.hp, 0), lost: 0, healed: 0, unassigned: 0 };
             cur.waves++; cur.lastWave = Number(m.wave) || cur.lastWave; cur.lastAt = at;
             for (const u of players) { const p = cur.players[u.name] || (cur.players[u.name] = blankPlayer(u.name, u.id)); if (u.hp <= 0) u.dead = true; }
+            cur.monsters = cur.monsters || {}; for (const u of monsters) if (u.hrid) cur.monsters[u.name] = u.hrid;
             return closed;
         }
         function update(m, at) {
@@ -381,15 +382,31 @@
                 const pctBefore = e => (e.s.mhp > 0 ? (e.s.hp - e.dhp) / e.s.mhp : 1);
                 if (cands.length) bloomTarget = cands.reduce((x, y) => (pctBefore(y) < pctBefore(x) ? y : x));
             }
+            // Each source broken down (0.2.1, operator 2026-11-23): damage taken by the monster's ability (its card's
+            // name before the message, the players' rule), thorns under the monster that has them, an over-time hit
+            // under the monster and ability that applied it, the HP a player's own action cost; healing by kind.
+            // In the capture: regeneration is a tick every 10 s on several players at once with nobody acting; food a
+            // gain on one player alone with nobody acting, which for our own character lines up with the game's
+            // consumable messages (donut instant, cake over 30 s); other players' foods are not announced.
+            const sub = (o, src, k) => { const t = o[src] || (o[src] = {}); return t[k] || (t[k] = { amt: 0, hits: 0, misses: 0, n: 0 }); };
+            const actorInfo = actor && abilityOf(actor.used);
+            const creditedHeal = x => x === bloomTarget || !!(actorInfo && (actorInfo.heal || (actorInfo.drain && actor === x)));
+            const plainGains = ch.filter(x => x.side === "p" && x.dhp > 0 && !creditedHeal(x)).length;
+            const foodOf = (name, t) => { const f = (foods[name] || []).slice().reverse().find(x => t >= x.at - 1500 && t <= x.at + x.overMs + 1500); return f ? `food:${f.item}` : "food"; };
             // Players: damage taken, healing, deaths. A splat with no HP lost while a monster acts: its attack missed.
             for (const e of ch) {
-                if (e.side === "p" && !e.dhp && e.ddmg > 0 && ma.length) { const p = P(e), src = ma[0].s.name; p.takenMiss[src] = (p.takenMiss[src] || 0) + 1; continue; }
+                if (e.side === "p" && !e.dhp && e.ddmg > 0 && ma.length) { const p = P(e), src = ma[0].s.name; p.takenMiss[src] = (p.takenMiss[src] || 0) + 1; sub(p.takenSub || (p.takenSub = {}), src, ma[0].used).misses++; continue; }
                 if (e.side !== "p" || !e.dhp) continue;
                 const p = P(e);
                 if (e.dhp < 0) {
                     const dmg = -e.dhp; p.taken += dmg;
-                    const src = ma.length ? ma[0].s.name : e.datk > 0 ? "Own actions (HP cost, thorns)" : "Damage over time";
+                    let src, how;
+                    if (ma.length) { src = ma[0].s.name; how = ma[0].used; const inf = abilityOf(how); if (inf && inf.dot) e.s.dotFrom = { src, ability: how }; }
+                    else if (e.datk > 0) { const thorn = ch.find(x => x.side === "m" && x.s.counters && (x.dhp < 0 || x.ddmg > 0)); if (thorn) { src = thorn.s.name; how = "thorns"; } else { src = "Own actions (HP cost)"; how = `cost:${e.used}`; } }
+                    else if (e.s.dotFrom) { src = e.s.dotFrom.src; how = `dot:${e.s.dotFrom.ability}`; }
+                    else { src = "Damage over time"; how = "dot:?"; }
                     p.takenBy[src] = (p.takenBy[src] || 0) + dmg; p.takenHits[src] = (p.takenHits[src] || 0) + 1;
+                    const r = sub(p.takenSub || (p.takenSub = {}), src, how); r.amt += dmg; r.hits++;
                     if (e.s.hp <= 0 && !e.s.dead) { e.s.dead = true; p.deaths++; }
                 } else {
                     const gain = e.dhp; p.healed += gain; if (e.s.hp > 0) e.s.dead = false;
@@ -400,6 +417,7 @@
                     const key = !healer ? "regen" : healer.s.name === e.s.name ? how : `${healer.s.name}: ${how}`;
                     if (healer) { const h = P(healer), row = abilityRow(h, how); h.healDone += gain; row.heal += gain; if (bloom) row.hits++; }
                     p.healBy[key] = (p.healBy[key] || 0) + gain; p.healHits[key] = (p.healHits[key] || 0) + 1;
+                    if (!healer) { const kind = plainGains >= 2 ? "regen" : !pa.length && !ma.length ? (listed.length >= 2 ? "regen" : foodOf(e.s.name, at)) : "other"; const r = sub(p.healSub || (p.healSub = {}), "regen", kind); r.amt += gain; r.n++; }
                 }
             }
             return true;
@@ -425,12 +443,16 @@
             return true;
         }
         const num = v => Number(v) || 0;
-        return { newBattle, update, close, snapshot, restore, stitch, get session() { return cur; }, get inWave() { return !!battle; } };
+        // Our own food, from the game's consumable messages (only our own are sent): the item and how long it heals.
+        const foods = {};
+        function food(name, item, at, overMs) { const l = foods[name] || (foods[name] = []); l.push({ item, at, overMs: Number(overMs) || 0 }); if (l.length > 6) l.shift(); }
+        return { newBattle, update, close, snapshot, restore, stitch, food, get session() { return cur; }, get inWave() { return !!battle; } };
     }
     // Adds one session's counts into another: a run stitched across a reload, or the all-seen total of a dungeon.
     function meterAdd(dst, src) {
         const sum = (a, b, keys) => { for (const k of keys) a[k] = (Number(a[k]) || 0) + (Number(b[k]) || 0); };
         dst.players = dst.players || {};
+        if (src.monsters) dst.monsters = Object.assign(dst.monsters || {}, src.monsters);
         sum(dst, src, ["waves", "combatMs", "monsterHpLost", "monsterHealed", "unassigned"]);
         dst.check = dst.check || { waves: 0, balanced: 0, gap: 0 }; sum(dst.check, src.check || {}, ["waves", "balanced", "gap"]);
         const lo = (a, b) => (a == null ? b : b == null ? a : Math.min(a, b)), hi = (a, b) => (a == null ? b : b == null ? a : Math.max(a, b));
@@ -441,6 +463,7 @@
             sum(q, p, ["dealt", "hits", "misses", "casts", "taken", "healed", "healDone", "deaths"]);
             for (const [k, a] of Object.entries(p.abilities || {})) sum(q.abilities[k] || (q.abilities[k] = {}), a, ["dmg", "hits", "misses", "casts", "heal"]);
             for (const o of ["takenBy", "healBy", "takenHits", "takenMiss", "healHits"]) { if (!p[o]) continue; q[o] = q[o] || {}; for (const [k, v] of Object.entries(p[o])) q[o][k] = (q[o][k] || 0) + (Number(v) || 0); }
+            for (const o of ["takenSub", "healSub"]) for (const [srcKey, subs] of Object.entries(p[o] || {})) { q[o] = q[o] || {}; const qs = q[o][srcKey] || (q[o][srcKey] = {}); for (const [k, r] of Object.entries(subs)) sum(qs[k] || (qs[k] = {}), r, ["amt", "hits", "misses", "n"]); }
         }
         return dst;
     }
@@ -1466,7 +1489,11 @@
                 case "consumable_buffs_updated": case "action_type_consumable_slots_updated": noteBuffs(m); break;
                 case "market_listings_updated": onListings(m); break;
                 case "chat_message_received": onChat(m, false); break;
-                case "battle_consumable_ability_updated": break; // retained as a frame; the consume event comes from the inventory row
+                case "battle_consumable_ability_updated": { // retained as a frame; the consume event comes from the inventory row
+                    const c = m.consumable, it = c && ref.items[c.itemHrid];
+                    if (it && it.hp > 0 && state.characterName && meterEnabled()) state.meter.food(state.characterName, c.itemHrid, serverNow(), it.hpOverMs);
+                    break;
+                }
                 default: break;
             }
         } catch (error) { warn(`handler for ${type} failed`, error); }
@@ -2111,6 +2138,13 @@
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub :is(th,td){padding:3px 8px;text-align:left;position:static}
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub :is(th,td).n{text-align:right}
 :is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold{margin:8px 0 0}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub tr.mds-subhead{cursor:pointer}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub tr.mds-subhead:hover td{background:rgba(230,239,243,.05)}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub tr.mds-subhead>td:first-child::before{content:"▸";display:inline-block;width:1.1em;color:rgba(230,239,243,.5)}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub tr.mds-subhead.open>td:first-child::before{content:"▾"}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub tr:not(.mds-subhead):not(.mds-subrow)>td:first-child{padding-left:calc(8px + 1.1em)}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub tr.mds-subrow>td{color:#c5d4de;font-size:.95em;background:rgba(0,0,0,.12)}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub tr.mds-subrow>td:first-child{padding-left:calc(8px + 2.4em)}
 :is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold>summary{cursor:pointer;list-style:none;display:block;padding:3px 0;color:#e6eff3;font-size:.93em}
 :is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold>summary::-webkit-details-marker{display:none}
 :is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold>summary::before{content:"▸";display:inline-block;width:1.1em;color:rgba(230,239,243,.5)}
@@ -2522,7 +2556,7 @@
             root.querySelector("#mds-plan-wallet").addEventListener("click", () => { plan.budget = null; savePlan(); renderPlan(); });
             // Damage tab: the session picker, a player row opens its abilities, a session row shows that session.
             els["mds-dmg-pick"].addEventListener("change", e => { dmgPick = e.target.value; dmgHtml = ""; renderDamage(); });
-            els["mds-dmg-meter"].addEventListener("click", e => { if (metFoldClick(e)) return; const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else dmgExpanded.add(n); dmgHtml = ""; renderDamage(); });
+            els["mds-dmg-meter"].addEventListener("click", e => { if (metFoldClick(e)) return; if (metSubClick(e)) { dmgHtml = ""; renderDamage(); return; } const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else { dmgExpanded.add(n); metFoldsReset(); } dmgHtml = ""; renderDamage(); });
             els["mds-dmg-sessions"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; const tr = e.target.closest("tr[data-sid]"); if (!tr) return; dmgPick = tr.dataset.sid; dmgHtml = ""; renderDamage(); });
             {
                 const on = root.querySelector("#mds-meter-on"), bmBox = root.querySelector("#mds-bm-on");
@@ -3195,25 +3229,50 @@
             const rows = players.map(p => {
                 const isOpen = expanded.has(p.name), me = p.name === state.characterName;
                 const main = `<tr class="mds-mrow${isOpen ? " open" : ""}${me ? " mds-me" : ""}" data-player="${esc(p.name)}" title="Click for ${esc(p.name)}'s abilities"><td class="mds-mname">${esc(p.name)}</td><td class="mds-mbar"><span class="fill" style="width:${top > 0 ? (100 * p.dealt / top).toFixed(1) : 0}%"></span><span class="v">${fmtN(p.dealt)}</span></td><td class="n">${pct1(p.dealt, total)}</td><td class="n">${Math.round(p.dealt / secs).toLocaleString()}</td><td class="n">${fmtN(p.taken)}</td><td class="n">${fmtN(p.healDone)}</td><td class="n">${fmtN(p.healed)}</td><td class="n">${p.deaths || 0}</td></tr>`;
-                return isOpen ? `${main}<tr class="mds-mdetail"><td colspan="8">${meterDetail(p, secs)}</td></tr>` : main;
+                return isOpen ? `${main}<tr class="mds-mdetail"><td colspan="8">${meterDetail(p, secs, s)}</td></tr>` : main;
             }).join("");
             return `<table class="mds-meter"><thead><tr><th>Player <span class="mds-hint">· click for details</span></th><th>Damage</th><th class="n">Share</th><th class="n">DPS</th><th class="n">Taken</th><th class="n" title="What this player's heal abilities and Life Drain restored">Healing done</th><th class="n" title="Every HP this player regained: heals, Life Drain, regeneration, food and passives">Healed</th><th class="n">Deaths</th></tr></thead><tbody>${rows}</tbody></table>`;
         }
-        function meterDetail(p, secs) {
+        const monsterIcon = h => { const b = spriteOf("combat_monsters_sprite"); return b && h ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${String(h).split("/").pop()}"></use></svg>` : ""; };
+        const takenSubName = k => k === "auto" ? "Auto attack" : k === "thorns" ? "Thorns (damage sent back)" : k === "dot:?" ? "Over time" : /^dot:/.test(k) ? `${abilityName(k.slice(4))} over time` : /^cost:/.test(k) ? (k === "cost:auto" ? "HP cost on auto attacks" : `HP cost with ${abilityName(k.slice(5))}`) : /^\/abilities\//.test(k) ? abilityName(k) : k;
+        const takenSubIcon = k => { const h = /^(dot|cost):/.test(k) ? k.slice(k.indexOf(":") + 1) : k; return /^\/abilities\//.test(h) ? abilityIcon(h) : ""; };
+        const healSubName = k => k === "regen" ? "Regeneration (every 10 s)" : k === "food" ? "Food" : k === "other" ? "Other (passives, lifesteal)" : /^food:/.test(k) ? itemName(k.slice(5)) : k;
+        const healSubIcon = k => (/^food:/.test(k) ? icon(k.slice(5)) : "");
+        // Which source rows are open (damage taken from X, healed by Y): kept so a redraw keeps them.
+        const metSubs = new Set();
+        function meterDetail(p, secs, s) {
             const abs = Object.entries(p.abilities || {}).sort((a, b) => (b[1].dmg - a[1].dmg) || (b[1].heal - a[1].heal) || (b[1].casts - a[1].casts));
             const rows = abs.map(([k, a]) => `<tr><td>${meterKeyIcon(k)}${esc(meterKeyName(k))}</td><td class="n">${fmtN(a.dmg)}</td><td class="n">${pct1(a.dmg, p.dealt)}</td><td class="n">${Math.round(a.dmg / secs).toLocaleString()}</td><td class="n">${a.casts || "–"}</td><td class="n">${a.hits || 0}</td><td class="n">${a.misses || 0}</td><td class="n">${a.heal ? fmtN(a.heal) : "–"}</td></tr>`).join("") || `<tr><td colspan="8">Nothing used yet.</td></tr>`;
             const healName = k => k === "regen" ? "Regeneration, food and passives" : k.includes(": ") ? `${k.slice(0, k.indexOf(": "))}'s ${meterKeyName(k.slice(k.indexOf(": ") + 2))}` : meterKeyName(k);
             const cnt = (o, k) => (o && o[k] != null ? Number(o[k]).toLocaleString() : "–");
             // Damage taken and healing, the abilities' format: a folded header with the total, open on a click.
-            const fold = (key, title, total, rows, head) => { const n = rows.length; return `<details class="mds-mfold"${metFolds.has(key) ? " open" : ""}><summary data-fold="${key}"><b>${title} ${fmtN(total)}</b> <span class="mds-hint">· ${n} source${n === 1 ? "" : "s"}</span></summary>${n ? `<table class="mds-msub"><thead><tr>${head}</tr></thead><tbody>${rows.join("")}</tbody></table>` : ""}</details>`; };
-            const taken = Object.entries(p.takenBy || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.taken)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.takenHits, k)}</td><td class="n">${p.takenHits && p.takenHits[k] != null ? Number((p.takenMiss || {})[k] || 0).toLocaleString() : "–"}</td></tr>`);
-            const healed = Object.entries(p.healBy || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${meterKeyIcon(k.includes(": ") ? k.slice(k.indexOf(": ") + 2) : k)}${esc(healName(k))}</td><td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.healed)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.healHits, k)}</td></tr>`);
-            return `<table class="mds-msub"><thead><tr><th>Ability</th><th class="n">Damage</th><th class="n">Share</th><th class="n">DPS</th><th class="n" title="Times used. Parry, thorns and damage over time are not cast">Uses</th><th class="n" title="Enemies hit: an area ability counts each enemy it hits">Hits</th><th class="n">Misses</th><th class="n">Healing</th></tr></thead><tbody>${rows}</tbody></table>
-${fold("taken", "Damage taken", p.taken, taken, `<th>Source</th><th class="n">Damage</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n" title="Attacks or ticks that took HP">Hits</th><th class="n" title="Attacks that took no HP: missed, dodged or blocked">Misses</th>`)}${fold("healed", "Healed", p.healed, healed, `<th>Source</th><th class="n">Healing</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n" title="Times this source restored HP">Times</th>`)}`;
+            const fold = (key, title, total, rows, head, noun = "source", nouns = noun + "s") => { const n = rows.length; return `<details class="mds-mfold"${metFolds.has(key) ? " open" : ""}><summary data-fold="${key}"><b>${title} ${fmtN(total)}</b> <span class="mds-hint">· ${n} ${n === 1 ? noun : nouns}</span></summary>${n ? `<table class="mds-msub"><thead><tr>${head}</tr></thead><tbody>${rows.join("")}</tbody></table>` : ""}</details>`; };
+            const monsters = (s && s.monsters) || {};
+            // A source row opens on a click into what made it up (its own rows, indented), when that was recorded.
+            const head = (fold, k, label, iconHtml, cells, subs) => { const id = `${fold}|${k}`, has = subs && Object.keys(subs).length > 0, isOpen = has && metSubs.has(id); return `<tr class="${has ? `mds-subhead${isOpen ? " open" : ""}` : ""}"${has ? ` data-sub="${esc(id)}" title="Click for what made it up"` : ""}><td>${iconHtml}${esc(label)}</td>${cells}</tr>`; };
+            const taken = Object.entries(p.takenBy || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => {
+                const subs = p.takenSub && p.takenSub[k], id = `taken|${k}`;
+                const row = head("taken", k, k, monsterIcon(monsters[k]), `<td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.taken)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.takenHits, k)}</td><td class="n">${p.takenHits && p.takenHits[k] != null ? Number((p.takenMiss || {})[k] || 0).toLocaleString() : "–"}</td>`, subs);
+                if (!subs || !metSubs.has(id)) return row;
+                return row + Object.entries(subs).sort((a, b) => b[1].amt - a[1].amt || b[1].misses - a[1].misses).map(([sk, r]) => `<tr class="mds-subrow"><td>${takenSubIcon(sk)}${esc(takenSubName(sk))}</td><td class="n">${fmtN(r.amt)}</td><td class="n">${pct1(r.amt, p.taken)}</td><td class="n">${Math.round(r.amt / secs).toLocaleString()}</td><td class="n">${(r.hits || 0).toLocaleString()}</td><td class="n">${(r.misses || 0).toLocaleString()}</td></tr>`).join("");
+            });
+            const healIcon = k => { const h = k.includes(": ") ? k.slice(k.indexOf(": ") + 2) : k; return h === "bloom" ? icon("/items/blooming_trident") : meterKeyIcon(h); };
+            const healed = Object.entries(p.healBy || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => {
+                const subs = p.healSub && p.healSub[k], id = `healed|${k}`;
+                const row = head("healed", k, healName(k), healIcon(k), `<td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.healed)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.healHits, k)}</td>`, subs);
+                if (!subs || !metSubs.has(id)) return row;
+                return row + Object.entries(subs).sort((a, b) => b[1].amt - a[1].amt).map(([sk, r]) => `<tr class="mds-subrow"><td>${healSubIcon(sk)}${esc(healSubName(sk))}</td><td class="n">${fmtN(r.amt)}</td><td class="n">${pct1(r.amt, p.healed)}</td><td class="n">${Math.round(r.amt / secs).toLocaleString()}</td><td class="n">${(r.n || 0).toLocaleString()}</td></tr>`).join("");
+            });
+            return `${fold("abilities", "Damage dealt", p.dealt, abs.length ? rows.split("</tr>").filter(Boolean).map(r => r + "</tr>") : [], `<th>Ability</th><th class="n">Damage</th><th class="n">Share</th><th class="n">DPS</th><th class="n" title="Times used. Parry, thorns and damage over time are not cast">Uses</th><th class="n" title="Enemies hit: an area ability counts each enemy it hits">Hits</th><th class="n">Misses</th><th class="n">Healing</th>`, "ability", "abilities")}${fold("taken", "Damage taken", p.taken, taken, `<th>Source</th><th class="n">Damage</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n" title="Attacks or ticks that took HP">Hits</th><th class="n" title="Attacks that took no HP: missed, dodged or blocked">Misses</th>`)}${fold("healed", "Healed", p.healed, healed, `<th>Source</th><th class="n">Healing</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n" title="Times this source restored HP">Times</th>`)}`;
         }
         let dmgPick = "live", dmgHtml = "", dmgSessKey = "";
         // Which detail folds are open (damage taken, healed): kept here so a redraw keeps them, shared by every player.
-        const metFolds = new Set();
+        // Every popup and every opened player starts the same way (operator, 2026-11-23): damage dealt open, damage taken
+        // and healing folded, no source opened.
+        const METER_FOLDS = ["abilities"];
+        const metFolds = new Set(METER_FOLDS);
+        const metFoldsReset = () => { metFolds.clear(); for (const k of METER_FOLDS) metFolds.add(k); metSubs.clear(); };
+        function metSubClick(e) { const tr = e.target.closest("tr[data-sub]"); if (!tr) return false; const k = tr.dataset.sub; if (metSubs.has(k)) metSubs.delete(k); else metSubs.add(k); return true; }
         function metFoldClick(e) { const sm = e.target.closest("summary[data-fold]"); if (!sm) return false; e.preventDefault(); const k = sm.dataset.fold; if (metFolds.has(k)) metFolds.delete(k); else metFolds.add(k); sm.parentElement.open = metFolds.has(k); return true; }
         const dmgExpanded = new Set();
         function damageSessions() { return state.damage.slice().sort((a, b) => num(b.endAt || b.at) - num(a.endAt || a.at)); }
@@ -3267,13 +3326,13 @@ ${fold("taken", "Damage taken", p.taken, taken, `<th>Source</th><th class="n">Da
             if (!bmPopName) { if (bmPop) bmPop.hidden = true; return; }
             if (!bmPop) {
                 bmPop = document.createElement("div"); bmPop.id = "mds-bm-pop"; bmPop.hidden = true;
-                bmPop.addEventListener("click", e => { if (metFoldClick(e)) return; if (e.target === bmPop || e.target.closest("button[data-pop=close]")) bmPopClose(); });
+                bmPop.addEventListener("click", e => { if (metFoldClick(e)) return; if (metSubClick(e)) { bmPopHtml = ""; renderBattleMeter(); return; } if (e.target === bmPop || e.target.closest("button[data-pop=close]")) bmPopClose(); });
                 document.addEventListener("keydown", e => { if (e.key === "Escape" && bmPopName) bmPopClose(); });
                 document.body.appendChild(bmPop);
             }
             const p = s && s.players && s.players[bmPopName], secs = sessSecs(s), total = sessTotal(s);
             const sub = p ? `${fmtN(p.dealt)} damage · ${pct1(p.dealt, total)} of the party · ${Math.round(p.dealt / secs).toLocaleString()} DPS · taken ${fmtN(p.taken)} · healed ${fmtN(p.healed)}${p.deaths ? ` · ${p.deaths} death${p.deaths === 1 ? "" : "s"}` : ""}` : "";
-            const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage"><div class="mds-pop-head"><strong>${esc(bmPopName)}</strong><small>${sub}</small><small>${s ? (h => `${h.line} · party ${h.total}, ${h.dps} DPS ${h.badge}`)(meterHeadShort(s)) : ""}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
+            const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage"><div class="mds-pop-head"><strong>${esc(bmPopName)}</strong><small>${sub}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs, s) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
             if (html !== bmPopHtml) { morph(bmPop, html); bmPopHtml = html; }
             bmPop.hidden = false;
         }
@@ -3286,7 +3345,7 @@ ${fold("taken", "Damage taken", p.taken, taken, `<th>Source</th><th class="n">Da
                     const b = e.target.closest("button[data-bm]");
                     if (b && b.dataset.bm === "mode") { try { localStorage.setItem(BM_MODE_KEY, bmPerRun() ? "all" : "run"); } catch (_e) { /* fine */ } bmHtml = ""; renderBattleMeter(); return; }
                     if (b) { if (b.dataset.bm === "hide") { try { localStorage.setItem(BM_KEY, "off"); } catch (_e) { /* fine */ } const cb = root && root.querySelector("#mds-bm-on"); if (cb) cb.checked = false; renderBattleMeter(); } else { tab = "damage"; dmgPick = "live"; setTab("damage", true); setOpen(true); } return; }
-                    const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; bmPopName = tr.dataset.player; bmPopHtml = ""; renderBattleMeter();
+                    const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; bmPopName = tr.dataset.player; bmPopHtml = ""; metFoldsReset(); renderBattleMeter();
                 });
             }
             const info = [...host.children].find(c => /BattlePanel_infoArea__/.test(c.className || ""));
