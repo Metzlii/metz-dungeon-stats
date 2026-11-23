@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Metz Dungeon Stats
 // @namespace    metzlii
-// @version      0.2.11
+// @version      0.2.12
 // @description  One permanent record of your XP, your dungeon runs and the dungeon cash flow: keys crafted, consumables used, chests opened, loot sold. A damage meter per run, by player and ability. Tracked from the game's own messages, nothing estimated.
 // @author       Metzli
 // @license      MIT
@@ -34,7 +34,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.2.11";
+    const VERSION = "0.2.12";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -2448,6 +2448,11 @@
 /* The last header's grip stays inside the table: sticking out 4 px gave the meter a horizontal scroll bar. */
 .mds-meter th:last-child .mds-colrz{right:0;width:5px}
 .mds-meter .mds-colrz:hover{background:rgba(69,200,216,.35)}
+/* Number columns keep a floor wide enough for their usual values, so a value gaining a digit does not move the
+   columns beside it; the first column takes what is left (the popup's tables and the meter alike). */
+.mds-fx{display:inline-block;text-align:right}
+:is(#mds-root,#mds-bm) .mds-meter :is(th,td).n{min-width:4.8em}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub :is(th,td).n{width:1px;min-width:5.8em;white-space:nowrap}
 .mds-meter th[data-mcol]{cursor:pointer;user-select:none}
 .mds-meter th[data-mcol]:hover{color:#e6eff3}
 .mds-meter th.mds-sort-asc::after{content:" ▲";color:#45c8d8}
@@ -3643,10 +3648,13 @@
             : s.live ? (s.result ? t("{result}, closing", { result: resultWord(s.result) }) : serverNow() - num(s.lastAt) > METER_STALE_MS ? t("paused") : t("in progress")) + rejoined(s)
             : resultWord(s.result) + rejoined(s));
         const wavesText = s => (s.aggregate || s.streak ? t("{n} waves", { n: num(s.waves).toLocaleString() }) : s.firstWave === s.lastWave ? t("wave {n}", { n: s.lastWave }) : t("waves {a}–{b}", { a: s.firstWave, b: s.lastWave }));
+        // Live figures inside a sentence, each in a slot wide enough for its largest value, so a number changing does
+        // not push the words after it (operator, 2026-11-23). Marks are \u0001N\u0001 in the translated text.
+        const fixSlots = (html, vals) => html.replace(/\u0001(\d)\u0001/g, (_m, i) => { const v = vals[Number(i) - 1]; return v ? `<span class="mds-fx" style="min-width:${v[1]}ch${v[2] ? ";text-align:left" : ""}">${esc(v[0])}</span>` : ""; });
         function meterHead(s) {
             if (!s) return "";
             const total = sessTotal(s), secs = sessSecs(s), c = s.check || {};
-            return `${meterWhere(s)} · ${esc(meterResult(s))} · ${esc(wavesText(s))} · ${esc(t("{time} in combat", { time: fmtDur(num(s.combatMs)) }))} · ${esc(t("party {n} ({dps} DPS)", { n: fmtN(total), dps: Math.round(total / secs).toLocaleString() }))} · ${esc(t("checked {a} of {b} finished waves", { a: c.balanced || 0, b: c.waves || 0 }))}${c.gap ? ` · <span class="mds-flag" title="${esc(t("HP left standing or not credited, over the waves that did not check out"))}">${esc(t("{n} HP unexplained", { n: fmtN(c.gap) }))}</span>` : ""}${s.unassigned ? ` · ${esc(t("{n} not credited", { n: fmtN(s.unassigned) }))}` : ""}`;
+            return `${meterWhere(s)} · ${esc(meterResult(s))} · ${esc(wavesText(s))} · ${esc(t("{time} in combat", { time: fmtDur(num(s.combatMs)) }))} · ${fixSlots(esc(t("party {n} ({dps} DPS)", { n: "\u00011\u0001", dps: "\u00012\u0001" })), [[fmtN(total), 6.2, true], [Math.round(total / secs).toLocaleString(), 5.2]])} · ${esc(t("checked {a} of {b} finished waves", { a: c.balanced || 0, b: c.waves || 0 }))}${c.gap ? ` · <span class="mds-flag" title="${esc(t("HP left standing or not credited, over the waves that did not check out"))}">${esc(t("{n} HP unexplained", { n: fmtN(c.gap) }))}</span>` : ""}${s.unassigned ? ` · ${esc(t("{n} not credited", { n: fmtN(s.unassigned) }))}` : ""}`;
         }
         // The battle meter's head, short (operator, 2026-11-23: the long line was too wordy): the party's damage and DPS
         // beside the title, then the place and the time in combat, and the check as a badge whose tooltip says the rest.
@@ -3881,7 +3889,7 @@
                 document.body.appendChild(bmPop);
             }
             const p = s && s.players && s.players[bmPopName], secs = sessSecs(s), total = sessTotal(s);
-            const sub = p ? esc(t("{dmg} damage · {share} of the party · {dps} DPS · taken {taken} · healed {healed}", { dmg: fmtN(p.dealt), share: pct1(p.dealt, total), dps: Math.round(p.dealt / secs).toLocaleString(), taken: fmtN(p.taken), healed: fmtN(p.healed) }) + (p.deaths ? " · " + t(p.deaths === 1 ? "{n} death" : "{n} deaths", { n: p.deaths }) : "")) : "";
+            const sub = p ? fixSlots(esc(t("{dmg} damage · {share} of the party · {dps} DPS · taken {taken} · healed {healed}", { dmg: "\u00011\u0001", share: "\u00012\u0001", dps: "\u00013\u0001", taken: "\u00014\u0001", healed: "\u00015\u0001" })), [[fmtN(p.dealt), 6.2], [pct1(p.dealt, total), 5.2], [Math.round(p.dealt / secs).toLocaleString(), 5.2], [fmtN(p.taken), 5.4, true], [fmtN(p.healed), 5.4, true]]) + esc(p.deaths ? " · " + t(p.deaths === 1 ? "{n} death" : "{n} deaths", { n: p.deaths }) : "") : "";
             const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage" style="transform:translate(${bmPopPos.x}px,${bmPopPos.y}px)"><div class="mds-pop-head"><strong translate="no">${esc(bmPopName)}</strong><small>${sub}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs, s) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
             if (html !== bmPopHtml) { morph(bmPop, html); bmPopHtml = html; localize(bmPop); }
             bmPop.hidden = false;
@@ -4094,7 +4102,7 @@
                 t.live = same; s = t;
             }
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
-            const html = `<div class="mds-bm-head">${s ? (h => `<strong>${esc(t("Damage {n}", { n: "" })).replace("", `<span class="mds-fixd">${esc(h.total)}</span>`)}</strong><span class="mds-bm-dps"><span class="mds-fixp">${h.dps}</span> DPS</span><small>${h.line}</small>${h.badge}`)(meterHeadShort(s)) : `<strong>Damage</strong><small>starts with the next wave</small>`}${keysWarning()}${consWarning()}<span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded, true).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
+            const html = `<div class="mds-bm-head">${s ? (h => `<strong>${esc(t("Damage {n}", { n: "\u0001" })).replace("\u0001", `<span class="mds-fixd">${esc(h.total)}</span>`)}</strong><span class="mds-bm-dps"><span class="mds-fixp">${h.dps}</span> DPS</span><small>${h.line}</small>${h.badge}`)(meterHeadShort(s)) : `<strong>Damage</strong><small>starts with the next wave</small>`}${keysWarning()}${consWarning()}<span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded, true).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
             if (html !== bmHtml || !bmEl.firstChild) { morph(bmEl, html); bmHtml = html; localize(bmEl); }
             // Players' details open in a popup, so the meter is only ever its rows high. Never more than half the battle
             // panel, whose height is what the chat panel leaves (a dump 2026-11-23: window 1197 px, panel 424 px).
