@@ -707,7 +707,11 @@
         if (!state.streak || state.streak.key !== k) state.streak = { key: k, streak: true, zone: s.zone || null, tier: s.tier ?? null, players: {}, runs: 0 };
         const gap = num(s.startAt) - num(state.streak.lastAt);
         if (state.streak.runs && gap > 0 && gap < 120e3) state.streak.combatMs = num(state.streak.combatMs) + gap;
-        meterAdd(state.streak, s); state.streak.runs++;
+        // "N runs" counts runs, not pieces (operator, 2026-11-23: "2 runs" matched nothing): two pieces of one run,
+        // either side of a reload or a reset, are one run.
+        const ids = state.streak.ids || (state.streak.ids = []);
+        if (s.battleId == null || !ids.includes(s.battleId)) { state.streak.runs++; if (s.battleId != null) ids.push(s.battleId); }
+        meterAdd(state.streak, s);
     }
     function streakCheck() {
         const st = state.streak, s = state.meter.session; if (!st) return;
@@ -3651,7 +3655,7 @@
             const span = s.streak || s.aggregate ? meterResult(s) : `${wavesText(s)}${s.stitched ? ", " + t("stitched after a reload") : ""}${s.live ? "" : `, ${meterResult(s)}`}`;
             const tip = `${span}. ${t("Checked {a} of {b} finished waves: every monster seen at 0 HP and every point credited to a player.", { a: c.balanced || 0, b: c.waves || 0 })}${c.gap ? " " + t("{n} HP unexplained.", { n: fmtN(c.gap) }) : ""}${s.unassigned ? " " + t("{n} not credited.", { n: fmtN(s.unassigned) }) : ""}`;
             const ok = !c.gap && !s.unassigned;
-            return { total: fmtN(total), dps: Math.round(total / secs).toLocaleString(), line: `${meterWhere(s)}${s.streak && s.runs ? ` · ${esc(t("{n} runs", { n: s.runs + (s.live ? 1 : 0) }))}` : ""} · ${esc(t("{time} in combat", { time: fmtDur(num(s.combatMs)) }))}${s.live || s.streak ? "" : ` · ${esc(meterResult(s))}`}`, badge: `<span class="mds-check${ok ? "" : " bad"}" title="${esc(tip)}">${ok ? "✓" : "!"} ${c.balanced || 0}/${c.waves || 0}</span>` };
+            return { total: fmtN(total), dps: Math.round(total / secs).toLocaleString(), line: `${meterWhere(s)}${s.streak && s.runs + (s.live && s.liveNew !== false ? 1 : 0) > 1 ? ` · ${esc(t("{n} runs", { n: s.runs + (s.live && s.liveNew !== false ? 1 : 0) }))}` : ""} · ${esc(t("{time} in combat", { time: fmtDur(num(s.combatMs)) }))}${s.live || s.streak ? "" : ` · ${esc(meterResult(s))}`}`, badge: `<span class="mds-check${ok ? "" : " bad"}" title="${esc(tip)}">${ok ? "✓" : "!"} ${c.balanced || 0}/${c.waves || 0}</span>` };
         }
         // A player's XP/hr for the battle meter: the total, and a tooltip with each skill (and, for our own character,
         // the time to the next level from the game's own totals).
@@ -4086,7 +4090,7 @@
             const st = state.streak;
             if (!bmPerRun() && st) {
                 const same = !!(s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key), t = JSON.parse(JSON.stringify(st));
-                if (same) { const gap = num(s.startAt) - num(st.lastAt); if (gap > 0 && gap < 120e3) t.combatMs = num(t.combatMs) + gap; meterAdd(t, s); }
+                if (same) { const gap = num(s.startAt) - num(st.lastAt); if (gap > 0 && gap < 120e3) t.combatMs = num(t.combatMs) + gap; t.liveNew = !(t.ids || []).includes(s.battleId); meterAdd(t, s); }
                 t.live = same; s = t;
             }
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
