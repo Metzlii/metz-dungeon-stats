@@ -60,6 +60,7 @@ assert.equal(mage.healBy.regen, 10);
 assert.equal(mage.healBy["Healer: /abilities/heal"], 250);
 assert.equal(healer.healDone, 250);
 assert.equal(mage.taken, 300); assert.equal(mage.takenBy.Imp, 300, "the imp's attack, though its counter moved earlier with the blind");
+assert.equal(mage.takenHits.Imp, 1); assert.equal(mage.healHits.regen, 1); assert.equal(mage.healHits["Healer: /abilities/heal"], 1); assert.equal(mage.healHits["/abilities/life_drain"], 1, "Life Drain's heal counted once");
 assert.equal(tank.abilities.auto.misses, 1);
 assert.equal(tank.abilities.parry.dmg, 100, "the golem's loss while it attacked the tank");
 assert.equal(tank.abilities["/abilities/maim"].dmg, 100);
@@ -88,8 +89,11 @@ meter.update(upd(8, { 0: { cHP: 1000, atkCounter: 1 } }, { 0: { cHP: 300, dmgCou
 meter.newBattle(wave(8, 2, [monster("Imp", 500)]), 22000);
 assert.deepEqual(meter.session.check, { waves: 1, balanced: 0, gap: 300 });
 
+// An attack that takes no HP (a splat, HP unchanged, the monster acting) is a miss against the player.
+meter.update(upd(8, { 0: { cHP: 1000, dmgCounter: 1 } }, { 0: { cHP: 500, atkCounter: 1 } }), 22500);
+assert.equal(meter.session.players.Mage.takenMiss.Imp, 1);
 // Deaths: HP to 0 counts once.
-meter.update(upd(8, { 2: { cHP: 0, dmgCounter: 1 } }, { 0: { cHP: 500, atkCounter: 1 } }), 23000);
+meter.update(upd(8, { 2: { cHP: 0, dmgCounter: 1 } }, { 0: { cHP: 500, atkCounter: 2 } }), 23000);
 meter.update(upd(8, { 2: { cHP: 0 } }, {}), 23500);
 assert.equal(meter.session.players.Healer.deaths, 1);
 

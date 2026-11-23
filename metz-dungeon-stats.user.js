@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Metz Dungeon Stats
 // @namespace    metzlii
-// @version      0.2.0
+// @version      0.2.1
 // @description  One permanent record of your XP, your dungeon runs and the dungeon cash flow: keys crafted, consumables used, chests opened, loot sold. A damage meter per run, by player and ability. Tracked from the game's own messages, nothing estimated.
 // @author       Metzli
 // @license      MIT
@@ -34,7 +34,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.2.0";
+    const VERSION = "0.2.1";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -291,7 +291,7 @@
         const abilityOf = h => (cfg.ability && h && cfg.ability(h)) || null;
         const FLAGS = ["isBlinded", "isStunned", "isSilenced"];
         let cur = null, battle = null, seq = 0;
-        const blankPlayer = (name, id) => ({ name, id: id != null ? String(id) : null, dealt: 0, hits: 0, misses: 0, casts: 0, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: {}, takenBy: {}, healBy: {} });
+        const blankPlayer = (name, id) => ({ name, id: id != null ? String(id) : null, dealt: 0, hits: 0, misses: 0, casts: 0, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: {}, takenBy: {}, healBy: {}, takenHits: {}, takenMiss: {}, healHits: {} });
         const abilityRow = (p, key) => p.abilities[key] || (p.abilities[key] = { dmg: 0, hits: 0, misses: 0, casts: 0, heal: 0 });
         function open(m, at) {
             cur = { v: 1, battleId: m.battleId, startAt: at, lastAt: at, firstWave: Number(m.wave) || 0, lastWave: Number(m.wave) || 0, waves: 0, combatMs: 0, players: {}, monsterHpLost: 0, monsterHealed: 0, unassigned: 0, check: { waves: 0, balanced: 0, gap: 0 } };
@@ -369,21 +369,23 @@
                 if (!who) { cur.unassigned += dmg; battle.unassigned += dmg; continue; }
                 const p = P(who), row = abilityRow(p, key); p.dealt += dmg; row.dmg += dmg; row.hits++; p.hits++;
             }
-            // Players: damage taken, healing, deaths.
+            // Players: damage taken, healing, deaths. A splat with no HP lost while a monster acts: its attack missed.
             for (const e of ch) {
+                if (e.side === "p" && !e.dhp && e.ddmg > 0 && ma.length) { const p = P(e), src = ma[0].s.name; p.takenMiss[src] = (p.takenMiss[src] || 0) + 1; continue; }
                 if (e.side !== "p" || !e.dhp) continue;
                 const p = P(e);
                 if (e.dhp < 0) {
                     const dmg = -e.dhp; p.taken += dmg;
                     const src = ma.length ? ma[0].s.name : e.datk > 0 ? "Own actions (HP cost, thorns)" : "Damage over time";
-                    p.takenBy[src] = (p.takenBy[src] || 0) + dmg;
+                    p.takenBy[src] = (p.takenBy[src] || 0) + dmg; p.takenHits[src] = (p.takenHits[src] || 0) + 1;
                     if (e.s.hp <= 0 && !e.s.dead) { e.s.dead = true; p.deaths++; }
                 } else {
                     const gain = e.dhp; p.healed += gain; if (e.s.hp > 0) e.s.dead = false;
                     const info = actor && abilityOf(actor.used);
                     const healer = info && (info.heal || (info.drain && actor === e)) ? actor : null;
-                    if (healer) { const h = P(healer); h.healDone += gain; abilityRow(h, healer.used).heal += gain; p.healBy[healer.s.name === e.s.name ? actor.used : `${healer.s.name}: ${actor.used}`] = (p.healBy[healer.s.name === e.s.name ? actor.used : `${healer.s.name}: ${actor.used}`] || 0) + gain; }
-                    else p.healBy.regen = (p.healBy.regen || 0) + gain;
+                    const key = !healer ? "regen" : healer.s.name === e.s.name ? actor.used : `${healer.s.name}: ${actor.used}`;
+                    if (healer) { const h = P(healer); h.healDone += gain; abilityRow(h, healer.used).heal += gain; }
+                    p.healBy[key] = (p.healBy[key] || 0) + gain; p.healHits[key] = (p.healHits[key] || 0) + 1;
                 }
             }
             return true;
@@ -421,10 +423,10 @@
         dst.startAt = lo(dst.startAt, src.startAt); dst.lastAt = hi(dst.lastAt, src.lastAt); dst.endAt = hi(dst.endAt, src.endAt);
         dst.firstWave = lo(dst.firstWave, src.firstWave); dst.lastWave = hi(dst.lastWave, src.lastWave);
         for (const [name, p] of Object.entries(src.players || {})) {
-            const q = dst.players[name] || (dst.players[name] = { name, id: p.id || null, dealt: 0, hits: 0, misses: 0, casts: 0, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: {}, takenBy: {}, healBy: {} });
+            const q = dst.players[name] || (dst.players[name] = { name, id: p.id || null, dealt: 0, hits: 0, misses: 0, casts: 0, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: {}, takenBy: {}, healBy: {}, takenHits: {}, takenMiss: {}, healHits: {} });
             sum(q, p, ["dealt", "hits", "misses", "casts", "taken", "healed", "healDone", "deaths"]);
             for (const [k, a] of Object.entries(p.abilities || {})) sum(q.abilities[k] || (q.abilities[k] = {}), a, ["dmg", "hits", "misses", "casts", "heal"]);
-            for (const o of ["takenBy", "healBy"]) for (const [k, v] of Object.entries(p[o] || {})) q[o][k] = (q[o][k] || 0) + (Number(v) || 0);
+            for (const o of ["takenBy", "healBy", "takenHits", "takenMiss", "healHits"]) { if (!p[o]) continue; q[o] = q[o] || {}; for (const [k, v] of Object.entries(p[o])) q[o][k] = (q[o][k] || 0) + (Number(v) || 0); }
         }
         return dst;
     }
@@ -490,14 +492,23 @@
         if (!currentAction() || (s && s.zone && `${s.zone}|${s.tier ?? ""}` !== st.key) || serverNow() - num(st.lastAt) > METER_STALE_MS && !(s && serverNow() - num(s.lastAt) < METER_STALE_MS)) state.streak = null;
     }
     function meterClosed(s, result) { if (result) s.result = result; streakAdd(s); return meterSave(s); }
+    // Off (Settings → Damage meter, 0.2.1, operator 2026-11-23: some play on very old PCs): battle messages are not read
+    // at all, nothing is recorded, and the battle-tab meter and the Damage tab are hidden.
+    const METER_OFF_KEY = PANEL_KEY + "-meter";
+    const meterEnabled = () => { try { return localStorage.getItem(METER_OFF_KEY) !== "off"; } catch (_e) { return true; } };
+    function meterDisable() {
+        state.meter.restore(null); state.streak = null; meterLast = null; meterCheckpointAt = 0;
+        if (state.record) state.record.queue("meta", { key: "meterOpen", value: null });
+    }
     function meterOnNewBattle(m) {
+        if (!meterEnabled()) return;
         if (meterLast && meterLast.battleId === m.battleId && meterLast.wave === num(m.wave)) return; // duplicate roster send
         meterLast = { battleId: m.battleId, wave: num(m.wave) };
         const closed = state.meter.newBattle(m, serverNow());
         if (closed) meterClosed(closed);
         meterTag(state.meter.session); streakCheck(); meterCheckpoint(); panel.meterPing();
     }
-    function meterOnUpdate(m) { state.meter.update(m, serverNow()); panel.meterPing(); }
+    function meterOnUpdate(m) { if (!meterEnabled()) return; state.meter.update(m, serverNow()); panel.meterPing(); }
     // A run that ended: its session closes once the last messages are in. A clear counts its last wave in the check.
     function meterRunEnded(run, result) {
         const s = state.meter.session; if (!s || !run || (s.runId !== run.id && s.battleId !== run.battleId)) return;
@@ -2059,6 +2070,14 @@
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub{width:100%;border-collapse:collapse;font-size:.93em}
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub :is(th,td){padding:3px 8px;text-align:left;position:static}
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub :is(th,td).n{text-align:right}
+:is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold{margin:8px 0 0}
+:is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold>summary{cursor:pointer;list-style:none;display:block;padding:3px 0;color:#e6eff3;font-size:.93em}
+:is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold>summary::-webkit-details-marker{display:none}
+:is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold>summary::before{content:"▸";display:inline-block;width:1.1em;color:rgba(230,239,243,.5)}
+:is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold[open]>summary::before{content:"▾"}
+:is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold>summary b{font-weight:500}
+:is(#mds-root,#mds-bm,#mds-bm-pop) details.mds-mfold>summary:hover b{color:#a9e9f1}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-hint{color:rgba(230,239,243,.5);font-weight:400}
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-mlists{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:.9em;color:#c5d4de}
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-mlists b{color:#e6eff3;font-weight:500}
 #mds-root .mds-dmg-head{margin:0 0 10px;color:#c5d4de;font-size:.929em}
@@ -2077,6 +2096,10 @@
 #mds-bm .mds-bm-head{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-bottom:4px}
 #mds-bm .mds-bm-head strong{font-weight:500}
 #mds-bm .mds-bm-head small{color:#c5d4de;font-size:12px}
+#mds-bm .mds-bm-head strong{font-size:14px}
+#mds-bm .mds-bm-dps{font-weight:500;color:#a9e9f1}
+:is(#mds-bm,#mds-bm-pop) .mds-check{font-size:11px;font-weight:500;color:#9fd9a8;border:1px solid rgba(159,217,168,.35);border-radius:9px;padding:0 6px;cursor:help;white-space:nowrap}
+:is(#mds-bm,#mds-bm-pop) .mds-check.bad{color:#f2d99a;border-color:rgba(211,161,58,.5)}
 #mds-bm .mds-bm-btns{margin-left:auto;display:flex;gap:6px}
 #mds-bm .mds-bm-btns button{background:transparent;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:6px;padding:2px 8px;font:500 12px/1.3 "Inter",system-ui,sans-serif;cursor:pointer}
 #mds-bm .mds-bm-btns button:hover{background:rgba(230,239,243,.07)}
@@ -2355,6 +2378,7 @@
   <div class="mds-bar"><button id="mds-fs-down" title="Smaller">A −</button><span id="mds-fs-val" class="mds-note"></span><button id="mds-fs-up" title="Larger">A +</button><button id="mds-fs-reset">Reset</button><span class="mds-note">Scales every size in the panel, 70% to 180% in steps of 5%.</span></div>
  </div>
  <div class="mds-set"><span class="mds-set-title">Damage meter</span>
+  <div class="mds-bar"><label><input type="checkbox" id="mds-meter-on"> Record damage</label><span class="mds-note">Off: battle messages are not read at all, nothing is recorded, and the meter and the Damage tab are hidden. For slow PCs. Sessions already saved are kept.</span></div>
   <div class="mds-bar"><label><input type="checkbox" id="mds-bm-on"> Show the meter under the battle cards (Combat → Battle)</label><span class="mds-note">The Damage tab keeps every session either way.</span></div>
  </div>
  <div class="mds-set"><span class="mds-set-title">Column and card order</span>
@@ -2458,8 +2482,14 @@
             root.querySelector("#mds-plan-wallet").addEventListener("click", () => { plan.budget = null; savePlan(); renderPlan(); });
             // Damage tab: the session picker, a player row opens its abilities, a session row shows that session.
             els["mds-dmg-pick"].addEventListener("change", e => { dmgPick = e.target.value; dmgHtml = ""; renderDamage(); });
-            els["mds-dmg-meter"].addEventListener("click", e => { const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else dmgExpanded.add(n); dmgHtml = ""; renderDamage(); });
+            els["mds-dmg-meter"].addEventListener("click", e => { if (metFoldClick(e)) return; const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else dmgExpanded.add(n); dmgHtml = ""; renderDamage(); });
             els["mds-dmg-sessions"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; const tr = e.target.closest("tr[data-sid]"); if (!tr) return; dmgPick = tr.dataset.sid; dmgHtml = ""; renderDamage(); });
+            {
+                const on = root.querySelector("#mds-meter-on"), bmBox = root.querySelector("#mds-bm-on");
+                const apply = () => { const en = meterEnabled(); on.checked = en; bmBox.disabled = !en; const tb = root.querySelector('.mds-tabs button[data-tab="damage"]'); if (tb) tb.hidden = !en; if (!en && tab === "damage") setTab("overview"); };
+                on.addEventListener("change", () => { try { localStorage.setItem(METER_OFF_KEY, on.checked ? "on" : "off"); } catch (_e) { /* fine */ } if (!on.checked) { meterDisable(); bmPopClose(); } apply(); renderBattleMeter(); });
+                apply();
+            }
             { const bm = root.querySelector("#mds-bm-on"); bm.checked = bmOn(); bm.addEventListener("change", () => { try { localStorage.setItem(BM_KEY, bm.checked ? "on" : "off"); } catch (_e) { /* fine */ } renderBattleMeter(); }); }
             setInterval(() => { try { if (!document.hidden) { renderBattleMeter(); if (open && tab === "damage") renderDamage(); } } catch (error) { warn("damage meter view", error); } }, 1000);
             setInterval(() => { if (open && tab === "xp") touch(); }, 5000);
@@ -2599,7 +2629,7 @@
             if (root && root.parentNode !== document.body) document.body.appendChild(root);
         }
         function setTab(k, silent) {
-            if (!TABS.some(t => t[0] === k)) k = "overview";
+            if (!TABS.some(t => t[0] === k) || (k === "damage" && !meterEnabled())) k = "overview";
             tab = k;
             for (const b of root.querySelectorAll(".mds-tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === k));
             for (const p of root.querySelectorAll(".mds-pane")) p.hidden = p.dataset.pane !== k;
@@ -3104,6 +3134,15 @@
             const total = sessTotal(s), secs = sessSecs(s), c = s.check || {};
             return `${meterWhere(s)} · ${esc(meterResult(s))} · ${s.aggregate || s.streak ? `${num(s.waves).toLocaleString()} waves` : s.firstWave === s.lastWave ? `wave ${s.lastWave}` : `waves ${s.firstWave}–${s.lastWave}`} · ${fmtDur(num(s.combatMs))} in combat · party ${fmtN(total)} (${Math.round(total / secs).toLocaleString()} DPS) · checked ${c.balanced || 0} of ${c.waves || 0} finished waves${c.gap ? ` · <span class="mds-flag" title="HP left standing or not credited, over the waves that did not check out">${fmtN(c.gap)} HP unexplained</span>` : ""}${s.unassigned ? ` · ${fmtN(s.unassigned)} not credited` : ""}`;
         }
+        // The battle meter's head, short (operator, 2026-11-23: the long line was too wordy): the party's damage and DPS
+        // beside the title, then the place and the time in combat, and the check as a badge whose tooltip says the rest.
+        function meterHeadShort(s) {
+            const total = sessTotal(s), secs = sessSecs(s), c = s.check || {};
+            const span = s.streak ? `${s.runs} run${s.runs === 1 ? "" : "s"} finished${s.live ? " + this one" : ""} since ${fmtClock(num(s.startAt))}` : s.aggregate ? meterResult(s) : `${s.firstWave === s.lastWave ? `wave ${s.lastWave}` : `waves ${s.firstWave}–${s.lastWave}`}${s.stitched ? ", stitched after a reload" : ""}${s.live ? "" : `, ${meterResult(s)}`}`;
+            const tip = `${span}. Checked ${c.balanced || 0} of ${c.waves || 0} finished waves: every monster seen at 0 HP and every point credited to a player.${c.gap ? ` ${fmtN(c.gap)} HP unexplained.` : ""}${s.unassigned ? ` ${fmtN(s.unassigned)} not credited.` : ""}`;
+            const ok = !c.gap && !s.unassigned;
+            return { total: fmtN(total), dps: Math.round(total / secs).toLocaleString(), line: `${meterWhere(s)} · ${fmtDur(num(s.combatMs))} in combat${s.live || s.streak ? "" : ` · ${esc(meterResult(s))}`}`, badge: `<span class="mds-check${ok ? "" : " bad"}" title="${esc(tip)}">${ok ? "✓" : "!"} ${c.balanced || 0}/${c.waves || 0}</span>` };
+        }
         function meterView(s, expanded) {
             if (!s || !s.players || !Object.keys(s.players).length) return `<p class="mds-note">No battle seen yet: the meter starts with the next wave.</p>`;
             const secs = sessSecs(s), total = sessTotal(s);
@@ -3119,12 +3158,19 @@
         function meterDetail(p, secs) {
             const abs = Object.entries(p.abilities || {}).sort((a, b) => (b[1].dmg - a[1].dmg) || (b[1].heal - a[1].heal) || (b[1].casts - a[1].casts));
             const rows = abs.map(([k, a]) => `<tr><td>${meterKeyIcon(k)}${esc(meterKeyName(k))}</td><td class="n">${fmtN(a.dmg)}</td><td class="n">${pct1(a.dmg, p.dealt)}</td><td class="n">${Math.round(a.dmg / secs).toLocaleString()}</td><td class="n">${a.casts || "–"}</td><td class="n">${a.hits || 0}</td><td class="n">${a.misses || 0}</td><td class="n">${a.heal ? fmtN(a.heal) : "–"}</td></tr>`).join("") || `<tr><td colspan="8">Nothing used yet.</td></tr>`;
-            const list = (o, total, name) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(name(k))} ${fmtN(v)} (${pct1(v, total)})`).join(" · ") || "none";
             const healName = k => k === "regen" ? "Regeneration, food and passives" : k.includes(": ") ? `${k.slice(0, k.indexOf(": "))}'s ${meterKeyName(k.slice(k.indexOf(": ") + 2))}` : meterKeyName(k);
+            const cnt = (o, k) => (o && o[k] != null ? Number(o[k]).toLocaleString() : "–");
+            // Damage taken and healing, the abilities' format: a folded header with the total, open on a click.
+            const fold = (key, title, total, rows, head) => { const n = rows.length; return `<details class="mds-mfold"${metFolds.has(key) ? " open" : ""}><summary data-fold="${key}"><b>${title} ${fmtN(total)}</b> <span class="mds-hint">· ${n} source${n === 1 ? "" : "s"}</span></summary>${n ? `<table class="mds-msub"><thead><tr>${head}</tr></thead><tbody>${rows.join("")}</tbody></table>` : ""}</details>`; };
+            const taken = Object.entries(p.takenBy || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.taken)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.takenHits, k)}</td><td class="n">${p.takenHits && p.takenHits[k] != null ? Number((p.takenMiss || {})[k] || 0).toLocaleString() : "–"}</td></tr>`);
+            const healed = Object.entries(p.healBy || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${meterKeyIcon(k.includes(": ") ? k.slice(k.indexOf(": ") + 2) : k)}${esc(healName(k))}</td><td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.healed)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.healHits, k)}</td></tr>`);
             return `<table class="mds-msub"><thead><tr><th>Ability</th><th class="n">Damage</th><th class="n">Share</th><th class="n">DPS</th><th class="n" title="Times used. Parry, thorns and damage over time are not cast">Uses</th><th class="n" title="Enemies hit: an area ability counts each enemy it hits">Hits</th><th class="n">Misses</th><th class="n">Healing</th></tr></thead><tbody>${rows}</tbody></table>
-<div class="mds-mlists"><span><b>Damage taken ${fmtN(p.taken)}:</b> ${list(p.takenBy, p.taken, k => k)}</span><span><b>Healed ${fmtN(p.healed)}:</b> ${list(p.healBy, p.healed, healName)}</span></div>`;
+${fold("taken", "Damage taken", p.taken, taken, `<th>Source</th><th class="n">Damage</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n" title="Attacks or ticks that took HP">Hits</th><th class="n" title="Attacks that took no HP: missed, dodged or blocked">Misses</th>`)}${fold("healed", "Healed", p.healed, healed, `<th>Source</th><th class="n">Healing</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n" title="Times this source restored HP">Times</th>`)}`;
         }
         let dmgPick = "live", dmgHtml = "", dmgSessKey = "";
+        // Which detail folds are open (damage taken, healed): kept here so a redraw keeps them, shared by every player.
+        const metFolds = new Set();
+        function metFoldClick(e) { const sm = e.target.closest("summary[data-fold]"); if (!sm) return false; e.preventDefault(); const k = sm.dataset.fold; if (metFolds.has(k)) metFolds.delete(k); else metFolds.add(k); sm.parentElement.open = metFolds.has(k); return true; }
         const dmgExpanded = new Set();
         function damageSessions() { return state.damage.slice().sort((a, b) => num(b.endAt || b.at) - num(a.endAt || a.at)); }
         // All seen, per place and tier: every whole session plus the pieces kept out of the session list.
@@ -3171,19 +3217,19 @@
             if (!bmPopName) { if (bmPop) bmPop.hidden = true; return; }
             if (!bmPop) {
                 bmPop = document.createElement("div"); bmPop.id = "mds-bm-pop"; bmPop.hidden = true;
-                bmPop.addEventListener("click", e => { if (e.target === bmPop || e.target.closest("button[data-pop=close]")) bmPopClose(); });
+                bmPop.addEventListener("click", e => { if (metFoldClick(e)) return; if (e.target === bmPop || e.target.closest("button[data-pop=close]")) bmPopClose(); });
                 document.addEventListener("keydown", e => { if (e.key === "Escape" && bmPopName) bmPopClose(); });
                 document.body.appendChild(bmPop);
             }
             const p = s && s.players && s.players[bmPopName], secs = sessSecs(s), total = sessTotal(s);
             const sub = p ? `${fmtN(p.dealt)} damage · ${pct1(p.dealt, total)} of the party · ${Math.round(p.dealt / secs).toLocaleString()} DPS · taken ${fmtN(p.taken)} · healed ${fmtN(p.healed)}${p.deaths ? ` · ${p.deaths} death${p.deaths === 1 ? "" : "s"}` : ""}` : "";
-            const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage"><div class="mds-pop-head"><strong>${esc(bmPopName)}</strong><small>${sub}</small><small>${s ? meterHead(s) : ""}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
+            const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage"><div class="mds-pop-head"><strong>${esc(bmPopName)}</strong><small>${sub}</small><small>${s ? (h => `${h.line} · party ${h.total}, ${h.dps} DPS ${h.badge}`)(meterHeadShort(s)) : ""}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
             if (html !== bmPopHtml) { morph(bmPop, html); bmPopHtml = html; }
             bmPop.hidden = false;
         }
         function renderBattleMeter() {
             const host = document.querySelector('[class*="BattlePanel_battlePanel__"]');
-            if (!host || !bmOn()) { if (bmEl && bmEl.isConnected) bmEl.remove(); bmPopClose(); return; }
+            if (!host || !bmOn() || !meterEnabled()) { if (bmEl && bmEl.isConnected) bmEl.remove(); bmPopClose(); return; }
             if (!bmEl) {
                 bmEl = document.createElement("div"); bmEl.id = "mds-bm";
                 bmEl.addEventListener("click", e => {
@@ -3199,7 +3245,7 @@
             const st = state.streak;
             if (!bmPerRun() && st) { const t = meterAdd(JSON.parse(JSON.stringify(st)), s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key ? s : {}); t.live = !!(s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key); s = t; }
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
-            const html = `<div class="mds-bm-head"><strong>Damage</strong><small>${s ? meterHead(s) : "starts with the next wave"}</small><span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
+            const html = `<div class="mds-bm-head">${s ? (h => `<strong>Damage ${h.total}</strong><span class="mds-bm-dps">${h.dps} DPS</span><small>${h.line}</small>${h.badge}`)(meterHeadShort(s)) : `<strong>Damage</strong><small>starts with the next wave</small>`}<span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
             if (html !== bmHtml || !bmEl.firstChild) { morph(bmEl, html); bmHtml = html; }
             // Players' details open in a popup, so the meter is only ever its rows high. Never more than half the battle
             // panel, whose height is what the chat panel leaves (a dump 2026-11-23: window 1197 px, panel 424 px).
