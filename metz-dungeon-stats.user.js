@@ -544,7 +544,7 @@
         const st = state.streak, s = state.meter.session; if (!st) return;
         if (!meterInCombat() || (s && s.zone && `${s.zone}|${s.tier ?? ""}` !== st.key) || serverNow() - num(st.lastAt) > METER_STALE_MS && !(s && serverNow() - num(s.lastAt) < METER_STALE_MS)) state.streak = null;
     }
-    function meterClosed(s, result) { if (result) s.result = result; streakAdd(s); return meterSave(s); }
+    function meterClosed(s, result) { if (result) s.result = result; if (s.battleId !== meterNoStreakBattle) streakAdd(s); else meterNoStreakBattle = null; return meterSave(s); }
     // Off (Settings → Damage meter, 0.2.1, operator 2026-11-23: some play on very old PCs): battle messages are not read
     // at all, nothing is recorded, and the battle-tab meter and the Damage tab are hidden.
     const METER_OFF_KEY = PANEL_KEY + "-meter";
@@ -553,20 +553,20 @@
         state.meter.restore(null); state.streak = null; meterLast = null; meterCheckpointAt = 0;
         if (state.record) state.record.queue("meta", { key: "meterOpen", value: null });
     }
-    // After Reset damage data the rest of the run in progress is not recorded: the meter starts with the next battle,
-    // so nothing from before the reset reaches a total (operator, 2026-11-23: the battle tab's All runs held the last
-    // 15 waves of the run the reset was pressed in, and did not match the Damage tab).
-    let meterSkipBattle = null;
+    // After Reset damage data the meter records again from the next wave, but the rest of the run the reset was
+    // pressed in never joins the battle tab's All runs total (operator, 2026-11-23: All runs held the last 15 waves of
+    // that run and did not match the Damage tab). Skipping the rest of the run instead left the meter blank until the
+    // next run, and on a planet, whose battle id never changes, for good.
+    let meterNoStreakBattle = null;
     function meterOnNewBattle(m) {
         if (!meterEnabled()) return;
-        if (meterSkipBattle != null) { if (m.battleId === meterSkipBattle) return; meterSkipBattle = null; }
         if (meterLast && meterLast.battleId === m.battleId && meterLast.wave === num(m.wave)) return; // duplicate roster send
         meterLast = { battleId: m.battleId, wave: num(m.wave) };
         const closed = state.meter.newBattle(m, serverNow());
         if (closed) meterClosed(closed);
         meterTag(state.meter.session); streakCheck(); meterCheckpoint(); panel.meterPing();
     }
-    function meterOnUpdate(m) { if (!meterEnabled() || (meterSkipBattle != null && m.battleId === meterSkipBattle)) return; state.meter.update(m, serverNow()); panel.meterPing(); }
+    function meterOnUpdate(m) { if (!meterEnabled()) return; state.meter.update(m, serverNow()); panel.meterPing(); }
     // A run that ended: its session closes once the last messages are in. A clear counts its last wave in the check.
     function meterRunEnded(run, result) {
         const s = state.meter.session; if (!s || !run || (s.runId !== run.id && s.battleId !== run.battleId)) return;
@@ -3482,7 +3482,8 @@
         for (const e of state.damage) state.record.remove("events", e.id);
         state.damage = []; state.meta.damagePartial = {}; state.streak = null;
         state.record.queue("meta", { key: "damagePartial", value: {} }); state.record.queue("meta", { key: "meterOpen", value: null });
-        meterSkipBattle = (state.meter.session && state.meter.session.battleId) ?? (meterLast && meterLast.battleId) ?? null;
+        meterNoStreakBattle = (state.meter.session && state.meter.session.battleId) ?? (meterLast && meterLast.battleId) ?? null;
+        meterLast = null;   // the next wave of this battle opens a fresh session
         state.meter.restore(null);
         state.events = state.events.filter(e => e.kind !== "damage");
         await state.record.flush();
