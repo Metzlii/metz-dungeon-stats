@@ -1222,11 +1222,14 @@
     // ---------------------------------------------------------------------------------------------------------------
     // Party consumables (operator, 2026-11-23): every new_battle carries each player's combatConsumables with the
     // count they hold (read in the 2026-11-23 capture: all five players, every wave). Per player and item: the count
-    // now and how many were used since first seen on this page, for a time-left estimate. Kept in memory only; a
+    // now and how many were used since first seen on this page, for a time-left estimate. Kept per browser across a reload; a
     // slot that changes item starts over, a restock does not count as use, and a 5-minute gap starts everyone over
     // (time out of combat would dilute the rate).
     function trackPartyCons(m) {
         const at = serverNow();
+        // Kept across a reload (operator, 2026-11-23: every reload emptied the times for ten minutes): the newest
+        // state is saved per browser and taken up again when it is this character's and under five minutes old.
+        if (!state.partyCons) { try { const v = JSON.parse(localStorage.getItem("mds-partycons-v1") || "null"); if (v && v.who === state.characterName && v.cons && typeof v.cons === "object") { state.partyCons = v.cons; state.partyConsAt = Number(v.at) || 0; } } catch (_e) { /* start fresh */ } }
         if (!state.partyCons || at - (state.partyConsAt || 0) > 300e3) state.partyCons = {};
         state.partyConsAt = at;
         const seen = new Set();
@@ -1245,6 +1248,7 @@
             for (const [item, count] of Object.entries(now)) { let r = rec[item]; if (!r) r = rec[item] = { t0: at, used: 0, count, t: at }; else { if (count < r.count) r.used += r.count - count; r.count = count; r.t = at; } r.kind = where[item].kind; r.slot = where[item].slot; }
         }
         for (const k of Object.keys(state.partyCons)) if (!seen.has(k)) delete state.partyCons[k];
+        try { localStorage.setItem("mds-partycons-v1", JSON.stringify({ at, who: state.characterName, cons: state.partyCons })); } catch (_e) { /* fine */ }
     }
     function parseKeyCounts(meta) { const out = {}; let s = ""; try { s = typeof meta === "string" ? (JSON.parse(meta).keyCountString || "") : (meta && meta.keyCountString) || ""; } catch (_e) { s = String(meta || ""); } const re = /\[([^[\]-]+?)\s*-\s*([\d,]+)\]/g; let x; while ((x = re.exec(s))) out[x[1].trim()] = num(x[2].replace(/,/g, "")); return out; }
     function onChat(msg, replay) {
