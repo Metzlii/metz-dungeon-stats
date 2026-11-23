@@ -99,6 +99,18 @@ const again = createMeter({ ability: h => info[h] || null });
 again.restore(saved);
 assert.equal(again.newBattle(wave(8, 3, [monster("Imp", 500)]), 30000), null, "same battle id: no new session");
 assert.equal(again.session.waves, 3);
+// Stitching: a piece kept by an earlier page joins the session in progress when it comes before it.
+const late = createMeter({ ability: h => info[h] || null });
+late.newBattle(wave(9, 4, [monster("Imp", 500)]), 50000);
+late.update(upd(9, { 0: { cHP: 1000, atkCounter: 1 } }, { 0: { cHP: 0, dmgCounter: 1 } }), 51000);
+const piece = { battleId: 9, startAt: 40000, lastAt: 48000, firstWave: 1, lastWave: 3, waves: 3, combatMs: 8000, monsterHpLost: 900, monsterHealed: 0, unassigned: 0, check: { waves: 2, balanced: 2, gap: 0 }, zone: "/actions/combat/x", tier: 1,
+    players: { Mage: { name: "Mage", dealt: 900, hits: 3, misses: 0, casts: 3, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: { "/abilities/water_strike": { dmg: 900, hits: 3, misses: 0, casts: 3, heal: 0 } }, takenBy: {}, healBy: {} } } };
+assert.equal(late.stitch({ ...piece, battleId: 10 }), false, "another battle");
+assert.equal(late.stitch({ ...piece, lastWave: 4 }), false, "overlapping waves");
+assert.equal(late.stitch(JSON.parse(JSON.stringify(piece))), true);
+const st = late.snapshot();
+assert.equal(st.firstWave, 1); assert.equal(st.waves, 4); assert.equal(st.startAt, 40000); assert.equal(st.zone, "/actions/combat/x"); assert.equal(st.stitched, 1);
+assert.equal(st.players.Mage.dealt, 1400); assert.equal(st.players.Mage.abilities["/abilities/water_strike"].dmg, 1400, "the prepared Water Strike again on the late page");
 console.log("meter: rules ok");
 
 const capture = arg("--capture");
@@ -107,6 +119,25 @@ if (capture) {
     const m2 = createMeter({ ability: h => (gd[h] ? meterAbilityInfo(gd[h]) : null) }), out = [];
     for (const [t, m] of JSON.parse(fs.readFileSync(capture, "utf8")).rows) { if (m.type === "new_battle") { const c = m2.newBattle(m, t); if (c) out.push(c); } else if (m.type === "battle_updated") m2.update(m, t); }
     out.push(m2.close());
+    // A reload in the middle of wave 30 of the first whole run: the old page's piece, then a new page from wave 31.
+    const rows = JSON.parse(fs.readFileSync(capture, "utf8")).rows;
+    const first = out.find(x => x.firstWave === 1 && x.lastWave >= 65);
+    if (first) {
+        const before = createMeter({ ability: h => (gd[h] ? meterAbilityInfo(gd[h]) : null) }), after = createMeter({ ability: h => (gd[h] ? meterAbilityInfo(gd[h]) : null) });
+        let phase = 0, kept = null, inWave30 = 0;
+        for (const [t, m] of rows) {
+            if (m.battleId !== first.battleId) continue;
+            if (phase === 0) { if (m.type === "new_battle") before.newBattle(m, t); else if (m.type === "battle_updated") { before.update(m, t); if (before.snapshot().lastWave === 30 && ++inWave30 === 20) { kept = JSON.parse(JSON.stringify(before.snapshot())); phase = 1; } } }
+            else if (phase === 1) { if (m.type === "new_battle" && m.wave === 31) { after.newBattle(m, t); assert.equal(after.stitch(kept), true); phase = 2; } }
+            else if (m.type === "new_battle") after.newBattle(m, t); else if (m.type === "battle_updated") after.update(m, t);
+        }
+        const whole = after.close(undefined, true);
+        assert.equal(whole.firstWave, 1); assert.equal(whole.waves, whole.lastWave, "no wave missing after the stitch");
+        const lost = first.monsterHpLost - whole.monsterHpLost;
+        assert.ok(lost > 0 && lost < first.monsterHpLost * 0.02, "only the rest of wave 30 is missing");
+        assert.equal(whole.check.balanced, whole.check.waves - 0, "every wave counted as finished still checks out");
+        console.log(`capture stitch: waves 1-${whole.lastWave} whole after a reload in wave 30, ${lost} HP of wave 30 not seen, ${whole.check.balanced}/${whole.check.waves} waves checked`);
+    }
     for (const x of out) {
         const credited = Object.values(x.players).reduce((a, p) => a + p.dealt, 0);
         assert.equal(credited, x.monsterHpLost, `battle ${x.battleId}: every HP lost credited`);

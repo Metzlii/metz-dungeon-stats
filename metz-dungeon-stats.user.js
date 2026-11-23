@@ -396,7 +396,36 @@
             return s;
         }
         function restore(s) { cur = s && typeof s === "object" ? s : null; battle = null; }
-        return { newBattle, update, close, snapshot, restore, get session() { return cur; }, get inWave() { return !!battle; } };
+        // A piece of the same battle kept by an earlier page (a reload mid-run): joined to the session in progress, or
+        // taken up as it when none is. Refused when the pieces overlap or belong to another battle.
+        function stitch(saved) {
+            if (!saved || !saved.players) return false;
+            if (!cur) { restore(saved); return true; }
+            if (cur.battleId !== saved.battleId || num(saved.lastWave) >= num(cur.firstWave)) return false;
+            meterAdd(cur, saved);
+            for (const k of ["zone", "tier", "runId"]) if (cur[k] == null && saved[k] != null) cur[k] = saved[k];
+            cur.stitched = (cur.stitched || 0) + (saved.stitched || 0) + 1;
+            return true;
+        }
+        const num = v => Number(v) || 0;
+        return { newBattle, update, close, snapshot, restore, stitch, get session() { return cur; }, get inWave() { return !!battle; } };
+    }
+    // Adds one session's counts into another: a run stitched across a reload, or the all-seen total of a dungeon.
+    function meterAdd(dst, src) {
+        const sum = (a, b, keys) => { for (const k of keys) a[k] = (Number(a[k]) || 0) + (Number(b[k]) || 0); };
+        dst.players = dst.players || {};
+        sum(dst, src, ["waves", "combatMs", "monsterHpLost", "monsterHealed", "unassigned"]);
+        dst.check = dst.check || { waves: 0, balanced: 0, gap: 0 }; sum(dst.check, src.check || {}, ["waves", "balanced", "gap"]);
+        const lo = (a, b) => (a == null ? b : b == null ? a : Math.min(a, b)), hi = (a, b) => (a == null ? b : b == null ? a : Math.max(a, b));
+        dst.startAt = lo(dst.startAt, src.startAt); dst.lastAt = hi(dst.lastAt, src.lastAt); dst.endAt = hi(dst.endAt, src.endAt);
+        dst.firstWave = lo(dst.firstWave, src.firstWave); dst.lastWave = hi(dst.lastWave, src.lastWave);
+        for (const [name, p] of Object.entries(src.players || {})) {
+            const q = dst.players[name] || (dst.players[name] = { name, id: p.id || null, dealt: 0, hits: 0, misses: 0, casts: 0, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: {}, takenBy: {}, healBy: {} });
+            sum(q, p, ["dealt", "hits", "misses", "casts", "taken", "healed", "healDone", "deaths"]);
+            for (const [k, a] of Object.entries(p.abilities || {})) sum(q.abilities[k] || (q.abilities[k] = {}), a, ["dmg", "hits", "misses", "casts", "heal"]);
+            for (const o of ["takenBy", "healBy"]) for (const [k, v] of Object.entries(p[o] || {})) q[o][k] = (q[o][k] || 0) + (Number(v) || 0);
+        }
+        return dst;
     }
     // Ability facts the meter needs, from the game's abilityDetailMap: heals, drains, damage over time.
     function meterAbilityInfo(detail) {
@@ -406,11 +435,30 @@
     // </meter>
 
     state.meter = createMeter({ ability: h => (ref.abilities && ref.abilities[h] && ref.abilities[h].meter) || null });
-    // A session is one battle id: a dungeon run, or a stretch on a planet. It is saved as one "damage" event when it
-    // ends: the next battle id, the run's end (a few seconds later, so the last wave's final hits are in), or ten
-    // minutes with no battle message. Every 30 s the session in progress is kept in meta, so a reload carries on.
-    const METER_GAP_MS = 10 * 60e3, METER_SETTLE_MS = 5000;
+    // A session is one battle id: a dungeon run, or a stretch on a planet, however long. It ends with the next battle
+    // id or the run's end (a few seconds later, so the last wave's final hits are in). The session in progress is kept
+    // in meta at every wave and every 5 s, and a reload stitches it back together (operator, 2026-11-23). Saved as a
+    // "damage" event only when it is whole: a planet stretch always; a dungeon run only when seen from wave 1 to its
+    // end with no wave missing. Anything less goes into the dungeon's all-seen total (meta "damagePartial", by zone and
+    // tier), so its abilities still count in the averages.
+    const METER_SETTLE_MS = 5000, METER_STALE_MS = 10 * 60e3;
     let meterLast = null, meterCheckpointAt = 0;
+    function meterWhole(s) {
+        if (!s || !ref.dungeons[s.zone]) return true;
+        return num(s.firstWave) === 1 && num(s.waves) === num(s.lastWave) && ["clear", "fail", "stop"].includes(s.result);
+    }
+    function meterPartial(s) {
+        const key = `${s.zone || "?"}|${s.tier ?? ""}`, all = isObj(state.meta.damagePartial) ? state.meta.damagePartial : {};
+        const agg = all[key] || { zone: s.zone || null, tier: s.tier ?? null, players: {}, pieces: 0 };
+        meterAdd(agg, s); agg.pieces = (agg.pieces || 0) + 1;
+        all[key] = agg; state.meta.damagePartial = all;
+        if (state.record) state.record.queue("meta", { key: "damagePartial", value: all });
+    }
+    function meterCheckpoint() {
+        const s = state.meter.session; if (!s || !state.record || !state.ready || s.lastAt === meterCheckpointAt) return;
+        const snap = state.meter.snapshot(); delete snap.live; delete snap.seq;
+        state.record.queue("meta", { key: "meterOpen", value: snap }); meterCheckpointAt = s.lastAt;
+    }
     function meterTag(s) {
         if (!s) return;
         if (!s.zone) { const a = currentAction(); if (a) { s.zone = a.actionHrid; s.tier = num(a.difficultyTier); } }
@@ -420,32 +468,31 @@
         if (!s || !s.waves || !s.players || !Object.keys(s.players).length) return null;
         delete s.live; delete s.seq; delete s.closeAfter;
         if (result) s.result = result;
-        const ev = emit("damage", s, "battle", s.endAt || s.lastAt);
-        state.damage.push(ev);
         if (state.record) state.record.queue("meta", { key: "meterOpen", value: null });
         meterCheckpointAt = 0;
+        if (!meterWhole(s)) { meterPartial(s); return null; }
+        const ev = emit("damage", s, "battle", s.endAt || s.lastAt);
+        state.damage.push(ev);
         return ev;
     }
-    function meterGap(at) { const s = state.meter.session; if (s && at - s.lastAt > METER_GAP_MS) meterSave(state.meter.close(undefined, false), s.result || "gap"); }
     function meterOnNewBattle(m) {
         if (meterLast && meterLast.battleId === m.battleId && meterLast.wave === num(m.wave)) return; // duplicate roster send
         meterLast = { battleId: m.battleId, wave: num(m.wave) };
-        const at = serverNow(); meterGap(at);
-        const closed = state.meter.newBattle(m, at);
+        const closed = state.meter.newBattle(m, serverNow());
         if (closed) meterSave(closed);
-        meterTag(state.meter.session);
+        meterTag(state.meter.session); meterCheckpoint();
     }
-    function meterOnUpdate(m) { const at = serverNow(); meterGap(at); state.meter.update(m, at); }
+    function meterOnUpdate(m) { state.meter.update(m, serverNow()); }
     // A run that ended: its session closes once the last messages are in. A clear counts its last wave in the check.
     function meterRunEnded(run, result) {
-        const s = state.meter.session; if (!s || !run || s.runId !== run.id) return;
+        const s = state.meter.session; if (!s || !run || (s.runId !== run.id && s.battleId !== run.battleId)) return;
         s.result = result; s.closeAfter = serverNow() + METER_SETTLE_MS;
     }
     setInterval(() => {
         try {
             const s = state.meter.session; if (!s) return;
             if (s.closeAfter && serverNow() >= s.closeAfter) { const r = s.result; meterSave(state.meter.close(undefined, r === "clear"), r); panel.touch(); return; }
-            if (state.record && state.ready && s.lastAt !== meterCheckpointAt && Date.now() % 30000 < 1000) { const snap = state.meter.snapshot(); delete snap.live; delete snap.seq; state.record.queue("meta", { key: "meterOpen", value: snap }); meterCheckpointAt = s.lastAt; }
+            if (Date.now() % 5000 < 1000) meterCheckpoint();
         } catch (error) { warn("damage meter timer", error); }
     }, 1000);
 
@@ -1302,7 +1349,21 @@
             if (retaxed.length) { for (const e of retaxed) state.record.queue("events", e); for (const e of state.events) fixImportedTax(e); info(`imported sales re-taxed by the game's rule: ${retaxed.length}`); }
             state.consumeTotals = new Map(); for (const c of await state.record.getAll("events", "kind", IDBKeyRange.only("consume"))) addConsume(c);
             state.damage = await state.record.getAll("events", "kind", IDBKeyRange.only("damage"));
-            { const mo = state.meta.meterOpen; if (isObj(mo) && isObj(mo.players)) { if (!state.meter.session && serverNow() - num(mo.lastAt) <= METER_GAP_MS) state.meter.restore(mo); else if (!state.damage.some(e => e.battleId === mo.battleId && e.startAt === mo.startAt)) meterSave(mo, mo.result || "interrupted"); } }
+            {
+                const mo = state.meta.meterOpen;
+                if (isObj(mo) && isObj(mo.players) && !state.meter.stitch(mo)) meterSave(mo);
+                // 0.2.0 before this change saved a reloaded run's first piece as "interrupted", and kept runs it saw
+                // only part of. Stitch the first back into its run; move the rest into the all-seen total.
+                const keep = [];
+                for (const e of state.damage.slice().sort((a, b) => num(b.lastAt) - num(a.lastAt))) {
+                    const piece = { ...e }; delete piece.id; delete piece.kind; delete piece.at; delete piece.clock; delete piece.src; delete piece.v;
+                    if (e.result === "interrupted" && state.meter.session && state.meter.stitch(piece)) state.record.remove("events", e.id);
+                    else if (!meterWhole(e)) { meterPartial(piece); state.record.remove("events", e.id); }
+                    else keep.push(e);
+                }
+                state.damage = keep;
+                if (state.meter.session) meterCheckpoint();
+            }
             state.counts.events = await state.record.count("events");
             state.run = null;
             const openRuns = (await state.record.getAll("runs")).filter(r => r.result === "open");
@@ -1989,8 +2050,13 @@
 #mds-root tbody#mds-dmg-sessions tr{cursor:pointer}
 #mds-root tbody#mds-dmg-sessions tr.sel td{background:rgba(69,200,216,.12)}
 /* The battle panel stacks its parts in a column of fixed height: the meter takes only its own height, at most a third of the screen, and scrolls inside beyond that, so the battle cards keep their room. */
-#mds-bm{box-sizing:border-box;width:100%;flex:0 0 auto;align-self:stretch;max-height:34vh;overflow:auto;margin:6px 0 0;padding:6px 10px;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #3f424d;font:400 13px/1.45 "Inter",system-ui,sans-serif;text-align:left}
+#mds-bm{box-sizing:border-box;width:100%;flex:0 0 auto;align-self:stretch;max-height:34vh;display:flex;flex-direction:column;overflow:hidden;margin:6px 0 0;padding:6px 10px;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #3f424d;font:400 13px/1.45 "Inter",system-ui,sans-serif;text-align:left}
 #mds-bm *{box-sizing:border-box}
+/* The table scrolls inside the block's fixed cap; the head line stays put. */
+#mds-bm .mds-bm-body{flex:1 1 auto;min-height:0;overflow:auto}
+/* The game centres the unit cards in the battle area (BattlePanel_combatUnitGrid: align-content center, read in its
+   stylesheet 2026-11-23). Sat on the line above the consumables instead, the spare height goes above the cards. */
+[class*="BattlePanel_combatUnitGrid__"]{align-content:end !important}
 #mds-bm .mds-bm-head{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-bottom:4px}
 #mds-bm .mds-bm-head strong{font-weight:500}
 #mds-bm .mds-bm-head small{color:#c5d4de;font-size:12px}
@@ -2191,7 +2257,7 @@
  <div id="mds-dmg-meter"></div>
  <h4 data-noun="sessions">Sessions</h4>
  <div class="mds-wrap"><table><thead><tr><th>End</th><th>Where</th><th>Result</th><th>Combat time</th><th>Waves</th><th>Party damage</th><th>Party DPS</th><th>Your damage</th><th>Your share</th><th title="Finished waves in which every monster was seen going to 0 HP and every point was credited to a player">Checked</th></tr></thead><tbody id="mds-dmg-sessions"></tbody></table></div>
- <p class="mds-note">Click a player for their abilities: damage, uses, hits, misses and healing, then where their damage taken came from and what healed them. Damage is the HP the monsters lost, read from the game's battle messages: overkill is not counted. DPS runs over time in combat (each wave from its start to its last hit). A dungeon run is one session; on a planet a session runs until the battle changes or ten minutes pass with no battle. Parry and thorns are counter-attacks; damage over time is put on the ability that applied it. Healing done counts heal abilities and Life Drain; everything else a player regained (regeneration, food, passives) shows under Healed. Click a session below to show it.</p>
+ <p class="mds-note">Click a player for their abilities: damage, uses, hits, misses and healing, then where their damage taken came from and what healed them. Damage is the HP the monsters lost, read from the game's battle messages: overkill is not counted. DPS runs over time in combat (each wave from its start to its last hit). A dungeon run is one session, kept only when seen from wave 1 to its end; a reload mid-run is stitched back in. On a planet a session runs until the battle changes, across reloads. Runs seen only in part count in <b>All seen</b> for that dungeon and tier, not as sessions. Parry and thorns are counter-attacks; damage over time is put on the ability that applied it. Healing done counts heal abilities and Life Drain; everything else a player regained (regeneration, food, passives) shows under Healed. Click a session below to show it.</p>
 </div>
 <div class="mds-pane" data-pane="keys" hidden>
  <h4>Key crafting</h4>
@@ -2968,11 +3034,11 @@
         const sessSecs = s => Math.max(1, num(s && s.combatMs) / 1000);
         const placeName = z => (z ? (ref.dungeons[z] ? zoneLabel(z, null).replace(/^T?\d*/, "") : esc(shortAction(z).replace(/_/g, " ").replace(/^./, c => c.toUpperCase()))) : "?");
         const meterWhere = s => (s.zone ? (ref.dungeons[s.zone] ? zoneLabel(s.zone, s.tier) : placeName(s.zone) + (s.tier ? ` T${s.tier}` : "")) : "?");
-        const meterResult = s => (s.live ? (s.result ? `${s.result}, closing` : "in progress") : s.result === "gap" ? "battle went quiet" : s.result || "ended");
+        const meterResult = s => (s.aggregate ? `${s.runs} whole run${s.runs === 1 ? "" : "s"}${s.pieces ? ` + ${s.pieces} part${s.pieces === 1 ? "" : "s"}` : ""}` : s.live ? (s.result ? `${s.result}, closing` : serverNow() - num(s.lastAt) > METER_STALE_MS ? "paused" : "in progress") + (s.stitched ? " (stitched)" : "") : (s.result || "ended") + (s.stitched ? " (stitched)" : ""));
         function meterHead(s) {
             if (!s) return "";
             const total = sessTotal(s), secs = sessSecs(s), c = s.check || {};
-            return `${meterWhere(s)} · ${esc(meterResult(s))} · ${s.firstWave === s.lastWave ? `wave ${s.lastWave}` : `waves ${s.firstWave}–${s.lastWave}`} · ${fmtDur(num(s.combatMs))} in combat · party ${fmtN(total)} (${Math.round(total / secs).toLocaleString()} DPS) · checked ${c.balanced || 0} of ${c.waves || 0} finished waves${c.gap ? ` · <span class="mds-flag" title="HP left standing or not credited, over the waves that did not check out">${fmtN(c.gap)} HP unexplained</span>` : ""}${s.unassigned ? ` · ${fmtN(s.unassigned)} not credited` : ""}`;
+            return `${meterWhere(s)} · ${esc(meterResult(s))} · ${s.aggregate ? `${num(s.waves).toLocaleString()} waves` : s.firstWave === s.lastWave ? `wave ${s.lastWave}` : `waves ${s.firstWave}–${s.lastWave}`} · ${fmtDur(num(s.combatMs))} in combat · party ${fmtN(total)} (${Math.round(total / secs).toLocaleString()} DPS) · checked ${c.balanced || 0} of ${c.waves || 0} finished waves${c.gap ? ` · <span class="mds-flag" title="HP left standing or not credited, over the waves that did not check out">${fmtN(c.gap)} HP unexplained</span>` : ""}${s.unassigned ? ` · ${fmtN(s.unassigned)} not credited` : ""}`;
         }
         function meterView(s, expanded) {
             if (!s || !s.players || !Object.keys(s.players).length) return `<p class="mds-note">No battle seen yet: the meter starts with the next wave.</p>`;
@@ -2997,19 +3063,29 @@
         let dmgPick = "live", dmgHtml = "", dmgSessKey = "";
         const dmgExpanded = new Set();
         function damageSessions() { return state.damage.slice().sort((a, b) => num(b.endAt || b.at) - num(a.endAt || a.at)); }
+        // All seen, per place and tier: every whole session plus the pieces kept out of the session list.
+        function damageTotals() {
+            const by = new Map();
+            const slot = (zone, tier) => { const k = `${zone || "?"}|${tier ?? ""}`; let t = by.get(k); if (!t) by.set(k, t = { id: `all:${k}`, aggregate: true, zone: zone || null, tier: tier ?? null, players: {}, runs: 0, pieces: 0 }); return t; };
+            for (const e of state.damage) { const t = slot(e.zone, e.tier); meterAdd(t, e); t.runs++; }
+            for (const a of Object.values(isObj(state.meta.damagePartial) ? state.meta.damagePartial : {})) { const t = slot(a.zone, a.tier); meterAdd(t, a); t.pieces += a.pieces || 1; }
+            return [...by.values()].sort((a, b) => num(b.lastAt) - num(a.lastAt));
+        }
         function renderDamage() {
             if (!els["mds-dmg-meter"]) return;
-            const live = state.meter.snapshot(), list = damageSessions();
-            const label = s => `${s.live ? "Now" : fmtTime(num(s.endAt || s.at))} · ${meterWhere(s).replace(/<[^>]+>/g, "")} · ${meterResult(s)}`;
-            const opts = [...(live ? [["live", label(live)]] : []), ...list.slice(0, 300).map(e => [e.id, label(e)])];
-            if (dmgPick === "live" && !live && list.length) dmgPick = list[0].id;
-            if (dmgPick !== "live" && !list.some(e => e.id === dmgPick)) dmgPick = live ? "live" : list.length ? list[0].id : "live";
+            const live = state.meter.snapshot(), list = damageSessions(), totals = damageTotals();
+            const label = s => `${s.aggregate ? "All seen" : s.live ? "Now" : fmtTime(num(s.endAt || s.at))} · ${meterWhere(s).replace(/<[^>]+>/g, "")} · ${meterResult(s)}`;
+            const opts = [...(live ? [["live", label(live)]] : []), ...totals.map(t => [t.id, label(t)]), ...list.slice(0, 300).map(e => [e.id, label(e)])];
+            const known = id => list.some(e => e.id === id) || totals.some(t => t.id === id);
+            if (dmgPick === "live" && !live) dmgPick = list.length ? list[0].id : totals.length ? totals[0].id : "live";
+            if (dmgPick !== "live" && !known(dmgPick)) dmgPick = live ? "live" : list.length ? list[0].id : totals.length ? totals[0].id : "live";
             const sel = els["mds-dmg-pick"], optKey = opts.map(o => o.join("|")).join("\n") + "\n" + dmgPick;
             if (sel.dataset.key !== optKey) { sel.innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join("") || `<option value="live">No sessions yet</option>`; sel.value = dmgPick; sel.dataset.key = optKey; }
-            const s = dmgPick === "live" ? live : list.find(e => e.id === dmgPick) || null;
+            const s = dmgPick === "live" ? live : list.find(e => e.id === dmgPick) || totals.find(t => t.id === dmgPick) || null;
             const html = meterView(s, dmgExpanded), head = s ? meterHead(s) : "No battle seen yet. Fight a wave with the script running and the meter fills in.";
             if (html + head !== dmgHtml) { els["mds-dmg-meter"].innerHTML = html; els["mds-dmg-head"].innerHTML = head; dmgHtml = html + head; }
             const me = state.characterName, sessKey = `${list.length}|${list.length ? list[0].id : ""}|${dmgPick}|${me}`;
+            if (s && s.aggregate) els["mds-dmg-head"].title = "Every whole session here plus the runs seen only in part (joined mid-run, or a wave missed): useful for averages, not kept as sessions of their own"; else els["mds-dmg-head"].title = "";
             if (sessKey !== dmgSessKey) {
                 dmgSessKey = sessKey;
                 els["mds-dmg-sessions"].innerHTML = list.map(e => {
@@ -3039,8 +3115,8 @@
             if (info) { if (info.nextElementSibling !== bmEl) info.after(bmEl); } else if (bmEl.parentNode !== host) host.appendChild(bmEl);
             let s = state.meter.snapshot();
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
-            const html = `<div class="mds-bm-head"><strong>Damage</strong><small>${s ? meterHead(s) : "starts with the next wave"}</small><span class="mds-bm-btns"><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? meterView(s, bmExpanded) : ""}`;
-            if (html !== bmHtml || !bmEl.firstChild) { bmEl.innerHTML = html; bmHtml = html; }
+            const html = `<div class="mds-bm-head"><strong>Damage</strong><small>${s ? meterHead(s) : "starts with the next wave"}</small><span class="mds-bm-btns"><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded)}</div>` : ""}`;
+            if (html !== bmHtml || !bmEl.firstChild) { const prev = bmEl.querySelector(".mds-bm-body"), top = prev ? prev.scrollTop : 0; bmEl.innerHTML = html; bmHtml = html; const body = bmEl.querySelector(".mds-bm-body"); if (body) body.scrollTop = top; }
         }
         function renderRuns(force) {
             if (!els["mds-runs"]) return;
