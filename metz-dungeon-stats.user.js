@@ -701,8 +701,17 @@
     // that run and did not match the Damage tab). Skipping the rest of the run instead left the meter blank until the
     // next run, and on a planet, whose battle id never changes, for good.
     let meterNoStreakBattle = null;
+    // Our own recent foods, kept across a reload (operator, 2026-11-23: an unnamed "Food" row): a cake eaten just
+    // before a reload still heals after it, and the page that reloads never saw it eaten.
+    const METER_FOODS_KEY = "mds-meterfoods-v1";
+    function meterFoodKeep(f) { try { const l = JSON.parse(localStorage.getItem(METER_FOODS_KEY) || "[]"); l.push(f); localStorage.setItem(METER_FOODS_KEY, JSON.stringify(l.slice(-6))); } catch (_e) { /* fine */ } }
+    function meterFoodRestore() {
+        if (state.meterFoodsRestored) return; state.meterFoodsRestored = true;
+        try { const now = serverNow(); for (const f of JSON.parse(localStorage.getItem(METER_FOODS_KEY) || "[]")) if (f && f.who === state.characterName && f.item && now <= Number(f.at) + (Number(f.overMs) || 0) + 60e3) state.meter.food(f.who, f.item, Number(f.at), f.overMs); } catch (_e) { /* fine */ }
+    }
     function meterOnNewBattle(m) {
         if (!meterEnabled()) return;
+        meterFoodRestore();
         if (meterLast && meterLast.battleId === m.battleId && meterLast.wave === num(m.wave)) return; // duplicate roster send
         meterLast = { battleId: m.battleId, wave: num(m.wave) };
         const closed = state.meter.newBattle(m, serverNow());
@@ -1675,7 +1684,7 @@
                 case "chat_message_received": onChat(m, false); break;
                 case "battle_consumable_ability_updated": { // retained as a frame; the consume event comes from the inventory row
                     const c = m.consumable, it = c && ref.items[c.itemHrid];
-                    if (it && it.hp > 0 && state.characterName && meterEnabled()) state.meter.food(state.characterName, c.itemHrid, serverNow(), it.hpOverMs);
+                    if (it && it.hp > 0 && state.characterName && meterEnabled()) { state.meter.food(state.characterName, c.itemHrid, serverNow(), it.hpOverMs); meterFoodKeep({ who: state.characterName, item: c.itemHrid, at: serverNow(), overMs: it.hpOverMs }); }
                     break;
                 }
                 default: break;
