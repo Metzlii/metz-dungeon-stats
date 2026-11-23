@@ -457,5 +457,9 @@
  "Drag a tab onto another to move it.": "Перетащите вкладку на другую, чтобы переместить её.",
  "Other (unidentified)": "Прочее (не определено)",
  "Life steal": "Похищение жизни",
- "Mana leech": "Похищение маны"
+ "Mana leech": "Похищение маны",
+ "XP/hr": "Опыт/ч",
+ "Experience per hour, all skills; hover a value for each skill": "Опыт в час по всем навыкам; наведите на значение, чтобы увидеть каждый навык",
+ "XP per hour since {time} ago": "Опыт в час за последние {time}",
+ "next level in {time}": "следующий уровень через {time}"
 }

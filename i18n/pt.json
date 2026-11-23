@@ -457,5 +457,9 @@
  "Drag a tab onto another to move it.": "Arraste uma aba sobre outra para movê-la.",
  "Other (unidentified)": "Outros (não identificado)",
  "Life steal": "Roubo de vida",
- "Mana leech": "Absorção de mana"
+ "Mana leech": "Absorção de mana",
+ "XP/hr": "XP/h",
+ "Experience per hour, all skills; hover a value for each skill": "Experiência por hora, todas as habilidades; passe o cursor sobre um valor para ver cada habilidade",
+ "XP per hour since {time} ago": "XP por hora desde há {time}",
+ "next level in {time}": "próximo nível em {time}"
 }

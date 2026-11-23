@@ -457,5 +457,9 @@
  "Drag a tab onto another to move it.": "将标签拖到另一个标签上即可移动。",
  "Other (unidentified)": "其他（未识别）",
  "Life steal": "生命偷取",
- "Mana leech": "法力吸取"
+ "Mana leech": "法力吸取",
+ "XP/hr": "经验/小时",
+ "Experience per hour, all skills; hover a value for each skill": "所有技能的每小时经验；将鼠标悬停在数值上查看各技能",
+ "XP per hour since {time} ago": "{time} 前至今的每小时经验",
+ "next level in {time}": "{time} 后升级"
 }

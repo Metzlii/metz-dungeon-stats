@@ -457,5 +457,9 @@
  "Drag a tab onto another to move it.": "탭을 다른 탭 위로 끌어 옮길 수 있습니다.",
  "Other (unidentified)": "기타 (미확인)",
  "Life steal": "생명력 흡수",
- "Mana leech": "마나 흡수"
+ "Mana leech": "마나 흡수",
+ "XP/hr": "XP/시간",
+ "Experience per hour, all skills; hover a value for each skill": "모든 스킬의 시간당 경험치. 값에 마우스를 올리면 스킬별로 표시",
+ "XP per hour since {time} ago": "{time} 전부터의 시간당 XP",
+ "next level in {time}": "다음 레벨까지 {time}"
 }

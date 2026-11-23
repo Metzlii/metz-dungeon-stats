@@ -457,5 +457,9 @@
  "Drag a tab onto another to move it.": "タブを別のタブにドラッグすると移動できます。",
  "Other (unidentified)": "その他（未特定）",
  "Life steal": "ライフスティール",
- "Mana leech": "マナリーチ"
+ "Mana leech": "マナリーチ",
+ "XP/hr": "XP/時",
+ "Experience per hour, all skills; hover a value for each skill": "全スキル合計の 1 時間あたり経験値。値にカーソルを合わせるとスキル別に表示",
+ "XP per hour since {time} ago": "{time} 前からの 1 時間あたり XP",
+ "next level in {time}": "次のレベルまで {time}"
 }
