@@ -1988,16 +1988,18 @@
 #mds-root .mds-dmg-head{margin:0 0 10px;color:#c5d4de;font-size:.929em}
 #mds-root tbody#mds-dmg-sessions tr{cursor:pointer}
 #mds-root tbody#mds-dmg-sessions tr.sel td{background:rgba(69,200,216,.12)}
-#mds-bm{box-sizing:border-box;width:100%;flex:0 0 100%;align-self:stretch;margin:10px 0 0;padding:8px 10px;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #3f424d;font:400 13px/1.45 "Inter",system-ui,sans-serif;text-align:left}
+/* The battle panel stacks its parts in a column of fixed height: the meter takes only its own height, at most a third of the screen, and scrolls inside beyond that, so the battle cards keep their room. */
+#mds-bm{box-sizing:border-box;width:100%;flex:0 0 auto;align-self:stretch;max-height:34vh;overflow:auto;margin:6px 0 0;padding:6px 10px;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #3f424d;font:400 13px/1.45 "Inter",system-ui,sans-serif;text-align:left}
 #mds-bm *{box-sizing:border-box}
-#mds-bm .mds-bm-head{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-bottom:6px}
+#mds-bm .mds-bm-head{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-bottom:4px}
 #mds-bm .mds-bm-head strong{font-weight:500}
 #mds-bm .mds-bm-head small{color:#c5d4de;font-size:12px}
 #mds-bm .mds-bm-btns{margin-left:auto;display:flex;gap:6px}
 #mds-bm .mds-bm-btns button{background:transparent;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:6px;padding:2px 8px;font:500 12px/1.3 "Inter",system-ui,sans-serif;cursor:pointer}
 #mds-bm .mds-bm-btns button:hover{background:rgba(230,239,243,.07)}
-#mds-bm th{font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:4px 6px;border-bottom:1px solid rgba(230,239,243,.16);text-align:left}
-#mds-bm td{padding:4px 6px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top}
+#mds-bm th{position:sticky;top:0;z-index:1;background:#101b24;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:2px 6px;border-bottom:1px solid rgba(230,239,243,.16);text-align:left}
+#mds-bm td{padding:2px 6px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top;line-height:1.35}
+#mds-bm .mds-msub th{position:static;background:none}
 #mds-bm .mds-icon{width:1.2em;height:1.2em;vertical-align:-.25em;margin-right:4px}
 #mds-bm p{margin:4px 0;color:#c5d4de}
 #mds-tab{white-space:nowrap}
