@@ -263,6 +263,7 @@
         sockets: 0, viaData: 0,
         meter: null,                    // the damage meter's live session (0.2.0)
         damage: [],                     // saved damage sessions: the record's "damage" events
+        streak: null,                   // the battle tab's running total: every session since the party went into combat, this page only
     };
 
     // <meter>
@@ -475,12 +476,26 @@
         state.damage.push(ev);
         return ev;
     }
+    // The battle tab's running total (operator, 2026-11-23): every session closed on this page since the party went
+    // into combat, whole runs and parts alike. It ends when the combat action leaves the queue, the place or tier
+    // changes, or ten minutes pass with no battle; a reload starts it again.
+    function streakAdd(s) {
+        if (!s || !s.players || !Object.keys(s.players).length) return;
+        const k = `${s.zone || "?"}|${s.tier ?? ""}`;
+        if (!state.streak || state.streak.key !== k) state.streak = { key: k, streak: true, zone: s.zone || null, tier: s.tier ?? null, players: {}, runs: 0 };
+        meterAdd(state.streak, s); state.streak.runs++;
+    }
+    function streakCheck() {
+        const st = state.streak, s = state.meter.session; if (!st) return;
+        if (!currentAction() || (s && s.zone && `${s.zone}|${s.tier ?? ""}` !== st.key) || serverNow() - num(st.lastAt) > METER_STALE_MS && !(s && serverNow() - num(s.lastAt) < METER_STALE_MS)) state.streak = null;
+    }
+    function meterClosed(s, result) { if (result) s.result = result; streakAdd(s); return meterSave(s); }
     function meterOnNewBattle(m) {
         if (meterLast && meterLast.battleId === m.battleId && meterLast.wave === num(m.wave)) return; // duplicate roster send
         meterLast = { battleId: m.battleId, wave: num(m.wave) };
         const closed = state.meter.newBattle(m, serverNow());
-        if (closed) meterSave(closed);
-        meterTag(state.meter.session); meterCheckpoint();
+        if (closed) meterClosed(closed);
+        meterTag(state.meter.session); streakCheck(); meterCheckpoint();
     }
     function meterOnUpdate(m) { state.meter.update(m, serverNow()); }
     // A run that ended: its session closes once the last messages are in. A clear counts its last wave in the check.
@@ -491,7 +506,7 @@
     setInterval(() => {
         try {
             const s = state.meter.session; if (!s) return;
-            if (s.closeAfter && serverNow() >= s.closeAfter) { const r = s.result; meterSave(state.meter.close(undefined, r === "clear"), r); panel.touch(); return; }
+            if (s.closeAfter && serverNow() >= s.closeAfter) { const r = s.result; meterClosed(state.meter.close(undefined, r === "clear"), r); panel.touch(); return; }
             if (Date.now() % 5000 < 1000) meterCheckpoint();
         } catch (error) { warn("damage meter timer", error); }
     }, 1000);
@@ -1392,7 +1407,7 @@
                 case "new_battle": onNewBattle(m); meterOnNewBattle(m); break;
                 case "battle_updated": meterOnUpdate(m); break;
                 case "action_completed": onActionCompleted(m); break;
-                case "actions_updated": applyActions(m.endCharacterActions); if (state.run && !currentDungeonZone()) closeRun("stop", { reason: "dungeon action removed from the queue" }, "actions_updated"); break;
+                case "actions_updated": applyActions(m.endCharacterActions); streakCheck(); if (state.run && !currentDungeonZone()) closeRun("stop", { reason: "dungeon action removed from the queue" }, "actions_updated"); break;
                 case "items_updated": { const diffs = applyRows(m.endCharacterItems, false); if (diffs.length) onInventoryDiffs(diffs, "items_updated", m); break; }
                 case "skills_updated": { const d = applySkills(m.endCharacterSkills); if (Object.keys(d).length) { xpTick(d, serverNow()); noteSkillingXp(d, null, serverNow()); } break; }
                 case "loot_opened": onLootOpened(m); break;
@@ -3034,11 +3049,11 @@
         const sessSecs = s => Math.max(1, num(s && s.combatMs) / 1000);
         const placeName = z => (z ? (ref.dungeons[z] ? zoneLabel(z, null).replace(/^T?\d*/, "") : esc(shortAction(z).replace(/_/g, " ").replace(/^./, c => c.toUpperCase()))) : "?");
         const meterWhere = s => (s.zone ? (ref.dungeons[s.zone] ? zoneLabel(s.zone, s.tier) : placeName(s.zone) + (s.tier ? ` T${s.tier}` : "")) : "?");
-        const meterResult = s => (s.aggregate ? `${s.runs} whole run${s.runs === 1 ? "" : "s"}${s.pieces ? ` + ${s.pieces} part${s.pieces === 1 ? "" : "s"}` : ""}` : s.live ? (s.result ? `${s.result}, closing` : serverNow() - num(s.lastAt) > METER_STALE_MS ? "paused" : "in progress") + (s.stitched ? " (stitched)" : "") : (s.result || "ended") + (s.stitched ? " (stitched)" : ""));
+        const meterResult = s => (s.streak ? `${s.runs} finished${s.live ? " + this one" : ""} since ${fmtClock(num(s.startAt))}` : s.aggregate ? `${s.runs} whole run${s.runs === 1 ? "" : "s"}${s.pieces ? ` + ${s.pieces} part${s.pieces === 1 ? "" : "s"}` : ""}` : s.live ? (s.result ? `${s.result}, closing` : serverNow() - num(s.lastAt) > METER_STALE_MS ? "paused" : "in progress") + (s.stitched ? " (stitched)" : "") : (s.result || "ended") + (s.stitched ? " (stitched)" : ""));
         function meterHead(s) {
             if (!s) return "";
             const total = sessTotal(s), secs = sessSecs(s), c = s.check || {};
-            return `${meterWhere(s)} · ${esc(meterResult(s))} · ${s.aggregate ? `${num(s.waves).toLocaleString()} waves` : s.firstWave === s.lastWave ? `wave ${s.lastWave}` : `waves ${s.firstWave}–${s.lastWave}`} · ${fmtDur(num(s.combatMs))} in combat · party ${fmtN(total)} (${Math.round(total / secs).toLocaleString()} DPS) · checked ${c.balanced || 0} of ${c.waves || 0} finished waves${c.gap ? ` · <span class="mds-flag" title="HP left standing or not credited, over the waves that did not check out">${fmtN(c.gap)} HP unexplained</span>` : ""}${s.unassigned ? ` · ${fmtN(s.unassigned)} not credited` : ""}`;
+            return `${meterWhere(s)} · ${esc(meterResult(s))} · ${s.aggregate || s.streak ? `${num(s.waves).toLocaleString()} waves` : s.firstWave === s.lastWave ? `wave ${s.lastWave}` : `waves ${s.firstWave}–${s.lastWave}`} · ${fmtDur(num(s.combatMs))} in combat · party ${fmtN(total)} (${Math.round(total / secs).toLocaleString()} DPS) · checked ${c.balanced || 0} of ${c.waves || 0} finished waves${c.gap ? ` · <span class="mds-flag" title="HP left standing or not credited, over the waves that did not check out">${fmtN(c.gap)} HP unexplained</span>` : ""}${s.unassigned ? ` · ${fmtN(s.unassigned)} not credited` : ""}`;
         }
         function meterView(s, expanded) {
             if (!s || !s.players || !Object.keys(s.players).length) return `<p class="mds-note">No battle seen yet: the meter starts with the next wave.</p>`;
@@ -3096,8 +3111,10 @@
         }
         // The block under the game's battle cards: the session in progress, or the last one for ten minutes after it.
         // It sits after the panel's info area (BattlePanel_battlePanel > battleArea, infoArea in the game's bundle).
-        const BM_KEY = PANEL_KEY + "-battlemeter";
+        const BM_KEY = PANEL_KEY + "-battlemeter", BM_MODE_KEY = PANEL_KEY + "-battlemeter-mode";
         const bmOn = () => { try { return localStorage.getItem(BM_KEY) !== "off"; } catch (_e) { return true; } };
+        // All runs (the default): the running total since the party went into combat. This run: the session alone.
+        const bmPerRun = () => { try { return localStorage.getItem(BM_MODE_KEY) === "run"; } catch (_e) { return false; } };
         const bmExpanded = new Set();
         let bmEl = null, bmHtml = "";
         function renderBattleMeter() {
@@ -3107,6 +3124,7 @@
                 bmEl = document.createElement("div"); bmEl.id = "mds-bm";
                 bmEl.addEventListener("click", e => {
                     const b = e.target.closest("button[data-bm]");
+                    if (b && b.dataset.bm === "mode") { try { localStorage.setItem(BM_MODE_KEY, bmPerRun() ? "all" : "run"); } catch (_e) { /* fine */ } bmHtml = ""; renderBattleMeter(); return; }
                     if (b) { if (b.dataset.bm === "hide") { try { localStorage.setItem(BM_KEY, "off"); } catch (_e) { /* fine */ } const cb = root && root.querySelector("#mds-bm-on"); if (cb) cb.checked = false; renderBattleMeter(); } else { tab = "damage"; dmgPick = "live"; setTab("damage", true); setOpen(true); } return; }
                     const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (bmExpanded.has(n)) bmExpanded.delete(n); else bmExpanded.add(n); bmHtml = ""; renderBattleMeter();
                 });
@@ -3114,8 +3132,10 @@
             const info = [...host.children].find(c => /BattlePanel_infoArea__/.test(c.className || ""));
             if (info) { if (info.nextElementSibling !== bmEl) info.after(bmEl); } else if (bmEl.parentNode !== host) host.appendChild(bmEl);
             let s = state.meter.snapshot();
+            const st = state.streak;
+            if (!bmPerRun() && st) { const t = meterAdd(JSON.parse(JSON.stringify(st)), s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key ? s : {}); t.live = !!(s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key); s = t; }
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
-            const html = `<div class="mds-bm-head"><strong>Damage</strong><small>${s ? meterHead(s) : "starts with the next wave"}</small><span class="mds-bm-btns"><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded)}</div>` : ""}`;
+            const html = `<div class="mds-bm-head"><strong>Damage</strong><small>${s ? meterHead(s) : "starts with the next wave"}</small><span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded)}</div>` : ""}`;
             if (html !== bmHtml || !bmEl.firstChild) { const prev = bmEl.querySelector(".mds-bm-body"), top = prev ? prev.scrollTop : 0; bmEl.innerHTML = html; bmHtml = html; const body = bmEl.querySelector(".mds-bm-body"); if (body) body.scrollTop = top; }
         }
         function renderRuns(force) {
