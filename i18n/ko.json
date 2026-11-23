@@ -426,5 +426,8 @@
  "Drag to resize the players' and monsters' sides; double-click for an even split": "드래그하여 플레이어 쪽과 몬스터 쪽의 너비를 조절합니다. 더블 클릭하면 균등하게 나눕니다",
  "Lasts about {time} at {run} a run": "1회 {run} 기준 약 {time} 지속",
  "No run time for this dungeon yet": "이 던전의 클리어 시간 기록이 아직 없습니다",
- "Party entry keys": "파티 입장 열쇠"
+ "Party entry keys": "파티 입장 열쇠",
+ "{name} out of keys in {time}": "{name} 열쇠 소진까지 {time}",
+ "{name} is out of keys": "{name} 열쇠 없음",
+ "{name} has {n} keys": "{name} 열쇠 {n}개"
 }

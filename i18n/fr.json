@@ -426,5 +426,8 @@
  "Drag to resize the players' and monsters' sides; double-click for an even split": "Faites glisser pour redimensionner le côté des joueurs et celui des monstres ; double-cliquez pour un partage égal",
  "Lasts about {time} at {run} a run": "Dure environ {time} à {run} par run",
  "No run time for this dungeon yet": "Pas encore de temps de run pour ce donjon",
- "Party entry keys": "Clés d'entrée du groupe"
+ "Party entry keys": "Clés d'entrée du groupe",
+ "{name} out of keys in {time}": "{name} à court de clés dans {time}",
+ "{name} is out of keys": "{name} n'a plus de clés",
+ "{name} has {n} keys": "{name} a {n} clés"
 }

@@ -426,5 +426,8 @@
  "Drag to resize the players' and monsters' sides; double-click for an even split": "ドラッグでプレイヤー側とモンスター側の幅を変更。ダブルクリックで均等に戻します",
  "Lasts about {time} at {run} a run": "1周 {run} で約 {time} もちます",
  "No run time for this dungeon yet": "このダンジョンの周回時間はまだありません",
- "Party entry keys": "パーティの入場キー"
+ "Party entry keys": "パーティの入場キー",
+ "{name} out of keys in {time}": "{name} のキーはあと {time}",
+ "{name} is out of keys": "{name} のキーがありません",
+ "{name} has {n} keys": "{name} のキー {n} 個"
 }

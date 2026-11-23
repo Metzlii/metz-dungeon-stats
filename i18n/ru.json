@@ -426,5 +426,8 @@
  "Drag to resize the players' and monsters' sides; double-click for an even split": "Перетащите, чтобы изменить ширину сторон игроков и монстров; двойной щелчок — поровну",
  "Lasts about {time} at {run} a run": "Хватит примерно на {time} при {run} за забег",
  "No run time for this dungeon yet": "Для этого подземелья ещё нет времени забега",
- "Party entry keys": "Ключи входа группы"
+ "Party entry keys": "Ключи входа группы",
+ "{name} out of keys in {time}": "{name}: ключи кончатся через {time}",
+ "{name} is out of keys": "{name}: ключи кончились",
+ "{name} has {n} keys": "{name}: ключей {n}"
 }

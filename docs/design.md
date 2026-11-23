@@ -246,3 +246,5 @@ Version numbers: one bump per release, never per iteration.
 ### Keys in the battle window (0.2.8)
 
 In a dungeon, the entry key and chest key(s) sit left of Consumables in the bottom frame: the count held and, under it, how long they last at the dungeon average run time (this tier when it has runs; fails counted in), in the form Toolasha uses for consumables. A chest key goes at the chests per run the record has seen (1 until then). Hovering the entry key lists the party counts from the newest party key-count message.
+
+The damage meter header also names the party member who runs out of entry keys first and when (fewest keys in the newest key-count message, at the average run time): red at 3 runs or fewer, amber under 12 hours. With the meter hidden or switched off the same line sits beside the Keys label.

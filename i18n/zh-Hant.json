@@ -426,5 +426,8 @@
  "Drag to resize the players' and monsters' sides; double-click for an even split": "拖曳以調整玩家一側和怪物一側的寬度；雙擊恢復平分",
  "Lasts about {time} at {run} a run": "按每次 {run} 計算，約可用 {time}",
  "No run time for this dungeon yet": "此地下城尚無通關時間記錄",
- "Party entry keys": "隊伍入場鑰匙"
+ "Party entry keys": "隊伍入場鑰匙",
+ "{name} out of keys in {time}": "{name} 的鑰匙將在 {time} 後用完",
+ "{name} is out of keys": "{name} 的鑰匙已用完",
+ "{name} has {n} keys": "{name} 有 {n} 把鑰匙"
 }
