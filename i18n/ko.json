@@ -429,5 +429,9 @@
  "Party entry keys": "파티 입장 열쇠",
  "{name} out of keys in {time}": "{name} 열쇠 소진까지 {time}",
  "{name} is out of keys": "{name} 열쇠 없음",
- "{name} has {n} keys": "{name} 열쇠 {n}개"
+ "{name} has {n} keys": "{name} 열쇠 {n}개",
+ "Key times: amber under": "열쇠 시간: 주황색 기준",
+ "red under": "빨간색 기준",
+ "hours": "시간 미만",
+ "Colours of the key times and the out-of-keys line in the battle window.": "전투 창의 열쇠 시간과 열쇠 소진 표시의 색."
 }

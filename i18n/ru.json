@@ -429,5 +429,9 @@
  "Party entry keys": "Ключи входа группы",
  "{name} out of keys in {time}": "{name}: ключи кончатся через {time}",
  "{name} is out of keys": "{name}: ключи кончились",
- "{name} has {n} keys": "{name}: ключей {n}"
+ "{name} has {n} keys": "{name}: ключей {n}",
+ "Key times: amber under": "Время ключей: жёлтый меньше",
+ "red under": "красный меньше",
+ "hours": "часов",
+ "Colours of the key times and the out-of-keys line in the battle window.": "Цвета времени ключей и строки об окончании ключей в окне боя."
 }

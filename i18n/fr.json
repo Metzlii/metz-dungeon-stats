@@ -429,5 +429,9 @@
  "Party entry keys": "Clés d'entrée du groupe",
  "{name} out of keys in {time}": "{name} à court de clés dans {time}",
  "{name} is out of keys": "{name} n'a plus de clés",
- "{name} has {n} keys": "{name} a {n} clés"
+ "{name} has {n} keys": "{name} a {n} clés",
+ "Key times: amber under": "Durées des clés : orange sous",
+ "red under": "rouge sous",
+ "hours": "heures",
+ "Colours of the key times and the out-of-keys line in the battle window.": "Couleurs des durées des clés et de la ligne de fin de clés dans la fenêtre de combat."
 }

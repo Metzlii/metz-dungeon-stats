@@ -429,5 +429,9 @@
  "Party entry keys": "隊伍入場鑰匙",
  "{name} out of keys in {time}": "{name} 的鑰匙將在 {time} 後用完",
  "{name} is out of keys": "{name} 的鑰匙已用完",
- "{name} has {n} keys": "{name} 有 {n} 把鑰匙"
+ "{name} has {n} keys": "{name} 有 {n} 把鑰匙",
+ "Key times: amber under": "鑰匙時間：低於此值顯示黃色",
+ "red under": "低於此值顯示紅色",
+ "hours": "小時",
+ "Colours of the key times and the out-of-keys line in the battle window.": "戰鬥視窗中鑰匙時間和鑰匙用完提示的顏色。"
 }
