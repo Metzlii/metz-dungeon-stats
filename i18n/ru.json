@@ -423,5 +423,8 @@
  "{n} of it in buy orders": "из них {n} в заявках на покупку",
  "Opens the game's buy window with {n} filled in": "Открывает окно покупки игры с количеством {n}",
  "Click a column header to sort by it; click again to reverse, a third time for the table's own order.": "Щёлкните заголовок столбца, чтобы отсортировать по нему; ещё раз — в обратном порядке, третий раз — исходный порядок таблицы.",
- "Drag to resize the players' and monsters' sides; double-click for an even split": "Перетащите, чтобы изменить ширину сторон игроков и монстров; двойной щелчок — поровну"
+ "Drag to resize the players' and monsters' sides; double-click for an even split": "Перетащите, чтобы изменить ширину сторон игроков и монстров; двойной щелчок — поровну",
+ "Lasts about {time} at {run} a run": "Хватит примерно на {time} при {run} за забег",
+ "No run time for this dungeon yet": "Для этого подземелья ещё нет времени забега",
+ "Party entry keys": "Ключи входа группы"
 }

@@ -423,5 +423,8 @@
  "{n} of it in buy orders": "{n} de ello en órdenes de compra",
  "Opens the game's buy window with {n} filled in": "Abre la ventana de compra del juego con {n} ya puesto",
  "Click a column header to sort by it; click again to reverse, a third time for the table's own order.": "Haz clic en un encabezado de columna para ordenar por ella; otro clic invierte el orden y un tercero vuelve al orden propio de la tabla.",
- "Drag to resize the players' and monsters' sides; double-click for an even split": "Arrastra para cambiar el ancho del lado de los jugadores y el de los monstruos; doble clic para repartirlo a partes iguales"
+ "Drag to resize the players' and monsters' sides; double-click for an even split": "Arrastra para cambiar el ancho del lado de los jugadores y el de los monstruos; doble clic para repartirlo a partes iguales",
+ "Lasts about {time} at {run} a run": "Dura unas {time} a {run} por partida",
+ "No run time for this dungeon yet": "Aún no hay tiempo de partida para esta mazmorra",
+ "Party entry keys": "Llaves de entrada del grupo"
 }

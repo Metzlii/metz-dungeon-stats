@@ -423,5 +423,8 @@
  "{n} of it in buy orders": "dont {n} en ordres d'achat",
  "Opens the game's buy window with {n} filled in": "Ouvre la fenêtre d'achat du jeu avec {n} déjà saisi",
  "Click a column header to sort by it; click again to reverse, a third time for the table's own order.": "Cliquez sur un en-tête de colonne pour trier ; cliquez à nouveau pour inverser, une troisième fois pour revenir à l'ordre d'origine du tableau.",
- "Drag to resize the players' and monsters' sides; double-click for an even split": "Faites glisser pour redimensionner le côté des joueurs et celui des monstres ; double-cliquez pour un partage égal"
+ "Drag to resize the players' and monsters' sides; double-click for an even split": "Faites glisser pour redimensionner le côté des joueurs et celui des monstres ; double-cliquez pour un partage égal",
+ "Lasts about {time} at {run} a run": "Dure environ {time} à {run} par run",
+ "No run time for this dungeon yet": "Pas encore de temps de run pour ce donjon",
+ "Party entry keys": "Clés d'entrée du groupe"
 }
