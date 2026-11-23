@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Metz Dungeon Stats
 // @namespace    metzlii
-// @version      0.1.2
+// @version      0.1.3
 // @description  One permanent record of your XP, your dungeon runs and the dungeon cash flow: keys crafted, consumables used, chests opened, loot sold. Tracked from the game's own messages, nothing estimated.
 // @author       Metzli
 // @license      MIT
@@ -34,7 +34,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.1.2";
+    const VERSION = "0.1.3";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -906,7 +906,6 @@
             } finally { db.close(); }
         } catch (error) { TOOLASHA.status = "unavailable: " + String(error && error.message || error); return null; }
     }
-    function taxRateNow() { for (let i = state.timeline.length - 1; i >= 0; i--) { const e = state.timeline[i]; if (e.kind === "sell" && !e.imported && num(e.gross) > 0 && e.tax != null) return e.tax / e.gross; } return 0.04; }
     let toolashaRunning = null;
     // Merge listings into the record's market history by listing id (a listing with more filled wins). Returns how many
     // were new or changed.
@@ -1069,11 +1068,11 @@
             // 2. Fills inside the record window that the script never recorded.
             const seen = new Map();
             for (const e of state.timeline) if ((e.kind === "buy" || e.kind === "sell") && e.listingId != null) seen.set(e.listingId, (seen.get(e.listingId) || 0) + num(e.qty));
-            const rate = taxRateNow(); let imported = 0;
+            let imported = 0;
             for (const l of listings) {
                 if (l.at < start) continue;
                 const missing = l.qty - (seen.get(l.id) || 0); if (missing <= 0) continue;
-                if (l.isSell) { const gross = missing * l.price; const tax = Math.round(gross * rate); emit("sell", { listingId: l.id, item: l.item, level: l.level, qty: missing, unitPrice: l.price, gross, tax, net: gross - tax, taxBasis: "rate", imported: true, instant: false }, "toolasha", l.at); }
+                if (l.isSell) { const gross = missing * l.price; const tax = Math.round(gross * marketTaxRate(l.item, l.at)); emit("sell", { listingId: l.id, item: l.item, level: l.level, qty: missing, unitPrice: l.price, gross, tax, net: gross - tax, taxBasis: "rate", imported: true, instant: false }, "toolasha", l.at); }
                 else { emit("buy", { listingId: l.id, item: l.item, level: l.level, qty: missing, unitPrice: l.price, coins: missing * l.price, imported: true, instant: false }, "toolasha", l.at); if (l.level === 0) { ledgerAdd(l.item, missing, l.price); if (ref.keyItems.has(l.item)) keyLotAdd(l.item, missing, l.price, "bought", null); } }
                 imported++;
             }
@@ -1407,6 +1406,17 @@
     // events plus what the bag holds now, so test/money.test.mjs can run it over an exported record.
     // ---------------------------------------------------------------------------------------------------------------
     // <money>
+    // The game's market tax, by item and by date (operator, 2026-11-22, from the patch notes): a Bag of 10 Cowbells has
+    // always been taxed 18%; everything else 2% until the patch of 2026-08-13, 5% until the patch of 2026-09-27, 4%
+    // since. A sale this record watched carries the tax the game reported and never needs this. It is for a sale with
+    // no reported tax (one imported from Toolasha's history) and for valuations with no sale behind them.
+    const TAX_STEPS = [[Date.UTC(2026, 7, 13), 0.02], [Date.UTC(2026, 8, 27), 0.05]];
+    const TAX_COWBELL_BAG = "/items/bag_of_10_cowbells";
+    function marketTaxRate(item, at) {
+        if (item === TAX_COWBELL_BAG) return 0.18;
+        if (at != null) for (const [until, rate] of TAX_STEPS) if (at < until) return rate;
+        return 0.04;
+    }
     function deriveMoney(events, X) {
         const n = v => (typeof v === "number" && isFinite(v)) ? v : 0;
         const ws = X.recordStart || 0;
@@ -1426,9 +1436,20 @@
                 default: break;
             }
         }
-        // Tax: the rate the game charged on the latest recorded sale, 4% until one has been recorded.
-        const taxed = sells.filter(s => n(s.gross) > 0 && s.tax != null && !s.imported).sort((a, b) => b.at - a.at);
-        const tax = { rate: taxed.length ? n(taxed[0].tax) / n(taxed[0].gross) : 0.04, measured: taxed.length };
+        // Tax. The standard rate in force now is the game's rule (marketTaxRate), unless this record's own latest sale
+        // says otherwise: the newest watched sale of an ordinary item priced at 10,000 or more a piece (small sales of
+        // cheap items measured 4.1% to 4.7% against the 4% rule, so they are no measure; a Cowbell Bag has its own
+        // rate). Per item, taxOn() adds the Cowbell Bag's 18%.
+        const taxed = sells.filter(s => n(s.gross) > 0 && s.tax != null && !s.imported && s.item !== TAX_COWBELL_BAG && n(s.unitPrice) >= 10000).sort((a, b) => b.at - a.at);
+        const tax = { rate: taxed.length ? Math.round(n(taxed[0].tax) / n(taxed[0].gross) * 1000) / 1000 : marketTaxRate(null, null), measured: taxed.length };
+        const taxOn = item => (item === TAX_COWBELL_BAG ? marketTaxRate(item, null) : tax.rate);
+        // A sale imported from Toolasha's history has no tax from the game: its tax is the rule for that item on that
+        // day, whatever figure the import stored (imports before 0.1.3 copied the rate of the latest sale, which could
+        // be a Cowbell Bag's 18% or a rounded-up small sale).
+        const saleTax = s => {
+            if (s.imported && s.taxBasis === "rate") { const t = Math.round(n(s.gross) * marketTaxRate(s.item, s.at)); return { tax: t, net: n(s.gross) - t }; }
+            return { tax: n(s.tax), net: s.net != null ? n(s.net) : n(s.gross) * (1 - marketTaxRate(s.item, s.at)) };
+        };
         // Cash out: buys and craft coins.
         const buyBy = {}; let buyTotal = 0;
         for (const b of buys) { const r = bump(buyBy, b.item, () => ({ qty: 0, coins: 0 })); r.qty += n(b.qty); r.coins += n(b.coins); buyTotal += n(b.coins); }
@@ -1510,9 +1531,9 @@
         const sellBy = {}; const sold = { loot: { qty: 0, gross: 0, tax: 0, net: 0 }, other: { qty: 0, gross: 0, tax: 0, net: 0 } };
         for (const s of sells) {
             const r = bump(sellBy, s.item, () => ({ qty: 0, gross: 0, tax: 0, net: 0, loot: lootItems.has(s.item) }));
-            const net = s.net != null ? n(s.net) : n(s.gross) * (1 - tax.rate);
-            r.qty += n(s.qty); r.gross += n(s.gross); r.tax += n(s.tax); r.net += net;
-            const b = r.loot ? sold.loot : sold.other; b.qty += n(s.qty); b.gross += n(s.gross); b.tax += n(s.tax); b.net += net;
+            const { tax: taxPaid, net } = saleTax(s);
+            r.qty += n(s.qty); r.gross += n(s.gross); r.tax += taxPaid; r.net += net;
+            const b = r.loot ? sold.loot : sold.other; b.qty += n(s.qty); b.gross += n(s.gross); b.tax += taxPaid; b.net += net;
         }
         // Used in runs, at ledger cost: entry keys (live clears carry the lot cost; offline and older clears fall back
         // to the craft average, then the ask), chest keys at the opening, consumables (live uses plus offline deltas).
@@ -1576,7 +1597,7 @@
             const remaining = Math.max(0, missing - accepted.qty);
             const drift = bidNow != null && bidAtOpen ? Math.abs(bidNow - bidAtOpen) / bidAtOpen : null;
             const review = remaining > 0 && (bidNow == null || (drift != null && drift > (X.reviewPct != null ? X.reviewPct : 0.5)));
-            const netBid = bidNow != null ? bidNow * (1 - tax.rate) : null;
+            const netBid = bidNow != null ? bidNow * (1 - taxOn(item)) : null;
             rows.push({
                 item, gained: gainedQty, fromChests: gi.qty, redeemed: gi.redeemed || 0, opened, sold: s.qty, soldNet: s.net, held: heldRecord, bag: held, holdover, listed: onMarket, kept, missing,
                 bidNow, bidAtOpen, heldValue: bidNow != null ? (held + onMarket - holdover) * bidNow : null, holdoverValue: bidNow != null ? holdover * bidNow : null, valueAtOpen: gi.value, unpricedAtOpen: gi.qty - gi.priced,
@@ -2237,7 +2258,7 @@
                 case "stop": return `${esc(shortAction(ev.zone))} stopped at wave ${ev.waves ?? ev.waveReached ?? "?"} · ${esc(ev.reason || "")}`;
                 case "craft": return `${esc(shortAction(ev.action))} ×${(ev.outputs || []).reduce((s, o) => s + o.qty, 0)} · ${(ev.inputs || []).map(i => `${i.qty} ${it(i.item)}${i.unitCost != null ? ` @${fmtCoins(i.unitCost)}` : " @?"}`).join(", ")}${ev.coins ? ` + ${fmtCoins(ev.coins)} coins` : ""} · ${ev.unitCost != null ? `${fmtCoins(ev.unitCost)} per key` : "cost unknown"}`;
                 case "buy": if (ev.imported) return `imported from Toolasha: ${ev.qty} ${it(ev.item)} @ ${fmtCoins(ev.unitPrice)} = ${fmtCoins(ev.coins)}`; return `${ev.qty}× ${it(ev.item)} ${ev.unitPrice != null ? `@ ${fmtCoins(ev.unitPrice)} = ${fmtCoins(ev.coins)}` : "price unresolved"}${ev.instant ? " · instant" : ""}`;
-                case "sell": if (ev.imported) return `imported from Toolasha: ${ev.qty} ${it(ev.item)} @ ${fmtCoins(ev.unitPrice)} = ${fmtCoins(ev.gross)} gross, tax at ${((ev.tax / ev.gross) * 100).toFixed(1)}% (rate, not measured), net ${fmtCoins(ev.net)}`; return `${ev.qty}× ${it(ev.item)} ${ev.unitPrice != null ? `@ ${fmtCoins(ev.unitPrice)}` : ""} · net ${fmtCoins(ev.net)}${ev.tax != null ? ` (tax ${fmtCoins(ev.tax)})` : ""}${ev.instant ? " · instant" : ""}`;
+                case "sell": if (ev.imported) return `imported from Toolasha: ${ev.qty} ${it(ev.item)} @ ${fmtCoins(ev.unitPrice)} = ${fmtCoins(ev.gross)} gross, tax at ${(marketTaxRate(ev.item, ev.at) * 100).toFixed(0)}% (the game's rate for that item on that day, not measured), net ${fmtCoins(ev.gross - Math.round(ev.gross * marketTaxRate(ev.item, ev.at)))}`; return `${ev.qty}× ${it(ev.item)} ${ev.unitPrice != null ? `@ ${fmtCoins(ev.unitPrice)}` : ""} · net ${fmtCoins(ev.net)}${ev.tax != null ? ` (tax ${fmtCoins(ev.tax)})` : ""}${ev.instant ? " · instant" : ""}`;
                 case "open": return `${ev.count}× ${it(ev.chest)} → ${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}`).join(", ")} · value at bid ${fmtCoins(ev.valueBid)}${ev.coinsGained ? ` + ${fmtCoins(ev.coinsGained)} coins` : ""}${ev.unpriced && ev.unpriced.length ? ` · unpriced: ${ev.unpriced.map(it).join(", ")}` : ""}${(ev.gains || []).some(g => g.counted || isCounted(g.item)) ? ` · counted: ${(ev.gains || []).filter(g => g.counted || isCounted(g.item)).map(g => `${g.qty} ${it(g.item)}`).join(", ")}` : ""}`;
                 case "consume": return `${ev.qty}× ${it(ev.item)}${ev.unitCost != null ? ` @ ${fmtCoins(ev.unitCost)}` : ` (purchase price known for ${ev.covered || 0} of ${ev.qty})`}`;
                 case "redeem": return `${ev.qty}× ${it(ev.token)} → ${ev.itemQty}× ${it(ev.item)}`;
