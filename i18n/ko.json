@@ -422,5 +422,6 @@
  "on order": "주문 중",
  "{n} of it in buy orders": "그중 {n}은 구매 주문 중",
  "Opens the game's buy window with {n} filled in": "게임의 구매 창을 {n}개가 입력된 상태로 엽니다",
- "Click a column header to sort by it; click again to reverse, a third time for the table's own order.": "열 머리글을 클릭하면 그 열로 정렬합니다. 다시 클릭하면 역순, 세 번째 클릭은 표의 원래 순서로 돌아갑니다."
+ "Click a column header to sort by it; click again to reverse, a third time for the table's own order.": "열 머리글을 클릭하면 그 열로 정렬합니다. 다시 클릭하면 역순, 세 번째 클릭은 표의 원래 순서로 돌아갑니다.",
+ "Drag to resize the players' and monsters' sides; double-click for an even split": "드래그하여 플레이어 쪽과 몬스터 쪽의 너비를 조절합니다. 더블 클릭하면 균등하게 나눕니다"
 }

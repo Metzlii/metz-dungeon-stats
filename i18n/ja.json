@@ -422,5 +422,6 @@
  "on order": "注文中",
  "{n} of it in buy orders": "うち {n} は買い注文中",
  "Opens the game's buy window with {n} filled in": "ゲームの購入ウィンドウを {n} 個入力済みで開きます",
- "Click a column header to sort by it; click again to reverse, a third time for the table's own order.": "列見出しをクリックするとその列で並べ替えます。もう一度で逆順、3 回目で表の元の順序に戻ります。"
+ "Click a column header to sort by it; click again to reverse, a third time for the table's own order.": "列見出しをクリックするとその列で並べ替えます。もう一度で逆順、3 回目で表の元の順序に戻ります。",
+ "Drag to resize the players' and monsters' sides; double-click for an even split": "ドラッグでプレイヤー側とモンスター側の幅を変更。ダブルクリックで均等に戻します"
 }
