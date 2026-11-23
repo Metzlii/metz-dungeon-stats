@@ -421,5 +421,6 @@
  "+{n} on order": "+{n} 已下單",
  "on order": "已下單",
  "{n} of it in buy orders": "其中 {n} 在買單中",
- "Opens the game's buy window with {n} filled in": "開啟遊戲的購買視窗並填入 {n}"
+ "Opens the game's buy window with {n} filled in": "開啟遊戲的購買視窗並填入 {n}",
+ "Click a column header to sort by it; click again to reverse, a third time for the table's own order.": "點擊欄位標題依該欄排序；再點一次反轉，第三次恢復表格原本的順序。"
 }

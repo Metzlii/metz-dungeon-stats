@@ -421,5 +421,6 @@
  "+{n} on order": "+{n} en commande",
  "on order": "en commande",
  "{n} of it in buy orders": "dont {n} en ordres d'achat",
- "Opens the game's buy window with {n} filled in": "Ouvre la fenêtre d'achat du jeu avec {n} déjà saisi"
+ "Opens the game's buy window with {n} filled in": "Ouvre la fenêtre d'achat du jeu avec {n} déjà saisi",
+ "Click a column header to sort by it; click again to reverse, a third time for the table's own order.": "Cliquez sur un en-tête de colonne pour trier ; cliquez à nouveau pour inverser, une troisième fois pour revenir à l'ordre d'origine du tableau."
 }
