@@ -3722,7 +3722,7 @@
                 for (const r of used) for (const ch of (r.chests || [])) if (ch.item === c) row.chests += Number(ch.qty) || 0;
             }
             for (const x of items) if (!x.entry) x.perRun = used.length && x.chests > 0 ? x.chests / used.length : 1;
-            const pk = state.partyKeys && (!state.run || state.partyKeys.at >= state.run.startAt - 120e3) ? state.partyKeys.counts : null;
+            const pk = state.partyKeys ? state.partyKeys.counts : null;   // the newest message; a run joined part-way starts later than its key-count message, so no time guard
             const html = `<div class="mds-bk-label">${esc(t("Keys"))}</div><div class="mds-bk-grid">` + items.map(x => {
                 const n = held(x.item), sec = avgMs != null ? n / x.perRun * avgMs / 1000 : NaN;
                 const tip = [itemName(x.item), avgMs != null ? t("Lasts about {time} at {run} a run", { time: runwayText(sec), run: fmtDur(avgMs) }) : t("No run time for this dungeon yet")];
