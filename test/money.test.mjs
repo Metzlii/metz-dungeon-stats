@@ -41,6 +41,8 @@ const M = deriveMoney(timeline, {
     keyOf: () => "/items/pirate_entry_key",
     keyRecipes: { "/actions/alchemy/pirate_entry_key": { inputs: [{ item: "/items/arcane_lumber", qty: 100 }, { item: "/items/redwood_lumber", qty: 100 }, { item: "/items/coin", qty: 300000 }], outputs: [{ item: "/items/pirate_entry_key", qty: 1 }] }, "/actions/alchemy/pirate_chest_key": { inputs: [{ item: "/items/burning_key_fragment", qty: 1 }, { item: "/items/stone_key_fragment", qty: 1 }, { item: "/items/white_key_fragment", qty: 1 }, { item: "/items/dark_key_fragment", qty: 1 }], outputs: [{ item: "/items/pirate_chest_key", qty: 1 }] } },
     consumeTotals, heldKeys: () => [],
+    // The Pirate Token shop, from the game's shopItemDetailMap (2026-11-22): what a token buys, so it can be valued.
+    tokenShop: h => (h === "/items/pirate_token" ? [["corsair_crest", 2000], ["damaged_anchor", 2000], ["kraken_fang", 3000], ["kraken_leather", 2000], ["maelstrom_plating", 2000], ["marksman_brooch", 2000], ["pirate_essence", 1]].map(([i, tokens]) => ({ item: "/items/" + i, tokens, count: 1 })) : []),
 });
 const ms = performance.now() - t0;
 const c = v => v == null ? "?" : (Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(2) + "m" : Math.abs(v) >= 1e3 ? (v / 1e3).toFixed(1) + "k" : String(Math.round(v)));
@@ -49,6 +51,7 @@ console.log(`deriveMoney over ${timeline.length} events in ${ms.toFixed(1)} ms; 
 console.log(`tax ${(M.tax.rate * 100).toFixed(2)}% (${M.tax.measured} taxed sales)`);
 console.log(`SPENT ${c(M.spent.total)} = buys ${c(M.spent.buys)} + craft coins ${c(M.spent.craftCoins)}; used in runs ${c(M.used.total)} (keys ${c(M.used.keyCost)}, consumables ${c(M.used.consumableCost)})`);
 console.log(`LOOT AT OPEN ${c(M.loot.atOpen)} (raw ${c(M.loot.atOpenRaw)}, revalued ${c(M.loot.revalued)}) + coins ${c(M.loot.coins)} from ${M.loot.opened} chests`);
+console.log(`  of it tokens ${c(M.loot.tokens.value)}: ${M.loot.tokens.qty} tokens (${M.loot.tokens.open} at the rate stored when opened, ${M.loot.tokens.near} from the nearest recorded bids, ${M.loot.tokens.now} at today's bid, ${M.loot.tokens.unpriced} unpriced)`);
 console.log(`SOLD loot ${c(M.sold.loot.net)} net (${M.sold.loot.qty} items, tax ${c(M.sold.loot.tax)}); other ${c(M.sold.other.net)} (${M.sold.other.qty})`);
 console.log(`NET ${c(M.net)}; held loot ${c(M.heldLoot)}; no longer held ${c(M.missingLoot)} (${M.reviewRows} rows to review)`);
 console.log("\nKEYS"); for (const [h, k] of Object.entries(M.keys)) console.log(`  ${nm(h)}: held ${k.held} crafted ${k.crafted} bought ${k.bought} dropped ${k.dropped} used ${k.used} (${k.usedExact} exact, ${k.usedFallback} ${k.fallbackBasis || ""}) cost/key ${c(k.costPerKey)} ${k.costBasis} usedCost ${c(k.usedCost)} baseline ${k.baseline}`);

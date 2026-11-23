@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Metz Dungeon Stats
 // @namespace    metzlii
-// @version      0.1.1
+// @version      0.1.2
 // @description  One permanent record of your XP, your dungeon runs and the dungeon cash flow: keys crafted, consumables used, chests opened, loot sold. Tracked from the game's own messages, nothing estimated.
 // @author       Metzli
 // @license      MIT
@@ -34,7 +34,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.1.1";
+    const VERSION = "0.1.2";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -739,11 +739,15 @@
         const key = ref.chestItems[chest] ? ref.chestItems[chest].key : null;
         const at = serverNow();
         const finish = () => {
-            const list = [...gains.values()].map(g => isCounted(g.item) ? { ...g, bid: null, ask: null, counted: true } : { ...g, bid: g.item === "/items/coin" ? 1 : bidOf(g.item), ask: g.item === "/items/coin" ? 1 : askOf(g.item) });
+            // A dungeon token has no market price: it is worth the best bid per token among the shop items it buys,
+            // recorded here so the opening keeps the value it had when the chest was opened.
+            const tokenBid = hrid => { let best = null; for (const e of (ref.tokenShop[hrid] || [])) { const b = bidOf(e.item); if (!(b > 0) || !(e.tokens > 0)) continue; const per = b * (e.count || 1) / e.tokens; if (!best || per > best.tokenBid) best = { tokenBid: per, via: e.item }; } return best; };
+            const list = [...gains.values()].map(g => isCounted(g.item) ? { ...g, bid: null, ask: null, counted: true } : ref.tokenShop[g.item] ? { ...g, bid: null, ask: null, ...(tokenBid(g.item) || {}) } : { ...g, bid: g.item === "/items/coin" ? 1 : bidOf(g.item), ask: g.item === "/items/coin" ? 1 : askOf(g.item) });
             const coinsGained = list.filter(g => g.item === "/items/coin").reduce((s, g) => s + g.qty, 0);
             const valueBid = list.filter(g => g.item !== "/items/coin" && !g.counted).reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0);
-            const unpriced = list.filter(g => g.item !== "/items/coin" && !g.counted && !g.bid).map(g => g.item);
-            emit("open", { chest, count, keyItem: key, zone: ref.chestItems[chest] ? ref.chestItems[chest].zone : null, gains: list, coinsGained, valueBid, unpriced, pricesAt: prices.at || null, keyCost: key ? keyLotTake(key, count) : null }, "loot_opened", at);
+            const valueTokens = list.reduce((s, g) => s + (g.tokenBid ? g.tokenBid * g.qty : 0), 0);
+            const unpriced = list.filter(g => g.item !== "/items/coin" && !g.counted && !g.bid && !g.tokenBid).map(g => g.item);
+            emit("open", { chest, count, keyItem: key, zone: ref.chestItems[chest] ? ref.chestItems[chest].zone : null, gains: list, coinsGained, valueBid, valueTokens, unpriced, pricesAt: prices.at || null, keyCost: key ? keyLotTake(key, count) : null }, "loot_opened", at);
             for (const g of list) if (ref.keyItems.has(g.item)) keyLotAdd(g.item, g.qty, 0, "dropped", null);
         };
         fetchPrices(false).then(finish, finish);
@@ -1440,6 +1444,21 @@
         // value). A box no dungeon chest drops (a task reward and the crates inside it) goes to "other boxes", out of
         // the loot and the net.
         const other = { opened: 0, value: 0, coins: 0, kinds: {} }; const otherIds = new Set();
+        // Tokens (operator, 2026-11-22): a token is worth the best bid per token among the shop items it buys, at the
+        // opening, the same plain bid the rest of the loot is valued at. An opening recorded since 0.1.2 carries that
+        // rate ("open"). An older one takes each shop item's bid from the opening nearest in time that recorded one
+        // ("near": every shop item is also a chest drop), or today's bid when the record never saw the item ("now").
+        const bidHist = {};
+        for (const o of opens) for (const g of (o.gains || [])) if (n(g.bid) > 0 && g.item !== "/items/coin") (bidHist[g.item] = bidHist[g.item] || []).push([n(o.at), n(g.bid)]);
+        for (const h of Object.values(bidHist)) h.sort((a, b) => a[0] - b[0]);
+        const bidNear = (item, at) => { const h = bidHist[item]; if (!h || !h.length) return null; let lo = 0, hi = h.length - 1; while (lo < hi) { const mid = (lo + hi) >> 1; if (h[mid][0] < at) lo = mid + 1; else hi = mid; } const a = h[lo], b = lo > 0 ? h[lo - 1] : null; return b && Math.abs(b[0] - at) <= Math.abs(a[0] - at) ? b[1] : a[1]; };
+        const tokenAt = (g, at) => {
+            if (n(g.tokenBid) > 0) return { rate: n(g.tokenBid), basis: "open" };
+            let best = null;
+            for (const e of (X.tokenShop ? X.tokenShop(g.item) : [])) { let bid = bidNear(e.item, at), basis = "near"; if (!(bid > 0)) { bid = X.bidOf(e.item); basis = "now"; } if (!(bid > 0) || !(n(e.tokens) > 0)) continue; const per = bid * (n(e.count) || 1) / n(e.tokens); if (!best || per > best.rate) best = { rate: per, basis }; }
+            return best;
+        };
+        const tokenLoot = { qty: 0, value: 0, open: 0, near: 0, now: 0, unpriced: 0 }, tokenRates = {};
         for (const o of opens) {
             const cnt = n(o.count) || 1;
             const derived = (X.isDungeonChest ? X.isDungeonChest(o.chest) : X.isChest(o.chest)) || (X.isDungeonLoot ? X.isDungeonLoot(o.chest) : false);
@@ -1458,6 +1477,12 @@
                 const gi = bump(gained, g.item, () => ({ qty: 0, value: 0, priced: 0, chests: {} }));
                 gi.qty += n(g.qty); gi.chests[o.chest] = (gi.chests[o.chest] || 0) + n(g.qty);
                 if (n(g.bid) > 0) { gi.value += g.bid * n(g.qty); gi.priced += n(g.qty); v += g.bid * n(g.qty); }
+                else if (X.isToken(g.item)) {
+                    const t = tokenAt(g, n(o.at)); tokenLoot.qty += n(g.qty);
+                    if (!t) { tokenLoot.unpriced += n(g.qty); continue; }
+                    const worth = t.rate * n(g.qty); v += worth; cb.tokenValue = (cb.tokenValue || 0) + worth;
+                    tokenLoot.value += worth; tokenLoot[t.basis] += n(g.qty); (tokenRates[o.id] = tokenRates[o.id] || {})[g.item] = t.rate;
+                }
             }
             cb.value += v;
         }
@@ -1466,7 +1491,7 @@
         let revalued = 0;
         for (const [chest, cb] of Object.entries(chestBy)) { const gi = gained[chest]; if (!gi) continue; const avgBid = gi.priced ? gi.value / gi.priced : 0; const opened = Math.min(cb.opened, gi.qty); gi.opened = cb.opened; revalued += avgBid * opened; }
         const chestValue = Object.values(chestBy).reduce((s, c) => s + c.value, 0), chestCoins = Object.values(chestBy).reduce((s, c) => s + c.coins, 0);
-        const loot = { atOpen: chestValue - revalued, atOpenRaw: chestValue, revalued, coins: chestCoins, opened: Object.values(chestBy).filter(c => c.dungeon).reduce((s, c) => s + c.opened, 0), nestedOpened: Object.values(chestBy).filter(c => !c.dungeon).reduce((s, c) => s + c.opened, 0), other, otherIds };
+        const loot = { atOpen: chestValue - revalued, atOpenRaw: chestValue, revalued, coins: chestCoins, opened: Object.values(chestBy).filter(c => c.dungeon).reduce((s, c) => s + c.opened, 0), nestedOpened: Object.values(chestBy).filter(c => !c.dungeon).reduce((s, c) => s + c.opened, 0), other, otherIds, tokens: tokenLoot, tokenRates };
         // Redemptions: tokens out, items in. What came in is dungeon loot too.
         const tokens = {};
         for (const [item, gi] of Object.entries(gained)) if (X.isToken(item)) { const t = bump(tokens, item, () => ({ gained: 0, redeemed: 0, received: {} })); t.gained += gi.qty; }
@@ -2301,7 +2326,7 @@
             { const XS = xpSummary(serverNow()); if (XS && XS.total > 0) cards.push(card("XP", fmtCoins(XS.total), [XS.perHour != null ? `${fmtCoins(XS.perHour)} / h` : "", XS.today ? `Today ${fmtCoins(XS.today.total)}` : "", `Active ${fmtHm(XS.activeMs)}`])); }
             cards.push(
                 card("Spent", fmtCoins(M.spent.total), [`Entry keys ${fmtCoins(M.spent.entryKeys)}`, `Chest keys ${fmtCoins(M.spent.chestKeys)}`, `Consumables ${fmtCoins(M.spent.consumables)}`, `Bought ${fmtCoins(M.spent.buys + M.spent.craftCoins)} as stock, charged as used`]),
-                card("Loot at open", fmtCoins(M.loot.atOpen), [`${M.loot.opened} Dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid`, M.loot.nestedOpened ? `${M.loot.nestedOpened} Chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : "", `+ ${fmtCoins(M.loot.coins)} Coins`]),
+                card("Loot at open", fmtCoins(M.loot.atOpen), [`${M.loot.opened} Dungeon chest${M.loot.opened === 1 ? "" : "s"} opened, at bid`, M.loot.nestedOpened ? `${M.loot.nestedOpened} Chest${M.loot.nestedOpened === 1 ? "" : "s"} from inside them` : "", M.loot.tokens.value ? `${fmtCoins(M.loot.tokens.value)} of it Tokens, at the best shop bid per token${M.loot.tokens.now ? ` (${fmtQ(M.loot.tokens.now)} at today's bid)` : ""}` : "", `+ ${fmtCoins(M.loot.coins)} Coins`]),
                 card("Sold", fmtCoins(M.sold.loot.net), [`${M.sold.loot.qty} Items`, `${fmtCoins(M.sold.loot.tax)} Tax (${(M.tax.rate * 100).toFixed(1)}%${assumed})`, M.sold.other.net ? `Other sales ${fmtCoins(M.sold.other.net)} not counted` : ""]),
                 card("Net", fmtCoins(M.net), [`Sold ${fmtCoins(M.sold.loot.net)}`, `+ Chest coins ${fmtCoins(M.loot.coins)}`, `− Spent ${fmtCoins(M.spent.total)}`, `Held loot ${fmtCoins(M.heldLoot)} at bid`, M.holdoverLoot ? `Holdover ${fmtCoins(M.holdoverLoot)} not counted` : "", `No longer held ${fmtCoins(M.missingLoot)}`, M.reviewRows ? `${M.reviewRows} To review` : ""]),
             );
@@ -2589,12 +2614,13 @@
         function renderChests() {
             const M = getMoney();
             const otherCard = M.loot.other.opened ? [card("Other boxes (not dungeon loot)", M.loot.other.opened, `${Object.entries(M.loot.other.kinds).map(([h, q]) => `${q} ${it(h)}`).join(" · ")} · value at bid ${fmtCoins(M.loot.other.value)}${M.loot.other.coins ? ` · coins ${fmtCoins(M.loot.other.coins)}` : ""} · kept out of the loot and the net`)] : [];
-            const cards = otherCard.concat(Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(icon(h) + chestName(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`)));
+            const cards = otherCard.concat(Object.entries(M.chests).sort((a, b) => b[1].opened - a[1].opened).map(([h, c]) => card(icon(h) + chestName(h), c.opened, `value at bid ${fmtCoins(c.value)}${c.tokenValue ? ` (tokens ${fmtCoins(c.tokenValue)})` : ""}${c.coins ? ` · coins ${fmtCoins(c.coins)}` : ""}${c.keyItem ? ` · keys ${fmtCoins(c.keyCost)}` : ""}${Object.keys(c.counted).length ? ` · ${Object.entries(c.counted).map(([i, q]) => `${q} ${it(i)}`).join(", ")} counted` : ""}`)));
             const bag = Object.keys(ref.chestItems).map(h => [h, held(h, 0)]).filter(([, q]) => q > 0);
             els["mds-chestcards"].innerHTML = sortCards("chestcards", [...cards, ...(bag.length ? [card("In the bag now", bag.reduce((a, [, q]) => a + q, 0), bag.map(([h, q]) => `${q} ${it(h)}`).join(" · "))] : [])]).join("");
+            const tokenRate = (ev, g) => (M.loot.tokenRates[ev.id] && M.loot.tokenRates[ev.id][g.item]) || 0;
             const opens = state.timeline.filter(e => e.kind === "open" && e.at >= (state.meta.recordStart || 0)).slice(-300).reverse();
-            els["mds-chests"].innerHTML = opens.map(ev => `<tr class="${M.loot.otherIds.has(ev.id) ? "cancelled" : ""}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${itIcon(ev.chest)}${M.loot.otherIds.has(ev.id) ? "<small>not dungeon loot</small>" : ""}</td><td>${ev.count}</td><td class="d">${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}${(g.counted || isCounted(g.item)) ? " (counted)" : (g.item !== "/items/coin" && !g.bid) ? " (no bid)" : ""}`).join(", ")}</td><td>${fmtCoins((ev.gains || []).filter(g => g.item !== "/items/coin" && !g.counted && !isCounted(g.item)).reduce((s, g) => s + (g.bid ? g.bid * g.qty : 0), 0))}</td><td>${ev.coinsGained ? fmtCoins(ev.coinsGained) : "–"}</td><td>${ev.keyCost && ev.keyCost.unitCost != null ? `${fmtCoins(ev.keyCost.unitCost * ev.count)}<small> ${esc(ev.keyCost.basis || "")}</small>` : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">No chest opened yet.</td></tr>`;
-            els["mds-chestsnote"].textContent = "Newest first. Value at bid = each item's highest bid when the chest was opened; counted items (cowbells) and unpriced items carry no value. Key cost = the chest key's lot cost; a basis of ask means the key was held before the record began.";
+            els["mds-chests"].innerHTML = opens.map(ev => `<tr class="${M.loot.otherIds.has(ev.id) ? "cancelled" : ""}"><td class="t">${fmtTime(ev.at)}</td><td class="k">${itIcon(ev.chest)}${M.loot.otherIds.has(ev.id) ? "<small>not dungeon loot</small>" : ""}</td><td>${ev.count}</td><td class="d">${(ev.gains || []).map(g => `${g.qty} ${it(g.item)}${(g.counted || isCounted(g.item)) ? " (counted)" : tokenRate(ev, g) ? ` (${fmtCoins(tokenRate(ev, g))} each)` : (g.item !== "/items/coin" && !g.bid) ? " (no bid)" : ""}`).join(", ")}</td><td>${fmtCoins((ev.gains || []).filter(g => g.item !== "/items/coin" && !g.counted && !isCounted(g.item)).reduce((s, g) => s + (g.bid ? g.bid * g.qty : tokenRate(ev, g) * g.qty), 0))}</td><td>${ev.coinsGained ? fmtCoins(ev.coinsGained) : "–"}</td><td>${ev.keyCost && ev.keyCost.unitCost != null ? `${fmtCoins(ev.keyCost.unitCost * ev.count)}<small> ${esc(ev.keyCost.basis || "")}</small>` : "–"}</td></tr>`).join("") || `<tr><td colspan="7" class="t">No chest opened yet.</td></tr>`;
+            els["mds-chestsnote"].textContent = "Newest first. Value at bid = each item's highest bid when the chest was opened; a dungeon token is worth the best bid per token among the shop items it buys (an opening from before 0.1.2 takes those bids from the nearest opening that recorded them); counted items (cowbells) and unpriced items carry no value. Key cost = the chest key's lot cost; a basis of ask means the key was held before the record began.";
         }
         // Sessions the game logged (dungeons and key crafts), newest first, beside what this record counted in the
         // same span: clears from the runs, chests from the clears plus offline blocks inside it.
