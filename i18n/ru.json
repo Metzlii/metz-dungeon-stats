@@ -436,5 +436,7 @@
  "Colours of the key and consumable times and warnings in the battle window.": "Цвета времени и предупреждений по ключам и расходникам в окне боя.",
  "{name} out of {item} in {time}": "{name}: {item} кончится через {time}",
  "{name} is out of {item}": "{name}: {item} кончился",
- "Party consumables": "Расходники группы"
+ "Party consumables": "Расходники группы",
+ "Party food slot {n}": "Еда группы, слот {n}",
+ "Party drink slot {n}": "Напитки группы, слот {n}"
 }

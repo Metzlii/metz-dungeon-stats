@@ -436,5 +436,7 @@
  "Colours of the key and consumable times and warnings in the battle window.": "戦闘画面のキーと消耗品の残り時間・警告の色。",
  "{name} out of {item} in {time}": "{name} の {item} はあと {time}",
  "{name} is out of {item}": "{name} の {item} がありません",
- "Party consumables": "パーティの消耗品"
+ "Party consumables": "パーティの消耗品",
+ "Party food slot {n}": "パーティの食べ物スロット {n}",
+ "Party drink slot {n}": "パーティのドリンクスロット {n}"
 }

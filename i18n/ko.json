@@ -436,5 +436,7 @@
  "Colours of the key and consumable times and warnings in the battle window.": "전투 창의 열쇠와 소모품 시간 및 경고의 색.",
  "{name} out of {item} in {time}": "{name} {item} 소진까지 {time}",
  "{name} is out of {item}": "{name} {item} 없음",
- "Party consumables": "파티 소모품"
+ "Party consumables": "파티 소모품",
+ "Party food slot {n}": "파티 음식 슬롯 {n}",
+ "Party drink slot {n}": "파티 음료 슬롯 {n}"
 }

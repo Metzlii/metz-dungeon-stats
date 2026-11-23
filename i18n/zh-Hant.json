@@ -436,5 +436,7 @@
  "Colours of the key and consumable times and warnings in the battle window.": "戰鬥視窗中鑰匙和消耗品時間及提示的顏色。",
  "{name} out of {item} in {time}": "{name} 的 {item} 將在 {time} 後用完",
  "{name} is out of {item}": "{name} 的 {item} 已用完",
- "Party consumables": "隊伍消耗品"
+ "Party consumables": "隊伍消耗品",
+ "Party food slot {n}": "隊伍食物欄位 {n}",
+ "Party drink slot {n}": "隊伍飲料欄位 {n}"
 }

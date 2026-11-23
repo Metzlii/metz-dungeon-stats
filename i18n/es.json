@@ -436,5 +436,7 @@
  "Colours of the key and consumable times and warnings in the battle window.": "Colores de los tiempos y avisos de llaves y consumibles en la ventana de batalla.",
  "{name} out of {item} in {time}": "{name} sin {item} en {time}",
  "{name} is out of {item}": "{name} no tiene {item}",
- "Party consumables": "Consumibles del grupo"
+ "Party consumables": "Consumibles del grupo",
+ "Party food slot {n}": "Comida del grupo, ranura {n}",
+ "Party drink slot {n}": "Bebida del grupo, ranura {n}"
 }
