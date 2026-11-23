@@ -462,5 +462,6 @@
  "Experience per hour, all skills; hover a value for each skill": "Experiência por hora, todas as habilidades; passe o cursor sobre um valor para ver cada habilidade",
  "XP per hour since {time} ago": "XP por hora desde há {time}",
  "next level in {time}": "próximo nível em {time}",
- "Meter columns": "Colunas do medidor"
+ "Meter columns": "Colunas do medidor",
+ "Drag to set this column's width; double-click for automatic": "Arraste para definir a largura desta coluna; clique duas vezes para automático"
 }

@@ -462,5 +462,6 @@
  "Experience per hour, all skills; hover a value for each skill": "所有技能的每小時經驗；將滑鼠懸停在數值上查看各技能",
  "XP per hour since {time} ago": "{time} 前至今的每小時經驗",
  "next level in {time}": "{time} 後升級",
- "Meter columns": "傷害統計欄"
+ "Meter columns": "傷害統計欄",
+ "Drag to set this column's width; double-click for automatic": "拖曳設定此欄寬度；按兩下恢復自動"
 }
