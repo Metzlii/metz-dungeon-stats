@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Metz Dungeon Stats
 // @namespace    metzlii
-// @version      0.2.2
+// @version      0.2.3
 // @description  One permanent record of your XP, your dungeon runs and the dungeon cash flow: keys crafted, consumables used, chests opened, loot sold. A damage meter per run, by player and ability. Tracked from the game's own messages, nothing estimated.
 // @author       Metzli
 // @license      MIT
@@ -34,7 +34,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.2.2";
+    const VERSION = "0.2.3";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -199,7 +199,107 @@
         return false;
     }
 
-    const itemName = hrid => (ref.items[hrid] && ref.items[hrid].name) || shortItem(hrid);
+    // ---------------------------------------------------------------------------------------------------------------
+    // Languages (0.2.3, operator 2026-11-23: every language the game ships, like the other Metz scripts)
+    // ---------------------------------------------------------------------------------------------------------------
+    // Two sources, the site's rule (zone-page/i18n.js):
+    //   - The game's own NOUNS (items, abilities, monsters, places, skills, its tab names) come from the game itself:
+    //     its components carry react-i18next's `i18n`, and `i18n.t("itemNames./items/…")` is exactly what the
+    //     player's screen shows. Nothing shipped, nothing to go stale; English from the game data if it is not found.
+    //   - OUR words are keyed by their English. I18N[lang] maps an English string to its translation; a key may hold
+    //     {placeholders}, which then match the same text with any values in them. A string with no translation stays
+    //     English, so a half-done language is always safe. localize() translates what the panel wrote, text nodes
+    //     and title/placeholder/aria-label/label attributes, and never inside translate="no" (player names).
+    const I18N = {};   // filled by the locale block at the end of the file
+    const LANGS = ["en", "es", "fr", "ja", "ko", "pt", "ru", "zh", "zh-Hant"];
+    let gameI18nNode = null, gameI18nAt = 0;
+    function gameI18n() {
+        if (gameI18nNode && typeof gameI18nNode.t === "function") return gameI18nNode;
+        if (Date.now() - gameI18nAt < 3000) return null; gameI18nAt = Date.now();
+        try {
+            const rootEl = document.getElementById("root"); if (!rootEl) return null;
+            const c = rootEl._reactRootContainer; let first = (c && (c.current || (c._internalRoot && c._internalRoot.current))) || null;
+            if (!first) { const k = Object.keys(rootEl).find(x => x.startsWith("__reactContainer$")); if (k) first = rootEl[k]; }
+            const pending = first ? [first] : [], seen = new Set();
+            while (pending.length && seen.size < 8000) {
+                const f = pending.pop(); if (!f || seen.has(f)) continue; seen.add(f);
+                const i = f.memoizedProps && f.memoizedProps.i18n;
+                if (i && typeof i.t === "function" && typeof i.language === "string") { gameI18nNode = i; return i; }
+                if (f.child) pending.push(f.child); if (f.sibling) pending.push(f.sibling);
+            }
+        } catch (_e) { /* not reachable: English names */ }
+        return null;
+    }
+    function uiLang() {
+        let l = "";
+        const g = gameI18n(); if (g) l = g.language;
+        if (!l) { try { l = String(W.localStorage.getItem("i18nextLng") || "").replace(/^"|"$/g, ""); } catch (_e) { l = ""; } }
+        l = l || "en";
+        if (/^zh[-_](tw|hk|mo|hant)/i.test(l)) return "zh-Hant";
+        if (/^zh/i.test(l)) return "zh";
+        const base = l.slice(0, 2).toLowerCase();
+        return LANGS.includes(base) ? base : "en";
+    }
+    // The game's name for a thing in the player's language, else the English one.
+    function gameName(section, hrid, english) {
+        if (!hrid || uiLang() === "en") return english;
+        const g = gameI18n(); if (!g) return english;
+        try { const k = `${section}.${hrid}`, v = g.t(k); return v && v !== k && typeof v === "string" ? v : english; } catch (_e) { return english; }
+    }
+    const i18nCache = new Map();   // lang -> { exact: Map, patterns: [{re, to, anchor}] }
+    function i18nTable(lang) {
+        let tb = i18nCache.get(lang); if (tb) return tb;
+        tb = { exact: new Map(), patterns: [] };
+        for (const [en, to] of Object.entries(I18N[lang] || {})) {
+            if (!to) continue;
+            if (!/\{[a-z0-9_]+\}/i.test(en)) { tb.exact.set(en, to); continue; }
+            const names = []; const anchor = en.split(/\{[a-z0-9_]+\}/i).sort((a, b) => b.length - a.length)[0];
+            const re = new RegExp("^" + en.split(/(\{[a-z0-9_]+\})/i).map(part => { const m = /^\{([a-z0-9_]+)\}$/i.exec(part); if (m) { names.push(m[1]); return "([\\s\\S]+?)"; } return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("") + "$");
+            tb.patterns.push({ re, to, names, anchor });
+        }
+        tb.patterns.sort((a, b) => b.anchor.length - a.anchor.length);
+        tb.memo = new Map();
+        i18nCache.set(lang, tb); return tb;
+    }
+    // One string: exact, else the first pattern that matches it whole.
+    function trText(text, lang) {
+        lang = lang || uiLang(); if (lang === "en" || !text) return text;
+        const core = text.trim(); if (!core || !/\p{L}/u.test(core)) return text;
+        const tb = i18nTable(lang);
+        let out = tb.memo.get(core);
+        if (out === undefined) {
+            out = tb.exact.get(core);
+            if (out === undefined) {
+                out = null;
+                for (const p of tb.patterns) { if (p.anchor && !core.includes(p.anchor)) continue; const m = p.re.exec(core); if (m) { out = p.to.replace(/\{([a-z0-9_]+)\}/gi, (all, n) => { const i = p.names.indexOf(n); return i >= 0 ? trText(m[i + 1], lang) : all; }); break; } }
+            }
+            if (tb.memo.size > 20000) tb.memo.clear();
+            tb.memo.set(core, out);
+        }
+        if (out == null) { if (W.__mdsI18nMissing) W.__mdsI18nMissing.add(core); return text; }
+        return text.replace(core, out);
+    }
+    // In code: t("Damage taken {n}", { n }) -> the translation with the values in.
+    function t(en, vars) {
+        const lang = uiLang(); let out = en;
+        if (W.__mdsI18nCollect) W.__mdsI18nCollect.add(en);
+        if (lang !== "en") { const tb = i18nTable(lang), v = tb.exact.get(en); if (v) out = v; else if (W.__mdsI18nMissing) W.__mdsI18nMissing.add(en); }
+        return vars ? out.replace(/\{([a-z0-9_]+)\}/gi, (all, n) => (vars[n] != null ? String(vars[n]) : all)) : out;
+    }
+    const L10N_ATTRS = ["title", "placeholder", "aria-label", "label"];
+    // Translate what the panel wrote under `el`. Cheap when nothing changed: every string is memoised.
+    function localize(el) {
+        const lang = uiLang(); if (!el || (lang === "en" && !W.__mdsI18nCollect)) return;
+        const collect = W.__mdsI18nCollect;
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, { acceptNode: n => (n.nodeType === 1 && (n.getAttribute("translate") === "no" || n.tagName === "STYLE" || n.tagName === "SCRIPT") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+        const one = s => { if (collect) { const c = s.trim(); if (c && /\p{L}/u.test(c)) collect.add(c); } return lang === "en" ? s : trText(s, lang); };
+        for (let n = el; n; n = walker.nextNode()) {
+            if (n.nodeType === 3) { const v = one(n.data); if (v !== n.data) n.data = v; }
+            else if (n.nodeType === 1) for (const a of L10N_ATTRS) { const v0 = n.getAttribute(a); if (v0) { const v = one(v0); if (v !== v0) n.setAttribute(a, v); } }
+        }
+    }
+
+    const itemName = hrid => gameName("itemNames", hrid, (ref.items[hrid] && ref.items[hrid].name) || shortItem(hrid));
     const isConsumable = hrid => { const c = ref.items[hrid] && ref.items[hrid].category; return c === "/item_categories/food" || c === "/item_categories/drink"; };
     const isLootItem = hrid => hrid && hrid !== "/items/coin" && !ref.keyItems.has(hrid) && !ref.chestItems[hrid];
     // Items that cannot be sold for coins: counted and averaged per chest, never priced (same as the simulator site).
@@ -2211,6 +2311,7 @@
 #mds-bm-pop th{font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:rgba(230,239,243,.6);border-bottom:1px solid rgba(230,239,243,.16)}
 #mds-bm-pop td{border-bottom:1px solid rgba(230,239,243,.08)}
 #mds-bm-pop .mds-icon{width:1.2em;height:1.2em;vertical-align:-.25em;margin-right:4px}
+#mds-bm tr.mds-flash td{background:rgba(69,200,216,.18)}
 #mds-bm .mds-icon{width:1.2em;height:1.2em;vertical-align:-.25em;margin-right:4px}
 #mds-bm p{margin:4px 0;color:#c5d4de}
 #mds-tab{white-space:nowrap}
@@ -2379,7 +2480,7 @@
 <div class="mds-tabs">${TABS.map(([k, label]) => `<button role="tab" data-tab="${k}" aria-selected="${k === tab}">${label}</button>`).join("")}</div>
 <div class="mds-body">
 <p class="mds-status" id="mds-status"></p>
-<div class="mds-banner" id="mds-banner" hidden><span>Open the game's <strong>Loot &amp; XP Log</strong> once this session (Combat → Loot &amp; XP Log) so the record can check its clears and chests against the game's own count.</span><button class="mds-x" title="Dismiss for this session">×</button></div>
+<div class="mds-banner" id="mds-banner" hidden><span>Open the game's Loot &amp; XP Log once this session (Combat → Loot &amp; XP Log) so the record can check its clears and chests against the game's own count.</span><button class="mds-x" title="Dismiss for this session">×</button></div>
 <div class="mds-pane" data-pane="overview">
  <h4>Summary</h4>
  <div class="mds-cards" id="mds-cards"></div>
@@ -2402,7 +2503,7 @@
  <div id="mds-dmg-meter"></div>
  <h4 data-noun="sessions">Sessions</h4>
  <div class="mds-wrap"><table><thead><tr><th>End</th><th>Where</th><th>Result</th><th>Combat time</th><th>Waves</th><th>Party damage</th><th>Party DPS</th><th>Your damage</th><th>Your share</th><th title="Finished waves in which every monster was seen going to 0 HP and every point was credited to a player">Checked</th></tr></thead><tbody id="mds-dmg-sessions"></tbody></table></div>
- <p class="mds-note">Click a player for their abilities: damage, uses, hits, misses and healing, then where their damage taken came from and what healed them. Damage is the HP the monsters lost, read from the game's battle messages: overkill is not counted. DPS runs over time in combat: from the first wave's start to the last hit, without a break between waves. A dungeon run is listed here only when the script saw it from wave 1 to its end (a reload in the middle of a wave is stitched back in; installing an update reloads the page, so that run is cut). On a planet a session runs until the battle changes, across reloads. Runs seen only in part still count: pick that dungeon's <b>totals</b> in the Session list. Parry and thorns are counter-attacks; damage over time is put on the ability that applied it. Healing done counts heal abilities, Life Drain and Bloom; everything else a player regained (regeneration, food, passives) shows under Healed. Click a session below to show it.</p>
+ <p class="mds-note">Click a player for their abilities: damage, uses, hits, misses and healing, then where their damage taken came from and what healed them. Damage is the HP the monsters lost, read from the game's battle messages: overkill is not counted. DPS runs over time in combat: from the first wave's start to the last hit, without a break between waves. A dungeon run is listed here only when the script saw it from wave 1 to its end (a reload in the middle of a wave is stitched back in; installing an update reloads the page, so that run is cut). On a planet a session runs until the battle changes, across reloads. Runs seen only in part still count: pick that dungeon's totals in the Session list. Parry and thorns are counter-attacks; damage over time is put on the ability that applied it. Healing done counts heal abilities, Life Drain and Bloom; everything else a player regained (regeneration, food, passives) shows under Healed. Click a session below to show it.</p>
 </div>
 <div class="mds-pane" data-pane="keys" hidden>
  <h4>Key crafting</h4>
@@ -2498,7 +2599,7 @@
                 const item = b.dataset.item;
                 if (b.dataset.act === "keep") {
                     const cur = Number(b.dataset.kept) || 0;
-                    const v = W.prompt(`Keep how many ${itemName(item)} for future runs? (now ${cur}; 0 clears it)`, String(cur || held(item, 0)));
+                    const v = W.prompt(t("Keep how many {item} for future runs? (now {n}; 0 clears it)", { item: itemName(item), n: cur }), String(cur || held(item, 0)));
                     if (v == null) return; const q = Math.max(0, Math.floor(Number(v))); if (!isFinite(q)) return;
                     emit("keep", { item, qty: q - cur, total: q }, "panel");
                 } else if (b.dataset.act === "accept") {
@@ -2527,20 +2628,10 @@
             root.addEventListener("click", e => {
                 if (!(e.ctrlKey || e.metaKey) || e.target.closest("button, a, input, select, th")) return;
                 const tr = e.target.closest("tbody tr"); if (!tr || !root.contains(tr)) return;
-                const table = tr.closest("table"); const head = table && table.tHead && table.tHead.rows[0]; if (!head) return;
-                if (tr.cells.length === 1 && tr.cells[0].colSpan > 1) return;
-                const heads = [...head.children], cells = [...tr.cells];
-                const parts = [];
-                for (let i = 0; i < cells.length; i++) {
-                    const th = heads[i], td = cells[i]; if (!th || !td || th.hidden || td.hidden || getComputedStyle(td).display === "none") continue;
-                    if (td.querySelector("button") && !td.textContent.replace(/\s+/g, "").replace(/(Sell|Keep…|Shop|Buy|Done|Value…)/g, "")) continue;
-                    const label = th.textContent.trim(); const value = td.innerText.replace(/\s*\n\s*/g, "; ").replace(/\s+/g, " ").trim();
-                    if (!value || value === "–") continue;
-                    parts.push(i === 0 || !label ? value : `${label} ${value}`);
-                }
-                const line = parts.join(" · "); if (!line) return;
+                const line = rowChatLine(tr); if (!line) return;
                 e.preventDefault(); toChatInput(line, tr);
             });
+            chatOut = toChatInput;
             function toChatInput(line, flashEl) {
                 const input = [...document.querySelectorAll('input[class*="Chat_chatInput"], [class*="Chat_chatInputContainer"] input[type="text"]')].find(el => !root.contains(el) && el.offsetParent !== null) || null;
                 if (input) {
@@ -2567,7 +2658,7 @@
             root.querySelector("#mds-plan-wallet").addEventListener("click", () => { plan.budget = null; savePlan(); renderPlan(); });
             // Damage tab: the session picker, a player row opens its abilities, a session row shows that session.
             els["mds-dmg-pick"].addEventListener("change", e => { dmgPick = e.target.value; dmgHtml = ""; renderDamage(); });
-            els["mds-dmg-meter"].addEventListener("click", e => { if (metFoldClick(e)) return; if (metSubClick(e)) { dmgHtml = ""; renderDamage(); return; } const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else { dmgExpanded.add(n); metFoldsReset(); } dmgHtml = ""; renderDamage(); });
+            els["mds-dmg-meter"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; if (metFoldClick(e)) return; if (metSubClick(e)) { dmgHtml = ""; renderDamage(); return; } const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else { dmgExpanded.add(n); metFoldsReset(); } dmgHtml = ""; renderDamage(); });
             els["mds-dmg-sessions"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; const tr = e.target.closest("tr[data-sid]"); if (!tr) return; dmgPick = tr.dataset.sid; dmgHtml = ""; renderDamage(); });
             {
                 const on = root.querySelector("#mds-meter-on"), bmBox = root.querySelector("#mds-bm-on");
@@ -2583,7 +2674,7 @@
             root.querySelector("#mds-plan-prices").addEventListener("click", () => fetchPrices(true).then(() => render()));
             root.querySelector("#mds-plan-copy").addEventListener("click", async () => {
                 if (!lastPlanRows) return;
-                const lines = [`${it(plan.key)} × ${(els["mds-plan-sum"].textContent.match(/buys ([\d,]+)|^([\d,]+) /) || []).slice(1).find(Boolean) || "?"}`, ...lastPlanRows.filter(x => x.buy > 0).map(x => `- ${itemName(x.item)} × ${x.buy.toLocaleString()}${x.cost != null ? ` ≈ ${Math.round(x.cost).toLocaleString()} coins` : ""}`), `Total ≈ ${Math.round(lastPlanRows.reduce((s, x) => s + (x.buy > 0 && x.cost != null ? x.cost : 0), 0)).toLocaleString()} coins`].join("\n");
+                const lines = [`${it(plan.key)} × ${lastPlanWant != null ? lastPlanWant.toLocaleString() : "?"}`, ...lastPlanRows.filter(x => x.buy > 0).map(x => `- ${itemName(x.item)} × ${x.buy.toLocaleString()}${x.cost != null ? ` ≈ ${Math.round(x.cost).toLocaleString()} coins` : ""}`), `Total ≈ ${Math.round(lastPlanRows.reduce((s, x) => s + (x.buy > 0 && x.cost != null ? x.cost : 0), 0)).toLocaleString()} coins`].join("\n");
                 try { await navigator.clipboard.writeText(lines); } catch (_e) { W.prompt("Copy the shopping list:", lines); }
             });
             root.addEventListener("click", e => { const a = e.target.closest("a[data-market]"); if (a) { e.preventDefault(); goToMarket(a.dataset.market); return; } const b = e.target.closest("button[data-act=market]"); if (b) goToMarket(b.dataset.item); const sh = e.target.closest("button[data-act=shop]"); if (sh) goToShop(); });
@@ -2621,7 +2712,8 @@
         function findStrip() {
             for (const list of document.querySelectorAll('[class*="TabsComponent_tabsComponent"] [role="tablist"]')) {
                 const tabs = [...list.querySelectorAll('[role="tab"]')].filter(t => t !== dock.tab);
-                if (tabs.length >= 3 && tabs.some(t => STRIP_TABS.includes(tabText(t)))) return list;
+                const names = [...STRIP_TABS, ...["combatZones", "findParty", "myParty"].map(k => gameName("combatPanel", k, ""))].filter(Boolean);
+                if (tabs.length >= 3 && tabs.some(t => names.includes(tabText(t)))) return list;
             }
             return null;
         }
@@ -2840,10 +2932,10 @@
             // Those slotted for the current fight come first, then by what was used in the record.
             const slotted = new Set(state.battleItems || []);
             const cons = Object.entries(M.consumables).filter(([h, c]) => c.used > 0 || slotted.has(h) || c.held > 0 && isConsumable(h)).sort((a, b) => (slotted.has(b[0]) - slotted.has(a[0])) || (b[1].usedCost - a[1].usedCost) || (b[1].held - a[1].held));
-            els["mds-consumables"].innerHTML = cons.map(([h, c]) => `<button class="mds-tile${slotted.has(h) ? " slotted" : ""}" data-act="market" data-item="${esc(h)}" title="${esc(itemName(h))}: ${fmtQ(c.held)} held · ${fmtQ(c.used)} used in the record${c.crafting ? ` (${fmtQ(c.crafting)} in key crafts)` : ""}${c.avg != null ? ` · ${fmtCoins(c.avg)} each at purchase price` : ""}${slotted.has(h) ? " · slotted now" : ""}. Click to open in the marketplace.">${icon(h)}<strong>${fmtQ(c.held)}</strong><small>${it(h)}</small></button>`).join("") || `<span class="mds-note">No consumables used yet.</span>`;
+            els["mds-consumables"].innerHTML = cons.map(([h, c]) => `<button class="mds-tile${slotted.has(h) ? " slotted" : ""}" data-act="market" data-item="${esc(h)}" title="${esc(`${itemName(h)}: ${t("{n} held", { n: fmtQ(c.held) })} · ${t("{n} used in the record", { n: fmtQ(c.used) })}${c.crafting ? " " + t("({n} in key crafts)", { n: fmtQ(c.crafting) }) : ""}${c.avg != null ? " · " + t("{n} each at purchase price", { n: fmtCoins(c.avg) }) : ""}${slotted.has(h) ? " · " + t("slotted now") : ""}. ${t("Click to open in the marketplace.")}`)}">${icon(h)}<strong>${fmtQ(c.held)}</strong><small>${it(h)}</small></button>`).join("") || `<span class="mds-note">No consumables used yet.</span>`;
             const live = sessionsOf().find(e => (ref.dungeons[e.action] || /\/combat\//.test(e.action)) && isRunning(e) && e.end > S.windowStart);
             const check = live ? (() => { const o = recordInSpan(d, live); const t = compareText(o, live, S.windowStart); return t ? ` Game's Loot & XP Log, session since ${fmtTime(live.start)} (read ${fmtTime(state.lootLogAt)}): ${t}.` : ""; })() : "";
-            els["mds-ovnote"].textContent = `${check}Since ${fmtTime(S.windowStart)}. A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.${S.open ? " One run is in progress." : ""}`;
+            els["mds-ovnote"].textContent = `${check}${t("Since {date}.", { date: fmtTime(S.windowStart) })} ${t("A run lasts from one party key-count message to the next, the way Toolasha counts it; cancelled runs are left out of the average. Runs while you were offline come from the party chat, their chests from the login summary.")}${S.open ? " " + t("One run is in progress.") : ""}`;
         }
         const fmtQ = q => (q == null ? "–" : Number.isInteger(q) ? q.toLocaleString() : q.toFixed(1));
         // The game's own navigation: its React components expose handleGoToMarketplace(item, level) and
@@ -2915,9 +3007,9 @@
             return spriteUrls[sheet];
         }
         const skillSpriteBase = () => spriteOf("skills_sprite");
-        const abilityName = h => (ref.abilities[h] && ref.abilities[h].name) || h.split("/").pop().replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+        const abilityName = h => gameName("abilityNames", h, (ref.abilities[h] && ref.abilities[h].name) || h.split("/").pop().replace(/_/g, " ").replace(/^./, c => c.toUpperCase()));
         const abilityIcon = h => { const b = spriteOf("abilities_sprite"); return b ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${h.split("/").pop()}"></use></svg>` : ""; };
-        const skillName = h => (ref.skills[h] && ref.skills[h].name) || h.split("/").pop().replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+        const skillName = h => gameName("skillNames", h, (ref.skills[h] && ref.skills[h].name) || h.split("/").pop().replace(/_/g, " ").replace(/^./, c => c.toUpperCase()));
         const skillIcon = h => { const b = skillSpriteBase(); return b ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${h.split("/").pop()}"></use></svg>` : ""; };
         const icon = h => { const b = spriteBase(); return b && /^\/items\/[a-z0-9_]+$/.test(h) ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${h.split("/").pop()}"></use></svg>` : ""; };
         const itIcon = h => icon(h) + it(h);
@@ -2932,6 +3024,7 @@
         const PLAN_KEY = PANEL_KEY + "-plan";
         // qty null = as many as the budget buys; budget null = follow the coins in the bag.
         let plan = { key: null, qty: null, budget: null, owned: true };
+        let lastPlanWant = null;   // the keys the plan shows, for the shopping list
         try { const v = JSON.parse(localStorage.getItem(PLAN_KEY) || "null"); if (v && typeof v === "object") plan = { key: v.key || null, qty: Number(v.qty) > 0 ? Math.floor(Number(v.qty)) : null, budget: Number(v.budget) >= 0 && v.budget !== null ? Math.floor(Number(v.budget)) : null, owned: v.owned !== false }; } catch (_e) { /* fine */ }
         const savePlan = () => { try { localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); } catch (_e) { /* fine */ } };
         let lastPlanRows = null;
@@ -2977,10 +3070,14 @@
             if (perKeyOk && art && art.tea) { const tp = askOf(art.tea); if (tp != null) perKeyCost += tp * (art.seconds || 10) / (art.teaSeconds || 300) / perCraft; }
             const keyAsk = askOf(plan.key);
             const over = total - budget;
+            const keyName = itemName(plan.key), craftsText = t(crafts === 1 ? "{n} craft" : "{n} crafts", { n: crafts.toLocaleString() });
+            const unpricedText = unpriced.length ? " " + t("({items} unpriced)", { items: unpriced.map(itemName).join(", ") }) : "";
             const head = mode === "budget"
-                ? (want > 0 ? `A budget of ${fmtCoins(budget)} buys ${want.toLocaleString()} ${it(plan.key)} (${crafts.toLocaleString()} craft${crafts === 1 ? "" : "s"}) for ${fmtCoins(total)}` : `A budget of ${fmtCoins(budget)} does not cover one ${it(plan.key)}${unpriced.length ? ` (${unpriced.map(it).join(", ")} unpriced)` : ""}`)
-                : `${want.toLocaleString()} ${it(plan.key)} = ${crafts.toLocaleString()} craft${crafts === 1 ? "" : "s"}, ${fmtCoins(total)} to buy${over > 0 ? `, ${fmtCoins(over)} over the budget of ${fmtCoins(budget)}` : ` within the budget of ${fmtCoins(budget)}`}${unpriced.length ? ` (${unpriced.map(it).join(", ")} unpriced)` : ""}`;
-            els["mds-plan-sum"].textContent = `${head}${art ? `, artisan ${(art.rate * 100).toFixed(1)}%` : ", no artisan tea slotted"}. Crafting cost ${perKeyOk ? fmtCoins(perKeyCost) : "?"} per key at ask${keyAsk != null ? ` against ${fmtCoins(keyAsk)} to buy a key (${perKeyOk ? (perKeyCost < keyAsk ? `crafting saves ${fmtCoins(keyAsk - perKeyCost)}` : `buying saves ${fmtCoins(perKeyCost - keyAsk)}`) : "?"})` : ""}.`;
+                ? (want > 0 ? t("A budget of {budget} buys {n} {key} ({crafts}) for {total}", { budget: fmtCoins(budget), n: want.toLocaleString(), key: keyName, crafts: craftsText, total: fmtCoins(total) }) : t("A budget of {budget} does not cover one {key}", { budget: fmtCoins(budget), key: keyName }) + unpricedText)
+                : t("{n} {key} = {crafts}, {total} to buy", { n: want.toLocaleString(), key: keyName, crafts: craftsText, total: fmtCoins(total) }) + ", " + (over > 0 ? t("{over} over the budget of {budget}", { over: fmtCoins(over), budget: fmtCoins(budget) }) : t("within the budget of {budget}", { budget: fmtCoins(budget) })) + unpricedText;
+            lastPlanWant = want;
+            els["mds-plan-sum"].setAttribute("translate", "no");
+            els["mds-plan-sum"].textContent = `${head}, ${art ? t("artisan {pct}", { pct: (art.rate * 100).toFixed(1) + "%" }) : t("no artisan tea slotted")}. ${t("Crafting cost {cost} per key at ask", { cost: perKeyOk ? fmtCoins(perKeyCost) : "?" })}${keyAsk != null ? " " + t("against {ask} to buy a key", { ask: fmtCoins(keyAsk) }) + ` (${perKeyOk ? (perKeyCost < keyAsk ? t("crafting saves {n}", { n: fmtCoins(keyAsk - perKeyCost) }) : t("buying saves {n}", { n: fmtCoins(perKeyCost - keyAsk) })) : "?"})` : ""}.`;
         }
         function renderKeys() {
             const M = getMoney();
@@ -3114,7 +3211,8 @@
                     return `<tr><td class="k">${skillIcon(p.skill)}${esc(skillName(p.skill))}</td><td>${p.n}</td><td>${fmtHm(p.ms)}</td><td>${fmtCoins(p.xp)}</td><td>${fmtCoins(p.xp / (p.ms / 3600e3))}</td><td class="d">${best ? `${fmtCoins(best.xp / (best.ms / 3600e3))} in ${zoneLabel(best.action, best.tier || null)}<small> ${fmtHm(best.ms)}</small>` : "–"}</td><td class="t">${fmtDate(p.from)}</td><td class="t">${fmtDate(p.to)}</td></tr>`;
                 }).join("") || `<tr><td colspan="8" class="t">No combat sessions in the log yet: open the game's Loot &amp; XP Log once.</td></tr>`;
             }
-            els["mds-lifenote"].textContent = `The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: ${all.length} sessions${all.length ? ` from ${fmtDate(Math.min(...all.map(e => e.start)))}` : ""}. Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device, merged here by listing id from this PC's Toolasha store and any file merged on the Data tab (${state.marketHistory.size} listings); the cost per key takes the average paid price in that history (a price holds whatever share was bought on one PC) with recipe quantities at your current artisan rate, since the log has no consumption per craft; no lifetime income is shown until the records from both PCs are merged (import, milestone 5).`;
+            els["mds-lifenote"].setAttribute("translate", "no");
+            els["mds-lifenote"].textContent = `${t("The game's own log (server-side, complete across devices), merged with Toolasha's saved copy: {n} sessions", { n: all.length })}${all.length ? " " + t("from {date}", { date: fmtDate(Math.min(...all.map(e => e.start))) }) : ""}. ${t("Time in sessions is the log's start-to-end, so XP / h is per hour of the action running, offline included. Market history is per device, merged here by listing id from this PC's Toolasha store and any file merged on the Data tab ({n} listings); the cost per key takes the average paid price in that history (a price holds whatever share was bought on one PC) with recipe quantities at your current artisan rate, since the log has no consumption per craft; no lifetime income is shown until the records from both PCs are merged (import, milestone 5).", { n: state.marketHistory.size })}`;
         }
         function renderChests() {
             const M = getMoney();
@@ -3207,30 +3305,36 @@
         // -----------------------------------------------------------------------------------------------------------
         const pct1 = (a, b) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "–");
         const fmtN = v => (Math.abs(v) >= 1000 ? fmtCoins(v) : String(Math.round(v || 0)));
-        const meterKeyName = k => k === "auto" ? "Auto attack" : k === "bloom" ? "Bloom" : k === "parry" ? "Parry" : k === "thorns" ? "Thorns and retaliation" : /^dot:/.test(k) ? `${k === "dot:?" ? "Damage" : abilityName(k.slice(4))} over time` : /^\/abilities\//.test(k) ? abilityName(k) : k;
+        // Our words through t() where a line is built from parts (localize() translates whole text nodes only).
+        const meterKeyName = k => k === "auto" ? t("Auto attack") : k === "bloom" ? t("Bloom") : k === "parry" ? t("Parry") : k === "thorns" ? t("Thorns and retaliation") : k === "dot:?" ? t("Damage over time") : /^dot:/.test(k) ? t("{ability} over time", { ability: abilityName(k.slice(4)) }) : /^\/abilities\//.test(k) ? abilityName(k) : k;
         const meterKeyIcon = k => { const h = /^dot:/.test(k) ? k.slice(4) : k; return /^\/abilities\//.test(h) ? abilityIcon(h) : ""; };
         const sessTotal = s => Object.values((s && s.players) || {}).reduce((a, p) => a + (p.dealt || 0), 0);
         const sessSecs = s => Math.max(1, num(s && s.combatMs) / 1000);
         // Places: a dungeon by its code (T2D4: short, and players know it; operator 2026-11-23), a planet by name, the
         // results in words ("cleared").
-        const placeName = z => (z ? (ref.dungeons[z] ? ref.dungeons[z].name : shortAction(z).replace(/_/g, " ").replace(/^./, c => c.toUpperCase())) : "Unknown place");
+        const placeName = z => (z ? gameName("actionNames", z, ref.dungeons[z] ? ref.dungeons[z].name : shortAction(z).replace(/_/g, " ").replace(/^./, c => c.toUpperCase())) : t("Unknown place"));
         const meterWhere = s => (s.zone && ref.dungeons[s.zone] ? zoneLabel(s.zone, s.tier) : esc(s.zone ? `${placeName(s.zone)}${s.tier ? ` T${s.tier}` : ""}` : placeName(null)));
         const RESULT_WORDS = { clear: "cleared", fail: "failed", stop: "ended early", gap: "went quiet", interrupted: "cut short" };
-        const resultWord = r => RESULT_WORDS[r] || r || "ended";
-        const meterResult = s => (s.streak ? `${s.runs} finished${s.live ? " + this one" : ""} since ${fmtClock(num(s.startAt))}` : s.aggregate ? `totals: ${s.runs} full run${s.runs === 1 ? "" : "s"}${s.pieces ? `, ${s.pieces} partly seen` : ""}` : s.live ? (s.result ? `${resultWord(s.result)}, closing` : serverNow() - num(s.lastAt) > METER_STALE_MS ? "paused" : "in progress") + (s.stitched ? " (rejoined after a reload)" : "") : resultWord(s.result) + (s.stitched ? " (rejoined after a reload)" : ""));
+        const resultWord = r => t(RESULT_WORDS[r] || r || "ended");
+        const rejoined = s => (s.stitched ? " " + t("(rejoined after a reload)") : "");
+        const meterResult = s => (s.streak ? t(s.live ? "{n} finished + this one since {time}" : "{n} finished since {time}", { n: s.runs, time: fmtClock(num(s.startAt)) })
+            : s.aggregate ? t(s.runs === 1 ? "totals: {n} full run" : "totals: {n} full runs", { n: s.runs }) + (s.pieces ? ", " + t(s.pieces === 1 ? "{n} partly seen run" : "{n} partly seen runs", { n: s.pieces }) : "")
+            : s.live ? (s.result ? t("{result}, closing", { result: resultWord(s.result) }) : serverNow() - num(s.lastAt) > METER_STALE_MS ? t("paused") : t("in progress")) + rejoined(s)
+            : resultWord(s.result) + rejoined(s));
+        const wavesText = s => (s.aggregate || s.streak ? t("{n} waves", { n: num(s.waves).toLocaleString() }) : s.firstWave === s.lastWave ? t("wave {n}", { n: s.lastWave }) : t("waves {a}–{b}", { a: s.firstWave, b: s.lastWave }));
         function meterHead(s) {
             if (!s) return "";
             const total = sessTotal(s), secs = sessSecs(s), c = s.check || {};
-            return `${meterWhere(s)} · ${esc(meterResult(s))} · ${s.aggregate || s.streak ? `${num(s.waves).toLocaleString()} waves` : s.firstWave === s.lastWave ? `wave ${s.lastWave}` : `waves ${s.firstWave}–${s.lastWave}`} · ${fmtDur(num(s.combatMs))} in combat · party ${fmtN(total)} (${Math.round(total / secs).toLocaleString()} DPS) · checked ${c.balanced || 0} of ${c.waves || 0} finished waves${c.gap ? ` · <span class="mds-flag" title="HP left standing or not credited, over the waves that did not check out">${fmtN(c.gap)} HP unexplained</span>` : ""}${s.unassigned ? ` · ${fmtN(s.unassigned)} not credited` : ""}`;
+            return `${meterWhere(s)} · ${esc(meterResult(s))} · ${esc(wavesText(s))} · ${esc(t("{time} in combat", { time: fmtDur(num(s.combatMs)) }))} · ${esc(t("party {n} ({dps} DPS)", { n: fmtN(total), dps: Math.round(total / secs).toLocaleString() }))} · ${esc(t("checked {a} of {b} finished waves", { a: c.balanced || 0, b: c.waves || 0 }))}${c.gap ? ` · <span class="mds-flag" title="${esc(t("HP left standing or not credited, over the waves that did not check out"))}">${esc(t("{n} HP unexplained", { n: fmtN(c.gap) }))}</span>` : ""}${s.unassigned ? ` · ${esc(t("{n} not credited", { n: fmtN(s.unassigned) }))}` : ""}`;
         }
         // The battle meter's head, short (operator, 2026-11-23: the long line was too wordy): the party's damage and DPS
         // beside the title, then the place and the time in combat, and the check as a badge whose tooltip says the rest.
         function meterHeadShort(s) {
             const total = sessTotal(s), secs = sessSecs(s), c = s.check || {};
-            const span = s.streak ? `${s.runs} run${s.runs === 1 ? "" : "s"} finished${s.live ? " + this one" : ""} since ${fmtClock(num(s.startAt))}` : s.aggregate ? meterResult(s) : `${s.firstWave === s.lastWave ? `wave ${s.lastWave}` : `waves ${s.firstWave}–${s.lastWave}`}${s.stitched ? ", stitched after a reload" : ""}${s.live ? "" : `, ${meterResult(s)}`}`;
-            const tip = `${span}. Checked ${c.balanced || 0} of ${c.waves || 0} finished waves: every monster seen at 0 HP and every point credited to a player.${c.gap ? ` ${fmtN(c.gap)} HP unexplained.` : ""}${s.unassigned ? ` ${fmtN(s.unassigned)} not credited.` : ""}`;
+            const span = s.streak || s.aggregate ? meterResult(s) : `${wavesText(s)}${s.stitched ? ", " + t("stitched after a reload") : ""}${s.live ? "" : `, ${meterResult(s)}`}`;
+            const tip = `${span}. ${t("Checked {a} of {b} finished waves: every monster seen at 0 HP and every point credited to a player.", { a: c.balanced || 0, b: c.waves || 0 })}${c.gap ? " " + t("{n} HP unexplained.", { n: fmtN(c.gap) }) : ""}${s.unassigned ? " " + t("{n} not credited.", { n: fmtN(s.unassigned) }) : ""}`;
             const ok = !c.gap && !s.unassigned;
-            return { total: fmtN(total), dps: Math.round(total / secs).toLocaleString(), line: `${meterWhere(s)}${s.streak && s.runs ? ` · ${s.runs + (s.live ? 1 : 0)} runs` : ""} · ${fmtDur(num(s.combatMs))} in combat${s.live || s.streak ? "" : ` · ${esc(meterResult(s))}`}`, badge: `<span class="mds-check${ok ? "" : " bad"}" title="${esc(tip)}">${ok ? "✓" : "!"} ${c.balanced || 0}/${c.waves || 0}</span>` };
+            return { total: fmtN(total), dps: Math.round(total / secs).toLocaleString(), line: `${meterWhere(s)}${s.streak && s.runs ? ` · ${esc(t("{n} runs", { n: s.runs + (s.live ? 1 : 0) }))}` : ""} · ${esc(t("{time} in combat", { time: fmtDur(num(s.combatMs)) }))}${s.live || s.streak ? "" : ` · ${esc(meterResult(s))}`}`, badge: `<span class="mds-check${ok ? "" : " bad"}" title="${esc(tip)}">${ok ? "✓" : "!"} ${c.balanced || 0}/${c.waves || 0}</span>` };
         }
         function meterView(s, expanded) {
             if (!s || !s.players || !Object.keys(s.players).length) return `<p class="mds-note">No battle seen yet: the meter starts with the next wave.</p>`;
@@ -3239,25 +3343,25 @@
             const top = players.length ? players[0].dealt : 0;
             const rows = players.map(p => {
                 const isOpen = expanded.has(p.name), me = p.name === state.characterName;
-                const main = `<tr class="mds-mrow${isOpen ? " open" : ""}${me ? " mds-me" : ""}" data-player="${esc(p.name)}" title="Click for ${esc(p.name)}'s abilities"><td class="mds-mname">${esc(p.name)}</td><td class="mds-mbar"><span class="fill" style="width:${top > 0 ? (100 * p.dealt / top).toFixed(1) : 0}%"></span><span class="v">${fmtN(p.dealt)}</span></td><td class="n">${pct1(p.dealt, total)}</td><td class="n">${Math.round(p.dealt / secs).toLocaleString()}</td><td class="n">${fmtN(p.taken)}</td><td class="n">${fmtN(p.healDone)}</td><td class="n">${fmtN(p.healed)}</td><td class="n">${p.deaths || 0}</td></tr>`;
+                const main = `<tr class="mds-mrow${isOpen ? " open" : ""}${me ? " mds-me" : ""}" data-player="${esc(p.name)}" title="${esc(t("Click for {name}'s abilities", { name: p.name }))}"><td class="mds-mname" translate="no">${esc(p.name)}</td><td class="mds-mbar"><span class="fill" style="width:${top > 0 ? (100 * p.dealt / top).toFixed(1) : 0}%"></span><span class="v">${fmtN(p.dealt)}</span></td><td class="n">${pct1(p.dealt, total)}</td><td class="n">${Math.round(p.dealt / secs).toLocaleString()}</td><td class="n">${fmtN(p.taken)}</td><td class="n">${fmtN(p.healDone)}</td><td class="n">${fmtN(p.healed)}</td><td class="n">${p.deaths || 0}</td></tr>`;
                 return isOpen ? `${main}<tr class="mds-mdetail"><td colspan="8">${meterDetail(p, secs, s)}</td></tr>` : main;
             }).join("");
             return `<table class="mds-meter"><thead><tr><th>Player <span class="mds-hint">· click for details</span></th><th>Damage</th><th class="n">Share</th><th class="n">DPS</th><th class="n">Taken</th><th class="n" title="What this player's heal abilities and Life Drain restored">Healing done</th><th class="n" title="Every HP this player regained: heals, Life Drain, regeneration, food and passives">Healed</th><th class="n">Deaths</th></tr></thead><tbody>${rows}</tbody></table>`;
         }
         const monsterIcon = h => { const b = spriteOf("combat_monsters_sprite"); return b && h ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${String(h).split("/").pop()}"></use></svg>` : ""; };
-        const takenSubName = k => k === "old" ? "Recorded before the breakdown (update 0.2.1)" : k === "auto" ? "Auto attack" : k === "thorns" ? "Thorns (damage sent back)" : k === "dot:?" ? "Over time" : /^dot:/.test(k) ? `${abilityName(k.slice(4))} over time` : /^cost:/.test(k) ? (k === "cost:auto" ? "HP cost on auto attacks" : `HP cost with ${abilityName(k.slice(5))}`) : /^\/abilities\//.test(k) ? abilityName(k) : k;
+        const takenSubName = k => k === "old" ? t("Recorded before the breakdown (update 0.2.1)") : k === "auto" ? t("Auto attack") : k === "thorns" ? t("Thorns (damage sent back)") : k === "dot:?" ? t("Over time") : /^dot:/.test(k) ? t("{ability} over time", { ability: abilityName(k.slice(4)) }) : /^cost:/.test(k) ? (k === "cost:auto" ? t("HP cost on auto attacks") : t("HP cost with {ability}", { ability: abilityName(k.slice(5)) })) : /^\/abilities\//.test(k) ? abilityName(k) : k;
         const takenSubIcon = k => { const h = /^(dot|cost):/.test(k) ? k.slice(k.indexOf(":") + 1) : k; return /^\/abilities\//.test(h) ? abilityIcon(h) : ""; };
-        const healSubName = k => k === "old" ? "Recorded before the breakdown (update 0.2.1)" : k === "regen" ? "Regeneration (every 10 s)" : k === "food" ? "Food" : k === "other" ? "Other (passives, lifesteal)" : /^food:/.test(k) ? itemName(k.slice(5)) : k;
+        const healSubName = k => k === "old" ? t("Recorded before the breakdown (update 0.2.1)") : k === "regen" ? t("Regeneration (every 10 s)") : k === "food" ? t("Food") : k === "other" ? t("Other (passives, lifesteal)") : /^food:/.test(k) ? itemName(k.slice(5)) : k;
         const healSubIcon = k => (/^food:/.test(k) ? icon(k.slice(5)) : "");
         // Which source rows are open (damage taken from X, healed by Y): kept so a redraw keeps them.
         const metSubs = new Set();
         function meterDetail(p, secs, s) {
             const abs = Object.entries(p.abilities || {}).sort((a, b) => (b[1].dmg - a[1].dmg) || (b[1].heal - a[1].heal) || (b[1].casts - a[1].casts));
             const rows = abs.map(([k, a]) => `<tr><td>${meterKeyIcon(k)}${esc(meterKeyName(k))}</td><td class="n">${fmtN(a.dmg)}</td><td class="n">${pct1(a.dmg, p.dealt)}</td><td class="n">${Math.round(a.dmg / secs).toLocaleString()}</td><td class="n">${a.casts || "–"}</td><td class="n">${a.hits || 0}</td><td class="n">${a.misses || 0}</td><td class="n">${a.heal ? fmtN(a.heal) : "–"}</td></tr>`).join("") || `<tr><td colspan="8">Nothing used yet.</td></tr>`;
-            const healName = k => k === "regen" ? "Regeneration, food and passives" : k.includes(": ") ? `${k.slice(0, k.indexOf(": "))}'s ${meterKeyName(k.slice(k.indexOf(": ") + 2))}` : meterKeyName(k);
+            const healName = k => k === "regen" ? t("Regeneration, food and passives") : k.includes(": ") ? t("{name}'s {ability}", { name: k.slice(0, k.indexOf(": ")), ability: meterKeyName(k.slice(k.indexOf(": ") + 2)) }) : meterKeyName(k);
             const cnt = (o, k) => (o && o[k] != null ? Number(o[k]).toLocaleString() : "–");
             // Damage taken and healing, the abilities' format: a folded header with the total, open on a click.
-            const fold = (key, title, total, rows, head, noun = "source", nouns = noun + "s") => { const n = rows.length; return `<details class="mds-mfold"${metFolds.has(key) ? " open" : ""}><summary data-fold="${key}"><b>${title} ${fmtN(total)}</b> <span class="mds-hint">· ${n} ${n === 1 ? noun : nouns}</span></summary>${n ? `<table class="mds-msub"><thead><tr>${head}</tr></thead><tbody>${rows.join("")}</tbody></table>` : ""}</details>`; };
+            const fold = (key, title, total, rows, head, noun = "source", nouns = noun + "s") => { const n = rows.length; return `<details class="mds-mfold"${metFolds.has(key) ? " open" : ""}><summary data-fold="${key}"><b>${esc(t(title + " {n}", { n: fmtN(total) }))}</b> <span class="mds-hint">· ${esc(t(n === 1 ? "{n} " + noun : "{n} " + nouns, { n }))}</span></summary>${n ? `<table class="mds-msub"><thead><tr>${head}</tr></thead><tbody>${rows.join("")}</tbody></table>` : ""}</details>`; };
             const monsters = (s && s.monsters) || {};
             // A source row opens on a click into what made it up (its own rows, indented), when that was recorded.
             const head = (fold, k, label, iconHtml, cells, subs) => { const id = `${fold}|${k}`, has = subs && Object.keys(subs).length > 0, isOpen = has && metSubs.has(id); return `<tr class="${has ? `mds-subhead${isOpen ? " open" : ""}` : ""}"${has ? ` data-sub="${esc(id)}" title="Click for what made it up"` : ""}><td>${iconHtml}${esc(label)}</td>${cells}</tr>`; };
@@ -3267,7 +3371,7 @@
             const anyTaken = !!(p.takenSub && Object.keys(p.takenSub).length), anyHeal = !!(p.healSub && Object.keys(p.healSub).length);
             const taken = Object.entries(p.takenBy || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => {
                 const subs = withOld(p.takenSub && p.takenSub[k], v, anyTaken, { hits: 0, misses: 0 }), id = `taken|${k}`;
-                const row = head("taken", k, k, monsterIcon(monsters[k]), `<td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.taken)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.takenHits, k)}</td><td class="n">${p.takenHits && p.takenHits[k] != null ? Number((p.takenMiss || {})[k] || 0).toLocaleString() : "–"}</td>`, subs);
+                const row = head("taken", k, monsters[k] ? gameName("monsterNames", monsters[k], k) : k === "Own actions (HP cost)" || k === "Damage over time" ? t(k) : k, monsterIcon(monsters[k]), `<td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.taken)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.takenHits, k)}</td><td class="n">${p.takenHits && p.takenHits[k] != null ? Number((p.takenMiss || {})[k] || 0).toLocaleString() : "–"}</td>`, subs);
                 if (!subs || !metSubs.has(id)) return row;
                 return row + Object.entries(subs).sort((a, b) => b[1].amt - a[1].amt || b[1].misses - a[1].misses).map(([sk, r]) => `<tr class="mds-subrow"><td>${takenSubIcon(sk)}${esc(takenSubName(sk))}</td><td class="n">${fmtN(r.amt)}</td><td class="n">${pct1(r.amt, p.taken)}</td><td class="n">${Math.round(r.amt / secs).toLocaleString()}</td><td class="n">${(r.hits || 0).toLocaleString()}</td><td class="n">${(r.misses || 0).toLocaleString()}</td></tr>`).join("");
             });
@@ -3281,6 +3385,22 @@
             return `${fold("abilities", "Damage dealt", p.dealt, abs.length ? rows.split("</tr>").filter(Boolean).map(r => r + "</tr>") : [], `<th>Ability</th><th class="n">Damage</th><th class="n">Share</th><th class="n">DPS</th><th class="n" title="Times used. Parry, thorns and damage over time are not cast">Uses</th><th class="n" title="Enemies hit: an area ability counts each enemy it hits">Hits</th><th class="n">Misses</th><th class="n">Healing</th>`, "ability", "abilities")}${fold("taken", "Damage taken", p.taken, taken, `<th>Source</th><th class="n">Damage</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n" title="Attacks or ticks that took HP">Hits</th><th class="n" title="Attacks that took no HP: missed, dodged or blocked">Misses</th>`)}${fold("healed", "Healed", p.healed, healed, `<th>Source</th><th class="n">Healing</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n" title="Times this source restored HP">Times</th>`)}`;
         }
         let dmgPick = "live", dmgHtml = "", dmgSessKey = "";
+        // Ctrl+click (Cmd on a Mac) on a table row, the meters' player rows included (operator, 2026-11-23): the row as
+        // one line in the game's chat input, from the visible column headers and values in the order shown.
+        let chatOut = null;
+        function rowChatLine(tr) {
+            const table = tr.closest("table"); const head = table && table.tHead && table.tHead.rows[0]; if (!head) return "";
+            if (tr.cells.length === 1 && tr.cells[0].colSpan > 1) return "";
+            const heads = [...head.children], cells = [...tr.cells], parts = [];
+            for (let i = 0; i < cells.length; i++) {
+                const th = heads[i], td = cells[i]; if (!th || !td || th.hidden || td.hidden || getComputedStyle(td).display === "none") continue;
+                if (td.querySelector("button") && !td.textContent.replace(/\s+/g, "").replace(/(Sell|Keep…|Shop|Buy|Done|Value…)/g, "")) continue;
+                const label = (th.firstChild && th.firstChild.nodeType === 3 ? th.firstChild.textContent : th.textContent).trim(); const value = td.innerText.replace(/\s*\n\s*/g, "; ").replace(/\s+/g, " ").trim();
+                if (!value || value === "–") continue;
+                parts.push(i === 0 || !label ? value : `${label} ${value}`);
+            }
+            return parts.join(" · ");
+        }
         // Which detail folds are open (damage taken, healed): kept here so a redraw keeps them, shared by every player.
         // Every popup and every opened player starts the same way (operator, 2026-11-23): damage dealt open, damage taken
         // and healing folded, no source opened.
@@ -3299,16 +3419,18 @@
             for (const a of Object.values(isObj(state.meta.damagePartial) ? state.meta.damagePartial : {})) { const t = slot(a.zone, a.tier); meterAdd(t, a); t.pieces += a.pieces || 1; }
             return [...by.values()].sort((a, b) => num(b.lastAt) - num(a.lastAt));
         }
-        function renderDamage() {
+        // Drawn by the panel's render and on every battle message: translated after each pass.
+        function renderDamage() { renderDamagePane(); const pane = els["mds-dmg-meter"] && els["mds-dmg-meter"].closest(".mds-pane"); if (pane) localize(pane); }
+        function renderDamagePane() {
             if (!els["mds-dmg-meter"]) return;
             const live = state.meter.snapshot(serverNow()), list = damageSessions(), totals = damageTotals();
             const plain = h => h.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
             const isRun = s => !!(s.zone && ref.dungeons[s.zone]);
-            const label = s => s.live ? `${isRun(s) ? "Current run" : "Current session"} · ${plain(meterWhere(s))} · ${meterResult(s)}`
+            const label = s => s.live ? `${t(isRun(s) ? "Current run" : "Current session")} · ${plain(meterWhere(s))} · ${meterResult(s)}`
                 : s.aggregate ? `${plain(meterWhere(s))} · ${meterResult(s)}`
                 : `${fmtTime(num(s.endAt || s.at))} · ${plain(meterWhere(s))} · ${meterResult(s)} · ${fmtDur(num(s.combatMs))}`;
             // Grouped: what is happening now, the totals per place (every run seen, whole or in part), the saved runs.
-            const groups = [["Now", live ? [["live", label(live)]] : []], ["Totals per place (every run seen, full or in part)", totals.map(t => [t.id, label(t)])], [`Saved ${list.some(isRun) ? "runs" : "sessions"} (seen from start to end), newest first`, list.slice(0, 300).map(e => [e.id, label(e)])]];
+            const groups = [[t("Now"), live ? [["live", label(live)]] : []], [t("Totals per place (every run seen, full or in part)"), totals.map(x => [x.id, label(x)])], [t(list.some(isRun) ? "Saved runs (seen from start to end), newest first" : "Saved sessions (seen from start to end), newest first"), list.slice(0, 300).map(e => [e.id, label(e)])]];
             const opts = groups.flatMap(g => g[1]);
             const known = id => list.some(e => e.id === id) || totals.some(t => t.id === id);
             if (dmgPick === "live" && !live) dmgPick = list.length ? list[0].id : totals.length ? totals[0].id : "live";
@@ -3366,9 +3488,9 @@
                 document.body.appendChild(bmPop);
             }
             const p = s && s.players && s.players[bmPopName], secs = sessSecs(s), total = sessTotal(s);
-            const sub = p ? `${fmtN(p.dealt)} damage · ${pct1(p.dealt, total)} of the party · ${Math.round(p.dealt / secs).toLocaleString()} DPS · taken ${fmtN(p.taken)} · healed ${fmtN(p.healed)}${p.deaths ? ` · ${p.deaths} death${p.deaths === 1 ? "" : "s"}` : ""}` : "";
-            const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage" style="transform:translate(${bmPopPos.x}px,${bmPopPos.y}px)"><div class="mds-pop-head"><strong>${esc(bmPopName)}</strong><small>${sub}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs, s) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
-            if (html !== bmPopHtml) { morph(bmPop, html); bmPopHtml = html; }
+            const sub = p ? esc(t("{dmg} damage · {share} of the party · {dps} DPS · taken {taken} · healed {healed}", { dmg: fmtN(p.dealt), share: pct1(p.dealt, total), dps: Math.round(p.dealt / secs).toLocaleString(), taken: fmtN(p.taken), healed: fmtN(p.healed) }) + (p.deaths ? " · " + t(p.deaths === 1 ? "{n} death" : "{n} deaths", { n: p.deaths }) : "")) : "";
+            const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage" style="transform:translate(${bmPopPos.x}px,${bmPopPos.y}px)"><div class="mds-pop-head"><strong translate="no">${esc(bmPopName)}</strong><small>${sub}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs, s) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
+            if (html !== bmPopHtml) { morph(bmPop, html); bmPopHtml = html; localize(bmPop); }
             bmPop.hidden = false;
         }
         function renderBattleMeter() {
@@ -3380,7 +3502,9 @@
                     const b = e.target.closest("button[data-bm]");
                     if (b && b.dataset.bm === "mode") { try { localStorage.setItem(BM_MODE_KEY, bmPerRun() ? "all" : "run"); } catch (_e) { /* fine */ } bmHtml = ""; renderBattleMeter(); return; }
                     if (b) { if (b.dataset.bm === "hide") { try { localStorage.setItem(BM_KEY, "off"); } catch (_e) { /* fine */ } const cb = root && root.querySelector("#mds-bm-on"); if (cb) cb.checked = false; renderBattleMeter(); } else { tab = "damage"; dmgPick = "live"; setTab("damage", true); setOpen(true); } return; }
-                    const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; bmPopName = tr.dataset.player; bmPopHtml = ""; metFoldsReset(); renderBattleMeter();
+                    const tr = e.target.closest("tr.mds-mrow"); if (!tr) return;
+                    if (e.ctrlKey || e.metaKey) { const line = rowChatLine(tr); if (line && chatOut) { e.preventDefault(); chatOut(line, tr); } return; }
+                    bmPopName = tr.dataset.player; bmPopHtml = ""; metFoldsReset(); renderBattleMeter();
                 });
             }
             const info = [...host.children].find(c => /BattlePanel_infoArea__/.test(c.className || ""));
@@ -3394,7 +3518,7 @@
             }
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
             const html = `<div class="mds-bm-head">${s ? (h => `<strong>Damage ${h.total}</strong><span class="mds-bm-dps">${h.dps} DPS</span><small>${h.line}</small>${h.badge}`)(meterHeadShort(s)) : `<strong>Damage</strong><small>starts with the next wave</small>`}<span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
-            if (html !== bmHtml || !bmEl.firstChild) { morph(bmEl, html); bmHtml = html; }
+            if (html !== bmHtml || !bmEl.firstChild) { morph(bmEl, html); bmHtml = html; localize(bmEl); }
             // Players' details open in a popup, so the meter is only ever its rows high. Never more than half the battle
             // panel, whose height is what the chat panel leaves (a dump 2026-11-23: window 1197 px, panel 424 px).
             const want = `${Math.max(140, Math.round(host.clientHeight * 0.5))}px`;
@@ -3427,10 +3551,11 @@
             ensure(); if (!root) return;
             if (!prices.map && !prices.fetching && !prices.error) fetchPrices(false).then(() => touch(), () => {});
             const used = state.events.filter(e => e.kind === "consume").reduce((s, e) => { s.n += e.qty; s.cost += e.unitCost != null ? e.unitCost * e.qty : 0; return s; }, { n: 0, cost: 0 });
-            const runLine = state.run ? `${zoneLabel(state.run.zone, state.run.tier)} · wave ${state.run.waves} · ${fmtDur(serverNow() - state.run.startAt)}` : "between runs";
-            els["mds-status"].textContent = `${state.characterName || "waiting for login"}${state.meta.recordStart ? ` · record since ${fmtTime(state.meta.recordStart)}` : " · no record yet"} · ${state.counts.events} events${state.reviews ? ` · ${state.reviews} for review` : ""} · ${runLine}${used.n ? ` · consumables used ${used.n} (${fmtCoins(used.cost)} at purchase price, recent events)` : ""}`;
+            const runLine = state.run ? `${zoneLabel(state.run.zone, state.run.tier)} · ${t("wave {n}", { n: state.run.waves })} · ${fmtDur(serverNow() - state.run.startAt)}` : t("between runs");
+            els["mds-status"].setAttribute("translate", "no");   // put together from translated parts here; the name stays as it is
+            els["mds-status"].textContent = `${state.characterName || t("waiting for login")}${state.meta.recordStart ? " · " + t("record since {date}", { date: fmtTime(state.meta.recordStart) }) : " · " + t("no record yet")} · ${t("{n} events", { n: state.counts.events })}${state.reviews ? " · " + t("{n} for review", { n: state.reviews }) : ""} · ${runLine}${used.n ? " · " + t("consumables used {n} ({cost} at purchase price, recent events)", { n: used.n, cost: fmtCoins(used.cost) }) : ""}`;
             root.querySelector("#mds-banner").hidden = bannerDismissed || state.lootLogReadThisSession || !state.ready;
-            setTimeout(foldSummaries, 0);
+            setTimeout(() => { foldSummaries(); localize(root); }, 0);
             for (const n of root.querySelectorAll(".mds-prices-note")) n.textContent = prices.fetching ? "fetching…" : prices.at ? `prices as of ${fmtTime(prices.at)}` : prices.error ? `prices: ${prices.error}` : "prices not fetched yet";
             if (tab === "overview") renderOverview();
             else if (tab === "runs") renderRuns(false);
@@ -3478,7 +3603,7 @@
     // per place, the session in progress and the battle tab's running total. The rest of the record is untouched.
     async function resetDamage() {
         if (!state.record) return;
-        if (!W.confirm(`Delete all damage meter data: ${state.damage.length} saved session${state.damage.length === 1 ? "" : "s"}, the totals per place and the run in progress? Runs, loot, XP and everything else stay.`)) return;
+        if (!W.confirm(t("Delete all damage meter data: {n} saved sessions, the totals per place and the run in progress? Runs, loot, XP and everything else stay.", { n: state.damage.length }))) return;
         for (const e of state.damage) state.record.remove("events", e.id);
         state.damage = []; state.meta.damagePartial = {}; state.streak = null;
         state.record.queue("meta", { key: "damagePartial", value: {} }); state.record.queue("meta", { key: "meterOpen", value: null });
@@ -3491,7 +3616,7 @@
     }
     async function resetRecord() {
         if (!state.record) return;
-        if (!W.confirm("Delete this character's whole Dungeon Stats record? Export it first if you want to keep it.")) return;
+        if (!W.confirm(t("Delete this character's whole Dungeon Stats record? Export it first if you want to keep it."))) return;
         await state.record.flush(); await state.record.clearAll();
         state.meta = {}; state.events = []; state.timeline = []; state.timelineRev++; state.consumeTotals.clear(); state.damage = []; state.lootLog.clear(); state.lootLogRev++; state.marketHistory.clear(); state.chatSeen.clear(); state.counts.events = 0; state.ledger.clear(); state.keyLots.clear(); keyAverages.clear(); state.run = null;
         panel.render();
