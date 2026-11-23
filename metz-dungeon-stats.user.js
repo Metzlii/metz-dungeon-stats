@@ -2388,6 +2388,8 @@
 #mds-bm tr.mds-flash td{background:rgba(69,200,216,.18)}
 /* Keys in the battle window's bottom frame: the game's small item tile, Toolasha's time line under it. */
 #mds-bkeys{flex:0 0 auto;width:max-content;font-size:var(--font-size-base);line-height:1.3;font-weight:500;text-align:center}
+#mds-tip{position:fixed;z-index:100000;pointer-events:none;max-width:420px;padding:6px 9px;background:#101b24;color:#e6eff3;border-radius:6px;box-shadow:0 0 0 1px #3f424d,0 6px 18px rgba(0,0,0,.45);font:400 12px/1.5 "Inter",system-ui,sans-serif;white-space:pre;text-align:left;font-variant-numeric:tabular-nums}
+#mds-tip[hidden]{display:none}
 .mds-keywarn{font-size:12px;font-weight:400;white-space:nowrap;cursor:default}
 #mds-bkeys .mds-keywarn{margin-left:8px}
 #mds-bkeys .mds-bk-only .mds-keywarn{margin-left:0}
@@ -2844,7 +2846,7 @@
             }
             for (const which of ["amber", "red"]) { const inp = root.querySelector("#mds-key-" + which); inp.value = String(keyHours(which)); inp.addEventListener("change", () => { const v = Number(inp.value); try { if (inp.value !== "" && v >= 0) localStorage.setItem(KEYH_KEY + which, String(v)); else localStorage.removeItem(KEYH_KEY + which); } catch (_e) { /* fine */ } inp.value = String(keyHours(which)); bkHtml = ""; bmHtml = ""; battleKeys(); renderBattleMeter(); }); }
             { const bm = root.querySelector("#mds-bm-on"); bm.checked = bmOn(); bm.addEventListener("change", () => { try { localStorage.setItem(BM_KEY, bm.checked ? "on" : "off"); } catch (_e) { /* fine */ } renderBattleMeter(); }); }
-            setInterval(() => { try { if (!document.hidden) { battleSplit(); battleKeys(); consTips(); renderBattleMeter(); if (open && tab === "damage") renderDamage(); if (open && tab === "party") renderParty(); } } catch (error) { warn("damage meter view", error); } }, 1000);
+            setInterval(() => { try { if (!document.hidden) { battleSplit(); battleKeys(); consTips(); renderBattleMeter(); if (tipFor) tipPlace(); if (open && tab === "damage") renderDamage(); if (open && tab === "party") renderParty(); } } catch (error) { warn("damage meter view", error); } }, 1000);
             setInterval(() => { if (open && tab === "xp") touch(); }, 5000);
             els["mds-plan-owned"].addEventListener("change", e => { plan.owned = !!e.target.checked; savePlan(); renderPlan(); });
             root.querySelector("#mds-plan-craft").addEventListener("click", () => { const p = plan.key && planRecipe(plan.key); if (p) goToAction(p.action); });
@@ -3799,7 +3801,7 @@
             const color = k <= 0 || (avgMs == null && k <= 3) ? "#ff6b6b" : runwayColor(sec, "#8fa3b0");
             const text = k <= 0 ? t("{name} is out of keys", { name }) : avgMs != null ? t("{name} out of keys in {time}", { name, time: runwayText(sec) }) : t("{name} has {n} keys", { name, n: k.toLocaleString() });
             const tip = [t("Party entry keys")].concat(rows.slice().sort((a, b) => a[1] - b[1]).map(([nm, n]) => `${nm}: ${n.toLocaleString()}${avgMs != null ? ` (${runwayText(n * avgMs / 1000)})` : ""}`)).join(String.fromCharCode(10));
-            return `<span class="mds-keywarn" translate="no" style="color:${color}" title="${esc(tip)}">${color === "#ff6b6b" ? "⚠ " : ""}${esc(text)}</span>`;
+            return `<span class="mds-keywarn" translate="no" style="color:${color}" data-mds-tip="${esc(tip)}">${color === "#ff6b6b" ? "⚠ " : ""}${esc(text)}</span>`;
         }
         // Who in the party runs out of a consumable first (operator, 2026-11-23): per player and item, the count held
         // over the rate used since this page first saw it (10 minutes and one use at least), same colours and places
@@ -3815,8 +3817,26 @@
             const text = x.sec <= 0 ? t("{name} is out of {item}", { name: x.name, item: itemName(x.item) }) : t("{name} out of {item} in {time}", { name: x.name, item: itemName(x.item), time: runwayText(x.sec) });
             const first = []; for (const r of all) if (!first.some(f => f.name === r.name)) first.push(r);
             const tip = [t("Party consumables")].concat(first.map(r => `${r.name}: ${itemName(r.item)} ${r.count.toLocaleString()} (${runwayText(r.sec)})`)).join(String.fromCharCode(10));
-            return `<span class="mds-keywarn" translate="no" style="color:${color}" title="${esc(tip)}">${color === "#ff6b6b" ? "⚠ " : ""}${esc(text)}</span>`;
+            return `<span class="mds-keywarn" translate="no" style="color:${color}" data-mds-tip="${esc(tip)}">${color === "#ff6b6b" ? "⚠ " : ""}${esc(text)}</span>`;
         }
+        // Our own tooltip for the battle window's keys, consumables and warning lines (operator, 2026-11-23: the
+        // browser's title tooltip takes about a second and cannot be made faster). Shown at once on hover, above the
+        // element (below when there is no room), text from data-mds-tip, kept current while it is open.
+        let tipEl = null, tipFor = null;
+        function tipPlace() {
+            if (!tipFor || !tipFor.isConnected || !tipFor.getAttribute("data-mds-tip")) { tipFor = null; if (tipEl) tipEl.hidden = true; return; }
+            const text = tipFor.getAttribute("data-mds-tip"); if (tipEl.textContent !== text) tipEl.textContent = text;
+            tipEl.hidden = false;
+            const r = tipFor.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+            const left = Math.max(4, Math.min(window.innerWidth - w - 4, r.left + r.width / 2 - w / 2)), top = r.top - h - 6 >= 4 ? r.top - h - 6 : r.bottom + 6;
+            tipEl.style.left = `${Math.round(left)}px`; tipEl.style.top = `${Math.round(top)}px`;
+        }
+        document.addEventListener("mouseover", e => {
+            const el = e.target && e.target.closest ? e.target.closest("[data-mds-tip]") : null; if (el === tipFor) return;
+            tipFor = el;
+            if (el && !tipEl) { tipEl = document.createElement("div"); tipEl.id = "mds-tip"; tipEl.setAttribute("translate", "no"); tipEl.hidden = true; document.body.appendChild(tipEl); }
+            if (tipEl) tipPlace();
+        }, true);
         // Seconds a tracked consumable lasts at the rate seen so far: 0 at none, null until 10 minutes and one use.
         const consSec = r => (r.count <= 0 ? 0 : r.t - r.t0 >= 600e3 && r.used > 0 ? r.count * (r.t - r.t0) / r.used / 1000 : null);
         // Hovering one of your own consumables in the bottom frame lists the party's item in the same slot (food 1-3,
@@ -3834,7 +3854,7 @@
                     rows.sort((a, b) => (a.sec == null ? Infinity : a.sec) - (b.sec == null ? Infinity : b.sec));
                     tip = [t(me.kind === "drink" ? "Party drink slot {n}" : "Party food slot {n}", { n: me.slot + 1 })].concat(rows.map(x => `${x.name}: ${itemName(x.item)} ${x.r.count.toLocaleString()} (${x.sec == null ? "–" : runwayText(x.sec)})`)).join(String.fromCharCode(10));
                 }
-                if ((el.getAttribute("title") || "") !== tip) { if (tip) el.setAttribute("title", tip); else el.removeAttribute("title"); }
+                if ((el.getAttribute("data-mds-tip") || "") !== tip) { if (tip) el.setAttribute("data-mds-tip", tip); else el.removeAttribute("data-mds-tip"); }
             }
         }
         // The Consumables tab (operator, 2026-11-23): the whole party at a glance, one row a member, a column a slot:
@@ -3882,7 +3902,7 @@
                 const n = held(x.item), sec = avgMs != null ? n / x.perRun * avgMs / 1000 : NaN;
                 const tip = [itemName(x.item), avgMs != null ? t("Lasts about {time} at {run} a run", { time: runwayText(sec), run: fmtDur(avgMs) }) : t("No run time for this dungeon yet")];
                 if (x.entry && pk && Object.keys(pk).length) { tip.push("", t("Party entry keys")); for (const [name, k] of Object.entries(pk)) tip.push(`${name}: ${k.toLocaleString()}${avgMs != null ? ` (${runwayText(k * avgMs / 1000)})` : ""}`); }
-                return `<div class="mds-bk-cell" title="${esc(tip.join(String.fromCharCode(10)))}"><div class="mds-bk-tile"><svg aria-hidden="true"><use href="${base}#${x.item.split("/").pop()}"></use></svg><span>${n}</span></div><div class="mds-bk-time" style="color:${runwayColor(sec)}">${runwayText(sec)}</div></div>`;
+                return `<div class="mds-bk-cell" data-mds-tip="${esc(tip.join(String.fromCharCode(10)))}"><div class="mds-bk-tile"><svg aria-hidden="true"><use href="${base}#${x.item.split("/").pop()}"></use></svg><span>${n}</span></div><div class="mds-bk-time" style="color:${runwayColor(sec)}">${runwayText(sec)}</div></div>`;
             }).join("") + `</div>`;
             if (!bkEl) { bkEl = document.createElement("div"); bkEl.id = "mds-bkeys"; bkEl.setAttribute("translate", "no"); }
             if (bkHtml !== html || !bkEl.firstChild) { bkEl.innerHTML = html; bkHtml = html; }
