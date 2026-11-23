@@ -497,6 +497,8 @@
         if (state.record) state.record.queue("meta", { key: "meterOpen", value: null });
         meterCheckpointAt = 0;
         if (!meterWhole(s)) { meterPartial(s); return null; }
+        // The same run saved once only (battle ids repeat over days, so the start time decides).
+        if (state.damage.some(e => e.battleId === s.battleId && num(e.startAt) === num(s.startAt) && e.zone === s.zone)) return null;
         const ev = emit("damage", s, "battle", s.endAt || s.lastAt);
         state.damage.push(ev);
         return ev;
@@ -3164,9 +3166,10 @@
         const meterKeyIcon = k => { const h = /^dot:/.test(k) ? k.slice(4) : k; return /^\/abilities\//.test(h) ? abilityIcon(h) : ""; };
         const sessTotal = s => Object.values((s && s.players) || {}).reduce((a, p) => a + (p.dealt || 0), 0);
         const sessSecs = s => Math.max(1, num(s && s.combatMs) / 1000);
-        // Places and results in words (operator, 2026-11-23: the session list read as code): "T2 Pirate Cove", "cleared".
+        // Places: a dungeon by its code (T2D4: short, and players know it; operator 2026-11-23), a planet by name, the
+        // results in words ("cleared").
         const placeName = z => (z ? (ref.dungeons[z] ? ref.dungeons[z].name : shortAction(z).replace(/_/g, " ").replace(/^./, c => c.toUpperCase())) : "Unknown place");
-        const meterWhere = s => esc(s.zone ? `${s.tier != null && (ref.dungeons[s.zone] || s.tier) ? `T${s.tier} ` : ""}${placeName(s.zone)}` : placeName(null));
+        const meterWhere = s => (s.zone && ref.dungeons[s.zone] ? zoneLabel(s.zone, s.tier) : esc(s.zone ? `${placeName(s.zone)}${s.tier ? ` T${s.tier}` : ""}` : placeName(null)));
         const RESULT_WORDS = { clear: "cleared", fail: "failed", stop: "ended early", gap: "went quiet", interrupted: "cut short" };
         const resultWord = r => RESULT_WORDS[r] || r || "ended";
         const meterResult = s => (s.streak ? `${s.runs} finished${s.live ? " + this one" : ""} since ${fmtClock(num(s.startAt))}` : s.aggregate ? `totals: ${s.runs} full run${s.runs === 1 ? "" : "s"}${s.pieces ? `, ${s.pieces} partly seen` : ""}` : s.live ? (s.result ? `${resultWord(s.result)}, closing` : serverNow() - num(s.lastAt) > METER_STALE_MS ? "paused" : "in progress") + (s.stitched ? " (rejoined after a reload)" : "") : resultWord(s.result) + (s.stitched ? " (rejoined after a reload)" : ""));
