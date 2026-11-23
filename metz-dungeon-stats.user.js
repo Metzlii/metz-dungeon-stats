@@ -3827,12 +3827,18 @@
         // browser's title tooltip takes about a second and cannot be made faster). Shown at once on hover, below the
         // element so the game's own item tooltip above it stays clear (above only when there is no room below), text from data-mds-tip, kept current while it is open.
         let tipEl = null, tipFor = null;
+        // Under a consumable tile Toolasha writes its own time line: the tooltip starts below that row.
+        function tipBottom(el, r) {
+            let b = r.bottom; const frame = el.closest('[class*="BattlePanel_combatConsumables__"]');
+            if (frame) for (const x of frame.querySelectorAll(".mwi-combat-consumable-timer")) b = Math.max(b, x.getBoundingClientRect().bottom);
+            return b;
+        }
         function tipPlace() {
             if (!tipFor || !tipFor.isConnected || !tipFor.getAttribute("data-mds-tip")) { tipFor = null; if (tipEl) tipEl.hidden = true; return; }
             const text = tipFor.getAttribute("data-mds-tip"); if (tipEl.textContent !== text) tipEl.textContent = text;
             tipEl.hidden = false;
             const r = tipFor.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
-            const left = Math.max(4, Math.min(window.innerWidth - w - 4, r.left + r.width / 2 - w / 2)), top = r.bottom + 6 + h <= window.innerHeight - 4 || r.top - h - 6 < 4 ? r.bottom + 6 : r.top - h - 6;
+            const left = Math.max(4, Math.min(window.innerWidth - w - 4, r.left + r.width / 2 - w / 2)), bottom = tipBottom(tipFor, r), top = bottom + 6 + h <= window.innerHeight - 4 || r.top - h - 6 < 4 ? bottom + 6 : r.top - h - 6;
             tipEl.style.left = `${Math.round(left)}px`; tipEl.style.top = `${Math.round(top)}px`;
         }
         document.addEventListener("mouseover", e => {
