@@ -420,6 +420,14 @@
         const abilityOf = h => (cfg.ability && h && cfg.ability(h)) || null;
         const FLAGS = ["isBlinded", "isStunned", "isSilenced"];
         let cur = null, battle = null, seq = 0;
+        // The regeneration clock (operator, 2026-11-23: one tick shown as "Other"). Regeneration ticks every 10 s for
+        // everyone at once; in the capture two or more players gain MP with nobody acting only on that clock (gaps
+        // of exactly 10 or 20 s). A heal or mana gain on one player alone is that tick too when it lands on the
+        // clock (within 0.4 s) AND is the amount that player's tick is known to give, or less with the player ending
+        // full. On the clock alone is not enough: about 8% of food and Bloom heals land there by chance.
+        let regenAt = null; const regenHp = {}, regenMp = {};
+        const onRegenClock = at => { if (regenAt == null) return false; const x = (((at - regenAt) % 10000) + 10000) % 10000; return Math.min(x, 10000 - x) <= 400; };
+        const regenTick = (known, gain, full) => known > 0 && (gain === known || (gain < known && full));
         const blankPlayer = (name, id) => ({ name, id: id != null ? String(id) : null, dealt: 0, hits: 0, misses: 0, casts: 0, taken: 0, healed: 0, healDone: 0, deaths: 0, abilities: {}, takenBy: {}, healBy: {}, takenHits: {}, takenMiss: {}, healHits: {}, takenSub: {}, healSub: {}, mpSpent: 0, mpGain: 0, mana: { spent: {}, gain: {} } });
         const abilityRow = (p, key) => p.abilities[key] || (p.abilities[key] = { dmg: 0, hits: 0, misses: 0, casts: 0, heal: 0 });
         function open(m, at) {
@@ -448,7 +456,7 @@
         function unit(u, i, isPlayer) {
             const det = (u.combatDetails && u.combatDetails.combatStats) || {};
             return { i, isPlayer, name: (isPlayer ? (u.character && u.character.name) || u.name : u.name || String(u.hrid || "").split("/").pop()) || `#${i}`, id: isPlayer && u.character ? u.character.id : null,
-                hp: Number(u.currentHitpoints) || 0, mhp: Number(u.maxHitpoints) || 0, mp: Number(u.currentManapoints) || 0, bloom: Number(det.bloom) || 0, atk: Number(u.attackAttemptCounter) || 0, dmg: Number(u.damageSplatCounter) || 0,
+                hp: Number(u.currentHitpoints) || 0, mhp: Number(u.maxHitpoints) || 0, mp: Number(u.currentManapoints) || 0, mmp: Number(u.maxManapoints) || 0, bloom: Number(det.bloom) || 0, atk: Number(u.attackAttemptCounter) || 0, dmg: Number(u.damageSplatCounter) || 0,
                 prep: u.isPreparingAutoAttack ? "auto" : (u.preparingAbilityHrid || "auto"), flags: Object.fromEntries(FLAGS.map(f => [f, !!u[f]])),
                 counters: (Number(det.parry) || 0) + (Number(det.thorns) || 0) + (Number(det.retaliation) || 0) > 0, dotBy: {}, dotFrom: null, hrid: isPlayer ? null : u.hrid || null };
         }
@@ -488,10 +496,12 @@
             // Mana: an ability's cost on the player acting, the regeneration tick, food and drink.
             {
                 const gainers = ch.filter(x => x.side === "p" && x.dmp > 0).length;
+                if (gainers >= 2 && !pa.length) { regenAt = at; for (const x of ch) if (x.side === "p" && x.dmp > 0 && !(x.s.mmp > 0 && x.s.mp >= x.s.mmp)) regenMp[x.s.name] = x.dmp; }
                 for (const e of ch) {
                     if (e.side !== "p" || !e.dmp) continue;
                     const pl = P(e), mana = pl.mana || (pl.mana = { spent: {}, gain: {} });
-                    const lost = e.dmp < 0, key = lost ? (e.datk > 0 ? e.used : "other") : gainers >= 2 ? "regen" : !pa.length && !ma.length ? "food" : "other";
+                    const lone = e.dmp > 0 && gainers === 1 && onRegenClock(at) && regenTick(regenMp[e.s.name], e.dmp, e.s.mmp > 0 && e.s.mp >= e.s.mmp);
+                    const lost = e.dmp < 0, key = lost ? (e.datk > 0 ? e.used : "other") : gainers >= 2 || lone ? "regen" : !pa.length && !ma.length ? "food" : "other";
                     const t = lost ? mana.spent : mana.gain, r = t[key] || (t[key] = { amt: 0, n: 0 });
                     r.amt += Math.abs(e.dmp); r.n++;
                     if (lost) pl.mpSpent = (pl.mpSpent || 0) - e.dmp; else pl.mpGain = (pl.mpGain || 0) + e.dmp;
@@ -536,6 +546,8 @@
             const actorInfo = actor && abilityOf(actor.used);
             const creditedHeal = x => x === bloomTarget || !!(actorInfo && (actorInfo.heal || (actorInfo.drain && actor === x)));
             const plainGains = ch.filter(x => x.side === "p" && x.dhp > 0 && !creditedHeal(x)).length;
+            // What each player's regeneration tick gives, learnt from ticks on the clock with several players healing.
+            if (plainGains >= 2 && !pa.length && onRegenClock(at)) for (const x of ch) if (x.side === "p" && x.dhp > 0 && !creditedHeal(x) && x.s.hp < x.s.mhp) regenHp[x.s.name] = x.dhp;
             const foodOf = (name, t) => { const f = (foods[name] || []).slice().reverse().find(x => t >= x.at - 1500 && t <= x.at + x.overMs + 1500); return f ? `food:${f.item}` : "food"; };
             // Players: damage taken, healing, deaths. A splat with no HP lost while a monster acts: its attack missed.
             for (const e of ch) {
@@ -561,7 +573,7 @@
                     const key = !healer ? "regen" : healer.s.name === e.s.name ? how : `${healer.s.name}: ${how}`;
                     if (healer) { const h = P(healer), row = abilityRow(h, how); h.healDone += gain; row.heal += gain; if (bloom) row.hits++; }
                     p.healBy[key] = (p.healBy[key] || 0) + gain; p.healHits[key] = (p.healHits[key] || 0) + 1;
-                    if (!healer) { const kind = plainGains >= 2 ? "regen" : !pa.length && !ma.length ? (listed.length >= 2 ? "regen" : foodOf(e.s.name, at)) : "other"; const r = sub(p.healSub || (p.healSub = {}), "regen", kind); r.amt += gain; r.n++; }
+                    if (!healer) { const named = foodOf(e.s.name, at), quiet = !pa.length && !ma.length; const kind = plainGains >= 2 ? "regen" : onRegenClock(at) && regenTick(regenHp[e.s.name], gain, e.s.hp >= e.s.mhp) ? "regen" : quiet ? (listed.length >= 2 ? "regen" : named) : named !== "food" ? named : "other"; const r = sub(p.healSub || (p.healSub = {}), "regen", kind); r.amt += gain; r.n++; }
                 }
             }
             return true;
