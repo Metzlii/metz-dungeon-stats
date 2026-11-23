@@ -3660,7 +3660,7 @@
         try { const v = Number(localStorage.getItem(SPLIT_KEY)); if (v >= 15 && v <= 85) splitPct = v; } catch (_e) { splitPct = null; }
         function applySplit() {
             if (!splitStyle) { splitStyle = document.createElement("style"); splitStyle.id = "mds-split-style"; document.documentElement.appendChild(splitStyle); }
-            const css = splitPct == null ? "" : `[class*="BattlePanel_battleArea__"]>[class*="BattlePanel_playersArea__"]{flex:0 0 ${splitPct}% !important}[class*="BattlePanel_battleArea__"]>[class*="BattlePanel_monstersArea__"]{flex:1 1 0 !important}`;
+            const css = splitPct == null ? "" : `[class*="BattlePanel_battleArea__"]>[class*="BattlePanel_playersArea__"]{flex:0 0 ${splitPct}% !important}[class*="BattlePanel_battleArea__"]>[class*="BattlePanel_monstersArea__"]{flex:1 1 0 !important}[class*="BattlePanel_battleArea__"]::after{left:${splitPct}% !important}`;   // the game's own line is battleArea::after at left:50% (its stylesheet)
             if (splitStyle.textContent !== css) splitStyle.textContent = css;
             if (splitEl) splitEl.style.left = `calc(${splitPct == null ? 50 : splitPct}% - 5px)`;
         }
