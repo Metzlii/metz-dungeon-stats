@@ -2056,11 +2056,11 @@
 :is(#mds-root,#mds-bm) .mds-meter td.mds-mbar .fill{position:absolute;left:6px;top:22%;bottom:22%;max-width:calc(100% - 12px);background:rgba(69,200,216,.3);border-radius:3px}
 :is(#mds-root,#mds-bm) .mds-meter td.mds-mbar .v{position:relative;padding-left:4px}
 :is(#mds-root,#mds-bm) .mds-meter tr.mds-mdetail>td{background:rgba(0,0,0,.2);padding:6px 10px 10px}
-:is(#mds-root,#mds-bm) .mds-msub{width:100%;border-collapse:collapse;font-size:.93em}
-:is(#mds-root,#mds-bm) .mds-msub :is(th,td){padding:3px 8px;text-align:left;position:static}
-:is(#mds-root,#mds-bm) .mds-msub :is(th,td).n{text-align:right}
-:is(#mds-root,#mds-bm) .mds-mlists{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:.9em;color:#c5d4de}
-:is(#mds-root,#mds-bm) .mds-mlists b{color:#e6eff3;font-weight:500}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub{width:100%;border-collapse:collapse;font-size:.93em}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub :is(th,td){padding:3px 8px;text-align:left;position:static}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub :is(th,td).n{text-align:right}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-mlists{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:.9em;color:#c5d4de}
+:is(#mds-root,#mds-bm,#mds-bm-pop) .mds-mlists b{color:#e6eff3;font-weight:500}
 #mds-root .mds-dmg-head{margin:0 0 10px;color:#c5d4de;font-size:.929em}
 #mds-root tbody#mds-dmg-sessions tr{cursor:pointer}
 #mds-root tbody#mds-dmg-sessions tr.sel td{background:rgba(69,200,216,.12)}
@@ -2083,6 +2083,22 @@
 #mds-bm th{position:sticky;top:0;z-index:1;background:#101b24;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:rgba(230,239,243,.6);padding:2px 6px;border-bottom:1px solid rgba(230,239,243,.16);text-align:left}
 #mds-bm td{padding:2px 6px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top;line-height:1.35}
 #mds-bm .mds-msub th{position:static;background:none}
+#mds-bm .mds-meter td.mds-mname::before{content:none}
+/* A player's details from the battle meter open in a popup, so the meter keeps its size (operator, 2026-11-23). */
+#mds-bm-pop{position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.45)}
+#mds-bm-pop[hidden]{display:none}
+#mds-bm-pop *{box-sizing:border-box}
+#mds-bm-pop .mds-pop-card{width:min(780px,100%);max-height:80vh;overflow:auto;padding:10px 14px 12px;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #595d6c,0 16px 40px rgba(0,0,0,.65);font:400 13px/1.45 "Inter",system-ui,sans-serif;text-align:left}
+#mds-bm-pop .mds-pop-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-bottom:8px}
+#mds-bm-pop .mds-pop-head strong{font-size:15px;font-weight:500}
+#mds-bm-pop .mds-pop-head small{color:#c5d4de;font-size:12px}
+#mds-bm-pop .mds-pop-card{position:relative}
+#mds-bm-pop .mds-pop-head{padding-right:26px}
+#mds-bm-pop .mds-pop-head button{position:absolute;top:6px;right:10px;background:none;border:0;color:#c5d4de;font-size:20px;line-height:1;cursor:pointer}
+#mds-bm-pop .mds-pop-head button:hover{color:#e6eff3}
+#mds-bm-pop th{font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:rgba(230,239,243,.6);border-bottom:1px solid rgba(230,239,243,.16)}
+#mds-bm-pop td{border-bottom:1px solid rgba(230,239,243,.08)}
+#mds-bm-pop .mds-icon{width:1.2em;height:1.2em;vertical-align:-.25em;margin-right:4px}
 #mds-bm .mds-icon{width:1.2em;height:1.2em;vertical-align:-.25em;margin-right:4px}
 #mds-bm p{margin:4px 0;color:#c5d4de}
 #mds-tab{white-space:nowrap}
@@ -3118,17 +3134,32 @@
         // All runs (the default): the running total since the party went into combat. This run: the session alone.
         const bmPerRun = () => { try { return localStorage.getItem(BM_MODE_KEY) === "run"; } catch (_e) { return false; } };
         const bmExpanded = new Set();
-        let bmEl = null, bmHtml = "", bmBase = 0;
+        let bmEl = null, bmHtml = "", bmPop = null, bmPopName = null, bmPopHtml = "";
+        function bmPopClose() { bmPopName = null; bmPopHtml = ""; if (bmPop) bmPop.hidden = true; }
+        function bmPopRender(s) {
+            if (!bmPopName) { if (bmPop) bmPop.hidden = true; return; }
+            if (!bmPop) {
+                bmPop = document.createElement("div"); bmPop.id = "mds-bm-pop"; bmPop.hidden = true;
+                bmPop.addEventListener("click", e => { if (e.target === bmPop || e.target.closest("button[data-pop=close]")) bmPopClose(); });
+                document.addEventListener("keydown", e => { if (e.key === "Escape" && bmPopName) bmPopClose(); });
+                document.body.appendChild(bmPop);
+            }
+            const p = s && s.players && s.players[bmPopName], secs = sessSecs(s), total = sessTotal(s);
+            const sub = p ? `${fmtN(p.dealt)} damage · ${pct1(p.dealt, total)} of the party · ${Math.round(p.dealt / secs).toLocaleString()} DPS · taken ${fmtN(p.taken)} · healed ${fmtN(p.healed)}${p.deaths ? ` · ${p.deaths} death${p.deaths === 1 ? "" : "s"}` : ""}` : "";
+            const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage"><div class="mds-pop-head"><strong>${esc(bmPopName)}</strong><small>${sub}</small><small>${s ? meterHead(s) : ""}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
+            if (html !== bmPopHtml) { const card = bmPop.querySelector(".mds-pop-card"), top = card ? card.scrollTop : 0; bmPop.innerHTML = html; bmPopHtml = html; const c = bmPop.querySelector(".mds-pop-card"); if (c) c.scrollTop = top; }
+            bmPop.hidden = false;
+        }
         function renderBattleMeter() {
             const host = document.querySelector('[class*="BattlePanel_battlePanel__"]');
-            if (!host || !bmOn()) { if (bmEl && bmEl.isConnected) bmEl.remove(); return; }
+            if (!host || !bmOn()) { if (bmEl && bmEl.isConnected) bmEl.remove(); bmPopClose(); return; }
             if (!bmEl) {
                 bmEl = document.createElement("div"); bmEl.id = "mds-bm";
                 bmEl.addEventListener("click", e => {
                     const b = e.target.closest("button[data-bm]");
                     if (b && b.dataset.bm === "mode") { try { localStorage.setItem(BM_MODE_KEY, bmPerRun() ? "all" : "run"); } catch (_e) { /* fine */ } bmHtml = ""; renderBattleMeter(); return; }
                     if (b) { if (b.dataset.bm === "hide") { try { localStorage.setItem(BM_KEY, "off"); } catch (_e) { /* fine */ } const cb = root && root.querySelector("#mds-bm-on"); if (cb) cb.checked = false; renderBattleMeter(); } else { tab = "damage"; dmgPick = "live"; setTab("damage", true); setOpen(true); } return; }
-                    const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (bmExpanded.has(n)) bmExpanded.delete(n); else bmExpanded.add(n); bmHtml = ""; renderBattleMeter();
+                    const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; bmPopName = tr.dataset.player; bmPopHtml = ""; renderBattleMeter();
                 });
             }
             const info = [...host.children].find(c => /BattlePanel_infoArea__/.test(c.className || ""));
@@ -3137,15 +3168,13 @@
             const st = state.streak;
             if (!bmPerRun() && st) { const t = meterAdd(JSON.parse(JSON.stringify(st)), s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key ? s : {}); t.live = !!(s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key); s = t; }
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
-            const html = `<div class="mds-bm-head"><strong>Damage</strong><small>${s ? meterHead(s) : "starts with the next wave"}</small><span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded)}</div>` : ""}`;
+            const html = `<div class="mds-bm-head"><strong>Damage</strong><small>${s ? meterHead(s) : "starts with the next wave"}</small><span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
             if (html !== bmHtml || !bmEl.firstChild) { const prev = bmEl.querySelector(".mds-bm-body"), top = prev ? prev.scrollTop : 0; bmEl.innerHTML = html; bmHtml = html; const body = bmEl.querySelector(".mds-bm-body"); if (body) body.scrollTop = top; }
-            // Height: with every player folded, the meter's own height is measured and kept; opening a player then
-            // scrolls inside it (operator, 2026-11-23). Never more than half the battle panel, whose height is what
-            // the chat panel leaves (a dump the same day: window 1197 px, panel 424 px).
-            const cap = Math.max(140, Math.round(host.clientHeight * 0.5));
-            if (!bmExpanded.size) { bmEl.style.maxHeight = ""; bmBase = bmEl.offsetHeight; }
-            const want = `${Math.min(bmBase || cap, cap)}px`;
+            // Players' details open in a popup, so the meter is only ever its rows high. Never more than half the battle
+            // panel, whose height is what the chat panel leaves (a dump 2026-11-23: window 1197 px, panel 424 px).
+            const want = `${Math.max(140, Math.round(host.clientHeight * 0.5))}px`;
             if (bmEl.style.maxHeight !== want) bmEl.style.maxHeight = want;
+            bmPopRender(s);
         }
         function renderRuns(force) {
             if (!els["mds-runs"]) return;
