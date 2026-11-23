@@ -2195,7 +2195,7 @@
 #mds-bm-pop .mds-pop-head strong{font-size:15px;font-weight:500}
 #mds-bm-pop .mds-pop-head small{color:#c5d4de;font-size:12px}
 #mds-bm-pop .mds-pop-card{position:relative}
-#mds-bm-pop .mds-pop-head{padding-right:26px}
+#mds-bm-pop .mds-pop-head{padding-right:26px;cursor:move;user-select:none;touch-action:none}
 #mds-bm-pop .mds-pop-head button{position:absolute;top:6px;right:10px;background:none;border:0;color:#c5d4de;font-size:20px;line-height:1;cursor:pointer}
 #mds-bm-pop .mds-pop-head button:hover{color:#e6eff3}
 #mds-bm-pop th{font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:rgba(230,239,243,.6);border-bottom:1px solid rgba(230,239,243,.16)}
@@ -3326,18 +3326,38 @@
         const bmPerRun = () => { try { return localStorage.getItem(BM_MODE_KEY) === "run"; } catch (_e) { return false; } };
         const bmExpanded = new Set();
         let bmEl = null, bmHtml = "", bmPop = null, bmPopName = null, bmPopHtml = "";
+        // Where the popup has been dragged to, from the middle (operator, 2026-11-23); kept for the next player's.
+        const bmPopPos = { x: 0, y: 0 };
         function bmPopClose() { bmPopName = null; bmPopHtml = ""; if (bmPop) bmPop.hidden = true; }
         function bmPopRender(s) {
             if (!bmPopName) { if (bmPop) bmPop.hidden = true; return; }
             if (!bmPop) {
                 bmPop = document.createElement("div"); bmPop.id = "mds-bm-pop"; bmPop.hidden = true;
+                // Dragged by its header (not the close button); double-click the header to put it back in the middle.
+                // The offset is part of the card's markup, so the in-place redraw keeps it.
+                bmPop.addEventListener("pointerdown", e => {
+                    const headEl = e.target.closest(".mds-pop-head"); if (!headEl || e.button !== 0 || e.target.closest("button")) return;
+                    const card = bmPop.querySelector(".mds-pop-card"); if (!card) return;
+                    e.preventDefault();
+                    const sx = e.clientX, sy = e.clientY, ox = bmPopPos.x, oy = bmPopPos.y, r = card.getBoundingClientRect();
+                    const move = ev => {
+                        // Keep at least 60 px of the header on screen.
+                        const nx = Math.max(-r.left - r.width + 60 + ox, Math.min(innerWidth - r.left - 60 + ox, ox + ev.clientX - sx));
+                        const ny = Math.max(-r.top + oy, Math.min(innerHeight - r.top - 30 + oy, oy + ev.clientY - sy));
+                        bmPopPos.x = Math.round(nx); bmPopPos.y = Math.round(ny);
+                        card.style.transform = `translate(${bmPopPos.x}px,${bmPopPos.y}px)`;
+                    };
+                    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); bmPopHtml = ""; };
+                    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+                });
+                bmPop.addEventListener("dblclick", e => { if (!e.target.closest(".mds-pop-head") || e.target.closest("button")) return; bmPopPos.x = 0; bmPopPos.y = 0; bmPopHtml = ""; renderBattleMeter(); });
                 bmPop.addEventListener("click", e => { if (metFoldClick(e)) return; if (metSubClick(e)) { bmPopHtml = ""; renderBattleMeter(); return; } if (e.target === bmPop || e.target.closest("button[data-pop=close]")) bmPopClose(); });
                 document.addEventListener("keydown", e => { if (e.key === "Escape" && bmPopName) bmPopClose(); });
                 document.body.appendChild(bmPop);
             }
             const p = s && s.players && s.players[bmPopName], secs = sessSecs(s), total = sessTotal(s);
             const sub = p ? `${fmtN(p.dealt)} damage · ${pct1(p.dealt, total)} of the party · ${Math.round(p.dealt / secs).toLocaleString()} DPS · taken ${fmtN(p.taken)} · healed ${fmtN(p.healed)}${p.deaths ? ` · ${p.deaths} death${p.deaths === 1 ? "" : "s"}` : ""}` : "";
-            const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage"><div class="mds-pop-head"><strong>${esc(bmPopName)}</strong><small>${sub}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs, s) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
+            const html = `<div class="mds-pop-card" role="dialog" aria-label="${esc(bmPopName)}'s damage" style="transform:translate(${bmPopPos.x}px,${bmPopPos.y}px)"><div class="mds-pop-head"><strong>${esc(bmPopName)}</strong><small>${sub}</small><button type="button" data-pop="close" title="Close (Esc)">×</button></div>${p ? meterDetail(p, secs, s) : `<p>Nothing for ${esc(bmPopName)} in this session.</p>`}</div>`;
             if (html !== bmPopHtml) { morph(bmPop, html); bmPopHtml = html; }
             bmPop.hidden = false;
         }
