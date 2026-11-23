@@ -2084,6 +2084,10 @@
 #mds-bm td{padding:2px 6px;border-bottom:1px solid rgba(230,239,243,.08);vertical-align:top;line-height:1.35}
 #mds-bm .mds-msub th{position:static;background:none}
 #mds-bm .mds-meter td.mds-mname::before{content:none}
+/* Clicking a player opens their details: said on every row (operator, 2026-11-23). */
+#mds-bm .mds-meter td.mds-mname::after{content:"details ›";display:inline-block;margin-left:8px;padding:0 7px;border:1px solid rgba(69,200,216,.4);border-radius:9px;font-size:10px;font-weight:500;line-height:1.5;color:#a9e9f1;opacity:.75;vertical-align:1px}
+#mds-bm .mds-meter tr.mds-mrow:hover td.mds-mname::after{opacity:1;background:rgba(69,200,216,.18);border-color:#45c8d8}
+:is(#mds-root,#mds-bm) .mds-meter th .mds-hint{text-transform:none;letter-spacing:0;font-weight:400;color:rgba(230,239,243,.5)}
 /* A player's details from the battle meter open in a popup, so the meter keeps its size (operator, 2026-11-23). */
 #mds-bm-pop{position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.45)}
 #mds-bm-pop[hidden]{display:none}
@@ -3083,7 +3087,7 @@
                 const main = `<tr class="mds-mrow${isOpen ? " open" : ""}${me ? " mds-me" : ""}" data-player="${esc(p.name)}" title="Click for ${esc(p.name)}'s abilities"><td class="mds-mname">${esc(p.name)}</td><td class="mds-mbar"><span class="fill" style="width:${top > 0 ? (100 * p.dealt / top).toFixed(1) : 0}%"></span><span class="v">${fmtN(p.dealt)}</span></td><td class="n">${pct1(p.dealt, total)}</td><td class="n">${Math.round(p.dealt / secs).toLocaleString()}</td><td class="n">${fmtN(p.taken)}</td><td class="n">${fmtN(p.healDone)}</td><td class="n">${fmtN(p.healed)}</td><td class="n">${p.deaths || 0}</td></tr>`;
                 return isOpen ? `${main}<tr class="mds-mdetail"><td colspan="8">${meterDetail(p, secs)}</td></tr>` : main;
             }).join("");
-            return `<table class="mds-meter"><thead><tr><th>Player</th><th>Damage</th><th class="n">Share</th><th class="n">DPS</th><th class="n">Taken</th><th class="n" title="What this player's heal abilities and Life Drain restored">Healing done</th><th class="n" title="Every HP this player regained: heals, Life Drain, regeneration, food and passives">Healed</th><th class="n">Deaths</th></tr></thead><tbody>${rows}</tbody></table>`;
+            return `<table class="mds-meter"><thead><tr><th>Player <span class="mds-hint">· click for details</span></th><th>Damage</th><th class="n">Share</th><th class="n">DPS</th><th class="n">Taken</th><th class="n" title="What this player's heal abilities and Life Drain restored">Healing done</th><th class="n" title="Every HP this player regained: heals, Life Drain, regeneration, food and passives">Healed</th><th class="n">Deaths</th></tr></thead><tbody>${rows}</tbody></table>`;
         }
         function meterDetail(p, secs) {
             const abs = Object.entries(p.abilities || {}).sort((a, b) => (b[1].dmg - a[1].dmg) || (b[1].heal - a[1].heal) || (b[1].casts - a[1].casts));
