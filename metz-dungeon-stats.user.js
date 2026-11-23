@@ -2441,6 +2441,8 @@
 :is(#mds-root,#mds-bm) .mds-meter tr>:is(th,td)+:is(th,td){border-left:1px solid rgba(230,239,243,.07)}
 #mds-bm .mds-meter th{position:relative}
 .mds-meter .mds-colrz{position:absolute;top:0;bottom:0;right:-4px;width:8px;cursor:col-resize;z-index:2}
+/* The last header's grip stays inside the table: sticking out 4 px gave the meter a horizontal scroll bar. */
+.mds-meter th:last-child .mds-colrz{right:0;width:5px}
 .mds-meter .mds-colrz:hover{background:rgba(69,200,216,.35)}
 .mds-meter th[data-mcol]{cursor:pointer;user-select:none}
 .mds-meter th[data-mcol]:hover{color:#e6eff3}
