@@ -1391,7 +1391,9 @@
             state.damage = await state.record.getAll("events", "kind", IDBKeyRange.only("damage"));
             {
                 const mo = state.meta.meterOpen;
-                if (isObj(mo) && isObj(mo.players) && !state.meter.stitch(mo)) meterSave(mo);
+                // A piece of another run than the one now in progress (the next run began during the reload, or its first
+                // wave came in before the record opened): saved, and counted in the battle tab's running total when recent.
+                if (isObj(mo) && isObj(mo.players) && !state.meter.stitch(mo)) { if (serverNow() - num(mo.lastAt) < METER_STALE_MS) streakAdd(mo); meterSave(mo); }
                 // 0.2.0 before this change saved a reloaded run's first piece as "interrupted", and kept runs it saw
                 // only part of. Stitch the first back into its run; move the rest into the all-seen total.
                 const keep = [];
