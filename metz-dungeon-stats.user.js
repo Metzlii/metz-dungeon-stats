@@ -2412,6 +2412,9 @@
 /* A player's details from the battle meter open in a popup, so the meter keeps its size (operator, 2026-11-23). */
 /* Equal-width digits everywhere a number updates live (suggested 2026-11-23: the meter header jumped as its numbers changed). */
 #mds-bm,#mds-bm-pop,#mds-bkeys{font-variant-numeric:tabular-nums}
+/* Fixed slots for the header's two live figures (operator, 2026-11-23): damage up to 999.99m, DPS up to 5 digits. */
+#mds-bm .mds-fixd{display:inline-block;min-width:6.9ch;text-align:left}
+#mds-bm .mds-fixp{display:inline-block;min-width:5.6ch;text-align:right}
 #mds-bm-pop{position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.45)}
 #mds-bm-pop[hidden]{display:none}
 #mds-bm-pop *{box-sizing:border-box}
@@ -3979,7 +3982,7 @@
                 t.live = same; s = t;
             }
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
-            const html = `<div class="mds-bm-head">${s ? (h => `<strong>${esc(t("Damage {n}", { n: h.total }))}</strong><span class="mds-bm-dps">${h.dps} DPS</span><small>${h.line}</small>${h.badge}`)(meterHeadShort(s)) : `<strong>Damage</strong><small>starts with the next wave</small>`}${keysWarning()}${consWarning()}<span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
+            const html = `<div class="mds-bm-head">${s ? (h => `<strong>${esc(t("Damage {n}", { n: "" })).replace("", `<span class="mds-fixd">${esc(h.total)}</span>`)}</strong><span class="mds-bm-dps"><span class="mds-fixp">${h.dps}</span> DPS</span><small>${h.line}</small>${h.badge}`)(meterHeadShort(s)) : `<strong>Damage</strong><small>starts with the next wave</small>`}${keysWarning()}${consWarning()}<span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
             if (html !== bmHtml || !bmEl.firstChild) { morph(bmEl, html); bmHtml = html; localize(bmEl); }
             // Players' details open in a popup, so the meter is only ever its rows high. Never more than half the battle
             // panel, whose height is what the chat panel leaves (a dump 2026-11-23: window 1197 px, panel 424 px).
