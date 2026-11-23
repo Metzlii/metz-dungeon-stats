@@ -18,6 +18,10 @@ Milestones 1 to 5 of [docs/design.md](docs/design.md): capture and record; runs 
 
 `node test/derive.test.mjs <record.json>` and `node test/money.test.mjs <record.json> --market marketplace.json` run the two derivations over an exported record and print what the tabs would show.
 
+## Languages
+
+The panel and the damage meter follow the game's language: English, Español, Français, 日本語, 한국어, Português, Русский, 简体中文 and 繁體中文. Item, ability, monster and dungeon names come from the game itself, so they match your screen. See [i18n/README.md](i18n/README.md) to correct a translation.
+
 ## Replay harness
 
 `test/index.html` feeds a synthetic dungeon session through the script without the game. Serve the parent folder on a local port and open the page; it expects the game's `init_client_data.json` at `/scratch/design-export-0919/init_client_data.json` and captured samples in `test/fixtures/samples.json` (not committed: they hold player names).

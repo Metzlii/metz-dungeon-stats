@@ -1,0 +1,56 @@
+{
+ "en": {
+  "loot": "Loot & XP Log",
+  "combat": "Combat",
+  "battle": "Battle #{{battleId}}",
+  "bloom": "Bloom"
+ },
+ "es": {
+  "loot": "Registro de botín y EXP",
+  "combat": "Combate",
+  "battle": "Batalla #{{battleId}}",
+  "bloom": "Floración"
+ },
+ "fr": {
+  "loot": "Suivi de butin et XP",
+  "combat": "Combat",
+  "battle": "Combat #{{battleId}}",
+  "bloom": "Floraison"
+ },
+ "ja": {
+  "loot": "ドロップ・経験記録",
+  "combat": "戦闘",
+  "battle": "バトル #{{battleId}}",
+  "bloom": "ブルーム"
+ },
+ "ko": {
+  "loot": "전리품 및 경험치 기록",
+  "combat": "전투",
+  "battle": "배틀 #{{battleId}}",
+  "bloom": "개화"
+ },
+ "pt": {
+  "loot": "Registro de loot e EXP",
+  "combat": "Combate",
+  "battle": "Batalha #{{battleId}}",
+  "bloom": "Floração"
+ },
+ "ru": {
+  "loot": "Журнал добычи и опыта",
+  "combat": "Бой",
+  "battle": "Бой #{{battleId}}",
+  "bloom": "Цветение"
+ },
+ "zh-Hant": {
+  "loot": "掉落與經驗記錄",
+  "combat": "戰鬥",
+  "battle": "交戰 #{{battleId}}",
+  "bloom": "綻放"
+ },
+ "zh": {
+  "loot": "掉落与经验记录",
+  "combat": "战斗",
+  "battle": "交战 #{{battleId}}",
+  "bloom": "绽放"
+ }
+}
