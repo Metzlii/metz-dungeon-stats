@@ -2064,8 +2064,10 @@
 #mds-root .mds-dmg-head{margin:0 0 10px;color:#c5d4de;font-size:.929em}
 #mds-root tbody#mds-dmg-sessions tr{cursor:pointer}
 #mds-root tbody#mds-dmg-sessions tr.sel td{background:rgba(69,200,216,.12)}
-/* The battle panel stacks its parts in a column of fixed height: the meter takes only its own height, at most a third of the screen, and scrolls inside beyond that, so the battle cards keep their room. */
-#mds-bm{box-sizing:border-box;width:100%;flex:0 0 auto;align-self:stretch;max-height:34vh;display:flex;flex-direction:column;overflow:hidden;margin:6px 0 0;padding:6px 10px;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #3f424d;font:400 13px/1.45 "Inter",system-ui,sans-serif;text-align:left}
+/* The battle panel stacks its parts in a column of fixed height. The meter keeps the height it has with every player
+   folded and scrolls inside when one is opened, never more than half the panel (set by renderBattleMeter, which
+   measures both: the panel is the chat-resized part of the window, not the window). */
+#mds-bm{box-sizing:border-box;width:100%;flex:0 0 auto;align-self:stretch;display:flex;flex-direction:column;overflow:hidden;margin:6px 0 0;padding:6px 10px;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #3f424d;font:400 13px/1.45 "Inter",system-ui,sans-serif;text-align:left}
 #mds-bm *{box-sizing:border-box}
 /* The table scrolls inside the block's fixed cap; the head line stays put. */
 #mds-bm .mds-bm-body{flex:1 1 auto;min-height:0;overflow:auto}
@@ -3116,7 +3118,7 @@
         // All runs (the default): the running total since the party went into combat. This run: the session alone.
         const bmPerRun = () => { try { return localStorage.getItem(BM_MODE_KEY) === "run"; } catch (_e) { return false; } };
         const bmExpanded = new Set();
-        let bmEl = null, bmHtml = "";
+        let bmEl = null, bmHtml = "", bmBase = 0;
         function renderBattleMeter() {
             const host = document.querySelector('[class*="BattlePanel_battlePanel__"]');
             if (!host || !bmOn()) { if (bmEl && bmEl.isConnected) bmEl.remove(); return; }
@@ -3137,6 +3139,13 @@
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
             const html = `<div class="mds-bm-head"><strong>Damage</strong><small>${s ? meterHead(s) : "starts with the next wave"}</small><span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded)}</div>` : ""}`;
             if (html !== bmHtml || !bmEl.firstChild) { const prev = bmEl.querySelector(".mds-bm-body"), top = prev ? prev.scrollTop : 0; bmEl.innerHTML = html; bmHtml = html; const body = bmEl.querySelector(".mds-bm-body"); if (body) body.scrollTop = top; }
+            // Height: with every player folded, the meter's own height is measured and kept; opening a player then
+            // scrolls inside it (operator, 2026-11-23). Never more than half the battle panel, whose height is what
+            // the chat panel leaves (a dump the same day: window 1197 px, panel 424 px).
+            const cap = Math.max(140, Math.round(host.clientHeight * 0.5));
+            if (!bmExpanded.size) { bmEl.style.maxHeight = ""; bmBase = bmEl.offsetHeight; }
+            const want = `${Math.min(bmBase || cap, cap)}px`;
+            if (bmEl.style.maxHeight !== want) bmEl.style.maxHeight = want;
         }
         function renderRuns(force) {
             if (!els["mds-runs"]) return;
