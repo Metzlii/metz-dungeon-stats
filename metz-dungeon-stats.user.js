@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Metz Dungeon Stats
 // @namespace    metzlii
-// @version      0.1.3
+// @version      0.1.4
 // @description  One permanent record of your XP, your dungeon runs and the dungeon cash flow: keys crafted, consumables used, chests opened, loot sold. Tracked from the game's own messages, nothing estimated.
 // @author       Metzli
 // @license      MIT
@@ -34,7 +34,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.1.3";
+    const VERSION = "0.1.4";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -995,6 +995,7 @@
             const k = naturalKey(e);
             if ((k && nat.has(k)) || sameTimed(e)) { out.duplicate++; continue; }
             const ev = { ...e, fromRecord: d.device || label || "import" };
+            fixImportedTax(ev);   // a record exported before 0.1.3 still carries the old figure
             state.record.queue("events", ev); ids.set(ev.id, ev); if (k) nat.add(k); noteTimed(ev);
             if (ev.kind === "consume") addConsume(ev); else state.timeline.push(ev);
             out.added++; out.byKind[ev.kind] = (out.byKind[ev.kind] || 0) + 1; state.counts.events++;
@@ -1083,6 +1084,15 @@
         })().catch(error => { warn("toolasha import failed", error); TOOLASHA.status = "failed: " + String(error && error.message || error); }).finally(() => { toolashaRunning = null; });
         return toolashaRunning;
     }
+    // A sale imported from Toolasha's history carries the game's rule for its item on its day (marketTaxRate). Imports
+    // before 0.1.3 stored the rate of whatever had sold last; this puts the rule's figure on the stored event itself, so
+    // an export of the record is right too. True when the event changed.
+    function fixImportedTax(e) {
+        if (!isObj(e) || e.kind !== "sell" || !e.imported || e.taxBasis !== "rate" || !(num(e.gross) > 0)) return false;
+        const tax = Math.round(e.gross * marketTaxRate(e.item, e.at));
+        if (e.tax === tax && e.net === e.gross - tax) return false;
+        e.tax = tax; e.net = e.gross - tax; return true;
+    }
     async function openRecord(id) {
         try {
             const db = await openDb(id);
@@ -1100,6 +1110,8 @@
             state.events = (await state.record.getAll("events", "at", null, "prev", 200));
             const perKind = await Promise.all(TIMELINE_KINDS.map(k => state.record.getAll("events", "kind", IDBKeyRange.only(k))));
             state.timeline = perKind.flat().sort((a, b) => a.at - b.at); state.timelineRev++;
+            const retaxed = state.timeline.filter(fixImportedTax);
+            if (retaxed.length) { for (const e of retaxed) state.record.queue("events", e); for (const e of state.events) fixImportedTax(e); info(`imported sales re-taxed by the game's rule: ${retaxed.length}`); }
             state.consumeTotals = new Map(); for (const c of await state.record.getAll("events", "kind", IDBKeyRange.only("consume"))) addConsume(c);
             state.counts.events = await state.record.count("events");
             state.run = null;
