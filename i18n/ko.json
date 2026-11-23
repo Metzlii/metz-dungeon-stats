@@ -322,7 +322,6 @@
  "loot log": "전리품 기록",
  "no artisan tea slotted": "장인 차 미장착",
  "no record yet": "아직 기록 없음",
- "party {n} ({dps} DPS)": "파티 {n} ({dps} DPS)",
  "paused": "일시정지",
  "record since {date}": "{date}부터 기록",
  "slotted now": "현재 장착",
@@ -380,7 +379,6 @@
  "{a} tokens": "토큰 {a}개",
  "{a} used": "{a} 사용",
  "{a} used ({b} offline) · {c} unpriced": "{a} 사용 (오프라인 {b}) · 가격 없음 {c}",
- "{dmg} damage · {share} of the party · {dps} DPS · taken {taken} · healed {healed}": "피해 {dmg} · 파티의 {share} · {dps} DPS · 받은 피해 {taken} · 회복 {healed}",
  "{name}'s damage": "{name}의 피해",
  "{name}'s {ability}": "{name}의 {ability}",
  "{n} HP unexplained": "설명되지 않은 HP {n}",
@@ -464,5 +462,7 @@
  "next level in {time}": "다음 레벨까지 {time}",
  "Meter columns": "미터 열",
  "Drag to set this column's width; double-click for automatic": "끌어서 이 열의 너비를 정하고, 두 번 클릭하면 자동",
- "Time in combat the meter has counted": "미터가 집계한 전투 시간"
+ "Time in combat the meter has counted": "미터가 집계한 전투 시간",
+ "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} 피해 · 파티의 {share} · {dps} DPS · {taken} 받은 피해 · {healed} 회복",
+ "{n} party damage ({dps} DPS)": "{n} 파티 피해 ({dps} DPS)"
 }

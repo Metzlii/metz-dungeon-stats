@@ -322,7 +322,6 @@
  "loot log": "掉落記錄",
  "no artisan tea slotted": "未裝備工匠茶",
  "no record yet": "尚無紀錄",
- "party {n} ({dps} DPS)": "隊伍 {n}（{dps} DPS）",
  "paused": "已暫停",
  "record since {date}": "自 {date} 起的紀錄",
  "slotted now": "目前已裝備",
@@ -380,7 +379,6 @@
  "{a} tokens": "{a} 個代幣",
  "{a} used": "已使用 {a}",
  "{a} used ({b} offline) · {c} unpriced": "已使用 {a}（離線 {b}）· {c} 無價格",
- "{dmg} damage · {share} of the party · {dps} DPS · taken {taken} · healed {healed}": "{dmg} 傷害 · 佔隊伍 {share} · {dps} DPS · 承受 {taken} · 受到治療 {healed}",
  "{name}'s damage": "{name} 的傷害",
  "{name}'s {ability}": "{name} 的 {ability}",
  "{n} HP unexplained": "{n} HP 無法解釋",
@@ -464,5 +462,7 @@
  "next level in {time}": "{time} 後升級",
  "Meter columns": "傷害統計欄",
  "Drag to set this column's width; double-click for automatic": "拖曳設定此欄寬度；按兩下恢復自動",
- "Time in combat the meter has counted": "統計已計入的戰鬥時間"
+ "Time in combat the meter has counted": "統計已計入的戰鬥時間",
+ "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} 傷害 · {share} 隊伍佔比 · {dps} DPS · {taken} 承受 · {healed} 受到治療",
+ "{n} party damage ({dps} DPS)": "{n} 隊伍傷害（{dps} DPS）"
 }

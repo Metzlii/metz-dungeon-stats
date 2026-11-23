@@ -322,7 +322,6 @@
  "loot log": "журнал добычи",
  "no artisan tea slotted": "чай мастерства не установлен",
  "no record yet": "записи пока нет",
- "party {n} ({dps} DPS)": "группа {n} ({dps} DPS)",
  "paused": "пауза",
  "record since {date}": "запись с {date}",
  "slotted now": "установлен сейчас",
@@ -380,7 +379,6 @@
  "{a} tokens": "жетонов: {a}",
  "{a} used": "использовано {a}",
  "{a} used ({b} offline) · {c} unpriced": "использовано {a} ({b} офлайн) · без цены {c}",
- "{dmg} damage · {share} of the party · {dps} DPS · taken {taken} · healed {healed}": "урон {dmg} · {share} группы · {dps} DPS · получено {taken} · вылечено {healed}",
  "{name}'s damage": "Урон: {name}",
  "{name}'s {ability}": "{name}: {ability}",
  "{n} HP unexplained": "{n} HP не объяснено",
@@ -464,5 +462,7 @@
  "next level in {time}": "следующий уровень через {time}",
  "Meter columns": "Столбцы счётчика",
  "Drag to set this column's width; double-click for automatic": "Перетащите, чтобы задать ширину столбца; двойной щелчок — автоматически",
- "Time in combat the meter has counted": "Время боя, учтённое счётчиком"
+ "Time in combat the meter has counted": "Время боя, учтённое счётчиком",
+ "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} урона · {share} группы · {dps} DPS · {taken} получено · {healed} вылечено",
+ "{n} party damage ({dps} DPS)": "{n} урона группы ({dps} DPS)"
 }

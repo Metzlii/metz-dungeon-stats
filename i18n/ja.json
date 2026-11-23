@@ -322,7 +322,6 @@
  "loot log": "ドロップログ",
  "no artisan tea slotted": "職人茶がセットされていません",
  "no record yet": "まだ記録なし",
- "party {n} ({dps} DPS)": "パーティー {n}（{dps} DPS）",
  "paused": "一時停止中",
  "record since {date}": "{date} からの記録",
  "slotted now": "現在セット中",
@@ -380,7 +379,6 @@
  "{a} tokens": "{a} トークン",
  "{a} used": "{a} 使用",
  "{a} used ({b} offline) · {c} unpriced": "{a} 使用（オフライン {b}） · 価格なし {c}",
- "{dmg} damage · {share} of the party · {dps} DPS · taken {taken} · healed {healed}": "ダメージ {dmg} · パーティーの {share} · {dps} DPS · 被ダメージ {taken} · 回復量 {healed}",
  "{name}'s damage": "{name} のダメージ",
  "{name}'s {ability}": "{name} の {ability}",
  "{n} HP unexplained": "原因不明の HP {n}",
@@ -464,5 +462,7 @@
  "next level in {time}": "次のレベルまで {time}",
  "Meter columns": "メーターの列",
  "Drag to set this column's width; double-click for automatic": "ドラッグでこの列の幅を設定、ダブルクリックで自動",
- "Time in combat the meter has counted": "メーターが計測した戦闘時間"
+ "Time in combat the meter has counted": "メーターが計測した戦闘時間",
+ "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} ダメージ · パーティーの {share} · {dps} DPS · {taken} 被ダメージ · {healed} 回復",
+ "{n} party damage ({dps} DPS)": "{n} パーティーダメージ（{dps} DPS）"
 }

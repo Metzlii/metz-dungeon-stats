@@ -322,7 +322,6 @@
  "loot log": "journal de butin",
  "no artisan tea slotted": "aucun thé d'artisan équipé",
  "no record yet": "pas encore de registre",
- "party {n} ({dps} DPS)": "groupe {n} ({dps} DPS)",
  "paused": "en pause",
  "record since {date}": "registre depuis le {date}",
  "slotted now": "équipé actuellement",
@@ -380,7 +379,6 @@
  "{a} tokens": "{a} jetons",
  "{a} used": "{a} utilisés",
  "{a} used ({b} offline) · {c} unpriced": "{a} utilisés ({b} hors ligne) · {c} sans prix",
- "{dmg} damage · {share} of the party · {dps} DPS · taken {taken} · healed {healed}": "{dmg} dégâts · {share} du groupe · {dps} DPS · subis {taken} · soigné {healed}",
  "{name}'s damage": "Dégâts de {name}",
  "{name}'s {ability}": "{ability} de {name}",
  "{n} HP unexplained": "{n} HP inexpliqués",
@@ -464,5 +462,7 @@
  "next level in {time}": "niveau suivant dans {time}",
  "Meter columns": "Colonnes du compteur",
  "Drag to set this column's width; double-click for automatic": "Faites glisser pour fixer la largeur de cette colonne ; double-cliquez pour l'automatique",
- "Time in combat the meter has counted": "Temps de combat compté par le compteur"
+ "Time in combat the meter has counted": "Temps de combat compté par le compteur",
+ "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} dégâts · {share} du groupe · {dps} DPS · {taken} subis · {healed} soignés",
+ "{n} party damage ({dps} DPS)": "{n} dégâts du groupe ({dps} DPS)"
 }

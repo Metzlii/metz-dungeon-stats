@@ -322,7 +322,6 @@
  "loot log": "log de loot",
  "no artisan tea slotted": "sem chá de artesão equipado",
  "no record yet": "nenhum registro ainda",
- "party {n} ({dps} DPS)": "grupo {n} ({dps} DPS)",
  "paused": "pausado",
  "record since {date}": "registro desde {date}",
  "slotted now": "equipado agora",
@@ -380,7 +379,6 @@
  "{a} tokens": "{a} fichas",
  "{a} used": "{a} usados",
  "{a} used ({b} offline) · {c} unpriced": "{a} usados ({b} offline) · {c} sem preço",
- "{dmg} damage · {share} of the party · {dps} DPS · taken {taken} · healed {healed}": "{dmg} de dano · {share} do grupo · {dps} DPS · recebido {taken} · curado {healed}",
  "{name}'s damage": "Dano de {name}",
  "{name}'s {ability}": "{ability} de {name}",
  "{n} HP unexplained": "{n} HP sem explicação",
@@ -464,5 +462,7 @@
  "next level in {time}": "próximo nível em {time}",
  "Meter columns": "Colunas do medidor",
  "Drag to set this column's width; double-click for automatic": "Arraste para definir a largura desta coluna; clique duas vezes para automático",
- "Time in combat the meter has counted": "Tempo em combate contado pelo medidor"
+ "Time in combat the meter has counted": "Tempo em combate contado pelo medidor",
+ "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} de dano · {share} do grupo · {dps} DPS · {taken} recebido · {healed} curado",
+ "{n} party damage ({dps} DPS)": "{n} de dano do grupo ({dps} DPS)"
 }
