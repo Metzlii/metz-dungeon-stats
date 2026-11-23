@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Metz Dungeon Stats
 // @namespace    metzlii
-// @version      0.2.1
+// @version      0.2.2
 // @description  One permanent record of your XP, your dungeon runs and the dungeon cash flow: keys crafted, consumables used, chests opened, loot sold. A damage meter per run, by player and ability. Tracked from the game's own messages, nothing estimated.
 // @author       Metzli
 // @license      MIT
@@ -34,7 +34,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.2.1";
+    const VERSION = "0.2.2";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -553,15 +553,20 @@
         state.meter.restore(null); state.streak = null; meterLast = null; meterCheckpointAt = 0;
         if (state.record) state.record.queue("meta", { key: "meterOpen", value: null });
     }
+    // After Reset damage data the rest of the run in progress is not recorded: the meter starts with the next battle,
+    // so nothing from before the reset reaches a total (operator, 2026-11-23: the battle tab's All runs held the last
+    // 15 waves of the run the reset was pressed in, and did not match the Damage tab).
+    let meterSkipBattle = null;
     function meterOnNewBattle(m) {
         if (!meterEnabled()) return;
+        if (meterSkipBattle != null) { if (m.battleId === meterSkipBattle) return; meterSkipBattle = null; }
         if (meterLast && meterLast.battleId === m.battleId && meterLast.wave === num(m.wave)) return; // duplicate roster send
         meterLast = { battleId: m.battleId, wave: num(m.wave) };
         const closed = state.meter.newBattle(m, serverNow());
         if (closed) meterClosed(closed);
         meterTag(state.meter.session); streakCheck(); meterCheckpoint(); panel.meterPing();
     }
-    function meterOnUpdate(m) { if (!meterEnabled()) return; state.meter.update(m, serverNow()); panel.meterPing(); }
+    function meterOnUpdate(m) { if (!meterEnabled() || (meterSkipBattle != null && m.battleId === meterSkipBattle)) return; state.meter.update(m, serverNow()); panel.meterPing(); }
     // A run that ended: its session closes once the last messages are in. A clear counts its last wave in the check.
     function meterRunEnded(run, result) {
         const s = state.meter.session; if (!s || !run || (s.runId !== run.id && s.battleId !== run.battleId)) return;
@@ -3225,7 +3230,7 @@
             const span = s.streak ? `${s.runs} run${s.runs === 1 ? "" : "s"} finished${s.live ? " + this one" : ""} since ${fmtClock(num(s.startAt))}` : s.aggregate ? meterResult(s) : `${s.firstWave === s.lastWave ? `wave ${s.lastWave}` : `waves ${s.firstWave}–${s.lastWave}`}${s.stitched ? ", stitched after a reload" : ""}${s.live ? "" : `, ${meterResult(s)}`}`;
             const tip = `${span}. Checked ${c.balanced || 0} of ${c.waves || 0} finished waves: every monster seen at 0 HP and every point credited to a player.${c.gap ? ` ${fmtN(c.gap)} HP unexplained.` : ""}${s.unassigned ? ` ${fmtN(s.unassigned)} not credited.` : ""}`;
             const ok = !c.gap && !s.unassigned;
-            return { total: fmtN(total), dps: Math.round(total / secs).toLocaleString(), line: `${meterWhere(s)} · ${fmtDur(num(s.combatMs))} in combat${s.live || s.streak ? "" : ` · ${esc(meterResult(s))}`}`, badge: `<span class="mds-check${ok ? "" : " bad"}" title="${esc(tip)}">${ok ? "✓" : "!"} ${c.balanced || 0}/${c.waves || 0}</span>` };
+            return { total: fmtN(total), dps: Math.round(total / secs).toLocaleString(), line: `${meterWhere(s)}${s.streak && s.runs ? ` · ${s.runs + (s.live ? 1 : 0)} runs` : ""} · ${fmtDur(num(s.combatMs))} in combat${s.live || s.streak ? "" : ` · ${esc(meterResult(s))}`}`, badge: `<span class="mds-check${ok ? "" : " bad"}" title="${esc(tip)}">${ok ? "✓" : "!"} ${c.balanced || 0}/${c.waves || 0}</span>` };
         }
         function meterView(s, expanded) {
             if (!s || !s.players || !Object.keys(s.players).length) return `<p class="mds-note">No battle seen yet: the meter starts with the next wave.</p>`;
@@ -3477,6 +3482,7 @@
         for (const e of state.damage) state.record.remove("events", e.id);
         state.damage = []; state.meta.damagePartial = {}; state.streak = null;
         state.record.queue("meta", { key: "damagePartial", value: {} }); state.record.queue("meta", { key: "meterOpen", value: null });
+        meterSkipBattle = (state.meter.session && state.meter.session.battleId) ?? (meterLast && meterLast.battleId) ?? null;
         state.meter.restore(null);
         state.events = state.events.filter(e => e.kind !== "damage");
         await state.record.flush();
