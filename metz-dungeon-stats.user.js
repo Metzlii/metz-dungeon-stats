@@ -3234,9 +3234,9 @@
             return `<table class="mds-meter"><thead><tr><th>Player <span class="mds-hint">· click for details</span></th><th>Damage</th><th class="n">Share</th><th class="n">DPS</th><th class="n">Taken</th><th class="n" title="What this player's heal abilities and Life Drain restored">Healing done</th><th class="n" title="Every HP this player regained: heals, Life Drain, regeneration, food and passives">Healed</th><th class="n">Deaths</th></tr></thead><tbody>${rows}</tbody></table>`;
         }
         const monsterIcon = h => { const b = spriteOf("combat_monsters_sprite"); return b && h ? `<svg class="mds-icon" aria-hidden="true"><use href="${b}#${String(h).split("/").pop()}"></use></svg>` : ""; };
-        const takenSubName = k => k === "auto" ? "Auto attack" : k === "thorns" ? "Thorns (damage sent back)" : k === "dot:?" ? "Over time" : /^dot:/.test(k) ? `${abilityName(k.slice(4))} over time` : /^cost:/.test(k) ? (k === "cost:auto" ? "HP cost on auto attacks" : `HP cost with ${abilityName(k.slice(5))}`) : /^\/abilities\//.test(k) ? abilityName(k) : k;
+        const takenSubName = k => k === "old" ? "Recorded before the breakdown (update 0.2.1)" : k === "auto" ? "Auto attack" : k === "thorns" ? "Thorns (damage sent back)" : k === "dot:?" ? "Over time" : /^dot:/.test(k) ? `${abilityName(k.slice(4))} over time` : /^cost:/.test(k) ? (k === "cost:auto" ? "HP cost on auto attacks" : `HP cost with ${abilityName(k.slice(5))}`) : /^\/abilities\//.test(k) ? abilityName(k) : k;
         const takenSubIcon = k => { const h = /^(dot|cost):/.test(k) ? k.slice(k.indexOf(":") + 1) : k; return /^\/abilities\//.test(h) ? abilityIcon(h) : ""; };
-        const healSubName = k => k === "regen" ? "Regeneration (every 10 s)" : k === "food" ? "Food" : k === "other" ? "Other (passives, lifesteal)" : /^food:/.test(k) ? itemName(k.slice(5)) : k;
+        const healSubName = k => k === "old" ? "Recorded before the breakdown (update 0.2.1)" : k === "regen" ? "Regeneration (every 10 s)" : k === "food" ? "Food" : k === "other" ? "Other (passives, lifesteal)" : /^food:/.test(k) ? itemName(k.slice(5)) : k;
         const healSubIcon = k => (/^food:/.test(k) ? icon(k.slice(5)) : "");
         // Which source rows are open (damage taken from X, healed by Y): kept so a redraw keeps them.
         const metSubs = new Set();
@@ -3250,15 +3250,19 @@
             const monsters = (s && s.monsters) || {};
             // A source row opens on a click into what made it up (its own rows, indented), when that was recorded.
             const head = (fold, k, label, iconHtml, cells, subs) => { const id = `${fold}|${k}`, has = subs && Object.keys(subs).length > 0, isOpen = has && metSubs.has(id); return `<tr class="${has ? `mds-subhead${isOpen ? " open" : ""}` : ""}"${has ? ` data-sub="${esc(id)}" title="Click for what made it up"` : ""}><td>${iconHtml}${esc(label)}</td>${cells}</tr>`; };
+            // A session stitched across the update to 0.2.1 holds totals from before the breakdown: the rest of a source
+            // is shown as its own row, so a source with nothing broken down still opens (operator, 2026-11-23).
+            const withOld = (subs, total, any, zero) => { const known = Object.values(subs || {}).reduce((a, r) => a + (r.amt || 0), 0); if (!any || total - known <= 0) return subs; return { ...(subs || {}), old: { ...zero, amt: total - known } }; };
+            const anyTaken = !!(p.takenSub && Object.keys(p.takenSub).length), anyHeal = !!(p.healSub && Object.keys(p.healSub).length);
             const taken = Object.entries(p.takenBy || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => {
-                const subs = p.takenSub && p.takenSub[k], id = `taken|${k}`;
+                const subs = withOld(p.takenSub && p.takenSub[k], v, anyTaken, { hits: 0, misses: 0 }), id = `taken|${k}`;
                 const row = head("taken", k, k, monsterIcon(monsters[k]), `<td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.taken)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.takenHits, k)}</td><td class="n">${p.takenHits && p.takenHits[k] != null ? Number((p.takenMiss || {})[k] || 0).toLocaleString() : "–"}</td>`, subs);
                 if (!subs || !metSubs.has(id)) return row;
                 return row + Object.entries(subs).sort((a, b) => b[1].amt - a[1].amt || b[1].misses - a[1].misses).map(([sk, r]) => `<tr class="mds-subrow"><td>${takenSubIcon(sk)}${esc(takenSubName(sk))}</td><td class="n">${fmtN(r.amt)}</td><td class="n">${pct1(r.amt, p.taken)}</td><td class="n">${Math.round(r.amt / secs).toLocaleString()}</td><td class="n">${(r.hits || 0).toLocaleString()}</td><td class="n">${(r.misses || 0).toLocaleString()}</td></tr>`).join("");
             });
             const healIcon = k => { const h = k.includes(": ") ? k.slice(k.indexOf(": ") + 2) : k; return h === "bloom" ? icon("/items/blooming_trident") : meterKeyIcon(h); };
             const healed = Object.entries(p.healBy || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => {
-                const subs = p.healSub && p.healSub[k], id = `healed|${k}`;
+                const subs = (p.healSub && p.healSub[k]) || k === "regen" ? withOld(p.healSub && p.healSub[k], v, anyHeal, { n: 0 }) : null, id = `healed|${k}`;
                 const row = head("healed", k, healName(k), healIcon(k), `<td class="n">${fmtN(v)}</td><td class="n">${pct1(v, p.healed)}</td><td class="n">${Math.round(v / secs).toLocaleString()}</td><td class="n">${cnt(p.healHits, k)}</td>`, subs);
                 if (!subs || !metSubs.has(id)) return row;
                 return row + Object.entries(subs).sort((a, b) => b[1].amt - a[1].amt).map(([sk, r]) => `<tr class="mds-subrow"><td>${healSubIcon(sk)}${esc(healSubName(sk))}</td><td class="n">${fmtN(r.amt)}</td><td class="n">${pct1(r.amt, p.healed)}</td><td class="n">${Math.round(r.amt / secs).toLocaleString()}</td><td class="n">${(r.n || 0).toLocaleString()}</td></tr>`).join("");
