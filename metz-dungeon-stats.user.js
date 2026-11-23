@@ -3709,9 +3709,9 @@
             if (sec < 86400) { const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60); return m ? `${h}h ${m}m` : `${h}h`; }
             const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600); return h ? `${d}d ${h}h` : `${d}d`;
         }
-        // Amber under 36 hours, red under 24 (operator, 2026-11-23); both can be changed in Settings, per browser.
+        // Amber under 72 hours, red under 24 (operator, 2026-11-23); both can be changed in Settings, per browser.
         const KEYH_KEY = PANEL_KEY + "-keyhours-";
-        function keyHours(which) { let v = NaN; try { const raw = localStorage.getItem(KEYH_KEY + which); if (raw != null && raw !== "") v = Number(raw); } catch (_e) { v = NaN; } return v >= 0 ? v : which === "red" ? 24 : 36; }
+        function keyHours(which) { let v = NaN; try { const raw = localStorage.getItem(KEYH_KEY + which); if (raw != null && raw !== "") v = Number(raw); } catch (_e) { v = NaN; } return v >= 0 ? v : which === "red" ? 24 : 72; }
         const runwayColor = (sec, calm = "#888") => (!Number.isFinite(sec) ? calm : sec < keyHours("red") * 3600 ? "#ff6b6b" : sec < keyHours("amber") * 3600 ? "#f0a830" : calm);
         // This dungeon's average run time: this tier's runs when the record has any, else every run of the dungeon.
         function zoneRuns(zone) {
@@ -3721,7 +3721,7 @@
             return { used, avgMs: used.length ? used.reduce((a, r) => a + r.durationMs, 0) / used.length : null };
         }
         // Who in the party runs out of entry keys first, and when (operator, 2026-11-23): the fewest keys in the newest
-        // party key-count message, at the dungeon's average run time. Amber under 36 hours and red under 24 unless changed in Settings (red at 3 keys or fewer while no run time is known).
+        // party key-count message, at the dungeon's average run time. Amber under 72 hours and red under 24 unless changed in Settings (red at 3 keys or fewer while no run time is known).
         // Shown in the damage meter's header; in the Keys label when the meter is hidden or switched off.
         function keysWarning() {
             const zone = currentDungeonZone(); const pk = zone && ref.dungeons[zone] && state.partyKeys ? state.partyKeys.counts : null;
