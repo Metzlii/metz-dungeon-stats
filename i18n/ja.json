@@ -417,5 +417,9 @@
  "cancelled": "キャンセル",
  "prices as of {date}": "{date} 時点の価格",
  "prices: {error}": "価格: {error}",
- "prices not fetched yet": "価格は未取得"
+ "prices not fetched yet": "価格は未取得",
+ "+{n} on order": "+{n} 注文中",
+ "on order": "注文中",
+ "{n} of it in buy orders": "うち {n} は買い注文中",
+ "Opens the game's buy window with {n} filled in": "ゲームの購入ウィンドウを {n} 個入力済みで開きます"
 }

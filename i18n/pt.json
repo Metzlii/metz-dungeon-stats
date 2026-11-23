@@ -417,5 +417,9 @@
  "cancelled": "cancelada",
  "prices as of {date}": "preços de {date}",
  "prices: {error}": "preços: {error}",
- "prices not fetched yet": "preços ainda não obtidos"
+ "prices not fetched yet": "preços ainda não obtidos",
+ "+{n} on order": "+{n} em pedido",
+ "on order": "em pedido",
+ "{n} of it in buy orders": "{n} disso em ordens de compra",
+ "Opens the game's buy window with {n} filled in": "Abre a janela de compra do jogo com {n} já preenchido"
 }

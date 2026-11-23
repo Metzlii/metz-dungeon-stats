@@ -417,5 +417,9 @@
  "cancelled": "취소됨",
  "prices as of {date}": "{date} 기준 가격",
  "prices: {error}": "가격: {error}",
- "prices not fetched yet": "가격을 아직 불러오지 않음"
+ "prices not fetched yet": "가격을 아직 불러오지 않음",
+ "+{n} on order": "+{n} 주문 중",
+ "on order": "주문 중",
+ "{n} of it in buy orders": "그중 {n}은 구매 주문 중",
+ "Opens the game's buy window with {n} filled in": "게임의 구매 창을 {n}개가 입력된 상태로 엽니다"
 }

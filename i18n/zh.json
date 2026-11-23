@@ -417,5 +417,9 @@
  "cancelled": "已取消",
  "prices as of {date}": "价格更新于 {date}",
  "prices: {error}": "价格：{error}",
- "prices not fetched yet": "尚未获取价格"
+ "prices not fetched yet": "尚未获取价格",
+ "+{n} on order": "+{n} 已下单",
+ "on order": "已下单",
+ "{n} of it in buy orders": "其中 {n} 在买单中",
+ "Opens the game's buy window with {n} filled in": "打开游戏的购买窗口并填入 {n}"
 }

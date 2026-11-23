@@ -417,5 +417,9 @@
  "cancelled": "отменён",
  "prices as of {date}": "цены на {date}",
  "prices: {error}": "цены: {error}",
- "prices not fetched yet": "цены ещё не загружены"
+ "prices not fetched yet": "цены ещё не загружены",
+ "+{n} on order": "+{n} в заказе",
+ "on order": "в заказе",
+ "{n} of it in buy orders": "из них {n} в заявках на покупку",
+ "Opens the game's buy window with {n} filled in": "Открывает окно покупки игры с количеством {n}"
 }

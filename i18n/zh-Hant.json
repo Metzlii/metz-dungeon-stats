@@ -417,5 +417,9 @@
  "cancelled": "已取消",
  "prices as of {date}": "價格更新於 {date}",
  "prices: {error}": "價格：{error}",
- "prices not fetched yet": "尚未取得價格"
+ "prices not fetched yet": "尚未取得價格",
+ "+{n} on order": "+{n} 已下單",
+ "on order": "已下單",
+ "{n} of it in buy orders": "其中 {n} 在買單中",
+ "Opens the game's buy window with {n} filled in": "開啟遊戲的購買視窗並填入 {n}"
 }
