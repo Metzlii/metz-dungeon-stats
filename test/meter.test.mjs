@@ -115,6 +115,16 @@ assert.equal(late.stitch(JSON.parse(JSON.stringify(piece))), true);
 const st = late.snapshot();
 assert.equal(st.firstWave, 1); assert.equal(st.waves, 4); assert.equal(st.startAt, 40000); assert.equal(st.zone, "/actions/combat/x"); assert.equal(st.stitched, 1);
 assert.equal(st.players.Mage.dealt, 1400); assert.equal(st.players.Mage.abilities["/abilities/water_strike"].dmg, 1400, "the prepared Water Strike again on the late page");
+// Bloom: a cast (not an auto) by a player with the bloom stat heals the lowest-HP ally; credited to the caster.
+const bl = createMeter({ ability: h => info[h] || null });
+bl.newBattle({ type: "new_battle", battleId: 20, wave: 1, players: [player("Druid", 1, 1000, "/abilities/water_strike", { bloom: 0.38 }), player("Tank", 2, 2000, ""), player("Mage", 3, 1000, "/abilities/water_strike")], monsters: [monster("Imp", 5000)] }, 0);
+bl.update(upd(20, { 1: { cHP: 1500 }, 2: { cHP: 600 } }, {}), 500); // both hurt (no actor: not credited to anyone)
+bl.update(upd(20, { 0: { cHP: 1000, atkCounter: 1, isAutoAtk: true }, 1: { cHP: 1600 }, 2: { cHP: 700 } }, { 0: { cHP: 4800, dmgCounter: 1 } }), 1000); // the Druid's cast: Mage (60%) is lowest -> Bloom; Tank -> regen
+bl.update(upd(20, { 0: { cHP: 1000, atkCounter: 2 }, 2: { cHP: 800 } }, { 0: { cHP: 4700, dmgCounter: 2 } }), 2000); // an auto: no Bloom
+const bs = bl.snapshot();
+assert.equal(bs.players.Druid.healDone, 100); assert.equal(bs.players.Druid.abilities.bloom.heal, 100); assert.equal(bs.players.Druid.abilities.bloom.hits, 1);
+assert.equal(bs.players.Mage.healBy["Druid: bloom"], 100); assert.equal(bs.players.Mage.healBy.regen, 100, "the gain during the auto is not Bloom");
+assert.equal(bs.players.Tank.healBy.regen, 100, "the second gain in the cast's message is not Bloom");
 console.log("meter: rules ok");
 
 const capture = arg("--capture");

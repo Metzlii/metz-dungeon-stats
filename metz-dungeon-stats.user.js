@@ -317,7 +317,7 @@
         function unit(u, i, isPlayer) {
             const det = (u.combatDetails && u.combatDetails.combatStats) || {};
             return { i, isPlayer, name: (isPlayer ? (u.character && u.character.name) || u.name : u.name || String(u.hrid || "").split("/").pop()) || `#${i}`, id: isPlayer && u.character ? u.character.id : null,
-                hp: Number(u.currentHitpoints) || 0, atk: Number(u.attackAttemptCounter) || 0, dmg: Number(u.damageSplatCounter) || 0,
+                hp: Number(u.currentHitpoints) || 0, mhp: Number(u.maxHitpoints) || 0, bloom: Number(det.bloom) || 0, atk: Number(u.attackAttemptCounter) || 0, dmg: Number(u.damageSplatCounter) || 0,
                 prep: u.isPreparingAutoAttack ? "auto" : (u.preparingAbilityHrid || "auto"), flags: Object.fromEntries(FLAGS.map(f => [f, !!u[f]])),
                 counters: (Number(det.parry) || 0) + (Number(det.thorns) || 0) + (Number(det.retaliation) || 0) > 0, dotBy: {} };
         }
@@ -369,6 +369,18 @@
                 if (!who) { cur.unassigned += dmg; battle.unassigned += dmg; continue; }
                 const p = P(who), row = abilityRow(p, key); p.dealt += dmg; row.dmg += dmg; row.hits++; p.hits++;
             }
+            // Bloom (a weapon stat, the Blooming Trident's 0.35/0.38): a completed cast may heal the lowest-HP ally. In the
+            // capture the one player with Bloom had a heal on exactly one player with 436 of 1,198 casts (36%, a Bloom on a
+            // party at full HP shows nothing), and no other player's 2,343 casts ever came with a heal (operator,
+            // 2026-11-23: "healing done" missed every Bloom). The gain on the lowest-HP player before the message is it;
+            // Life Drain's own heal on its caster is not.
+            let bloomTarget = null;
+            if (actor && actor.used !== "auto" && actor.s.bloom > 0) {
+                const info = abilityOf(actor.used);
+                const cands = ch.filter(e => e.side === "p" && e.dhp > 0 && !(info && info.drain && e === actor));
+                const pctBefore = e => (e.s.mhp > 0 ? (e.s.hp - e.dhp) / e.s.mhp : 1);
+                if (cands.length) bloomTarget = cands.reduce((x, y) => (pctBefore(y) < pctBefore(x) ? y : x));
+            }
             // Players: damage taken, healing, deaths. A splat with no HP lost while a monster acts: its attack missed.
             for (const e of ch) {
                 if (e.side === "p" && !e.dhp && e.ddmg > 0 && ma.length) { const p = P(e), src = ma[0].s.name; p.takenMiss[src] = (p.takenMiss[src] || 0) + 1; continue; }
@@ -382,9 +394,11 @@
                 } else {
                     const gain = e.dhp; p.healed += gain; if (e.s.hp > 0) e.s.dead = false;
                     const info = actor && abilityOf(actor.used);
-                    const healer = info && (info.heal || (info.drain && actor === e)) ? actor : null;
-                    const key = !healer ? "regen" : healer.s.name === e.s.name ? actor.used : `${healer.s.name}: ${actor.used}`;
-                    if (healer) { const h = P(healer); h.healDone += gain; abilityRow(h, healer.used).heal += gain; }
+                    const bloom = e === bloomTarget;
+                    const healer = bloom || (info && (info.heal || (info.drain && actor === e))) ? actor : null;
+                    const how = bloom ? "bloom" : actor && actor.used;
+                    const key = !healer ? "regen" : healer.s.name === e.s.name ? how : `${healer.s.name}: ${how}`;
+                    if (healer) { const h = P(healer), row = abilityRow(h, how); h.healDone += gain; row.heal += gain; if (bloom) row.hits++; }
                     p.healBy[key] = (p.healBy[key] || 0) + gain; p.healHits[key] = (p.healHits[key] || 0) + 1;
                 }
             }
@@ -3122,7 +3136,7 @@
         // -----------------------------------------------------------------------------------------------------------
         const pct1 = (a, b) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "–");
         const fmtN = v => (Math.abs(v) >= 1000 ? fmtCoins(v) : String(Math.round(v || 0)));
-        const meterKeyName = k => k === "auto" ? "Auto attack" : k === "parry" ? "Parry" : k === "thorns" ? "Thorns and retaliation" : /^dot:/.test(k) ? `${k === "dot:?" ? "Damage" : abilityName(k.slice(4))} over time` : /^\/abilities\//.test(k) ? abilityName(k) : k;
+        const meterKeyName = k => k === "auto" ? "Auto attack" : k === "bloom" ? "Bloom" : k === "parry" ? "Parry" : k === "thorns" ? "Thorns and retaliation" : /^dot:/.test(k) ? `${k === "dot:?" ? "Damage" : abilityName(k.slice(4))} over time` : /^\/abilities\//.test(k) ? abilityName(k) : k;
         const meterKeyIcon = k => { const h = /^dot:/.test(k) ? k.slice(4) : k; return /^\/abilities\//.test(h) ? abilityIcon(h) : ""; };
         const sessTotal = s => Object.values((s && s.players) || {}).reduce((a, p) => a + (p.dealt || 0), 0);
         const sessSecs = s => Math.max(1, num(s && s.combatMs) / 1000);
