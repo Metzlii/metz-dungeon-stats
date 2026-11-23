@@ -299,13 +299,15 @@
         }
         // The check, for a wave that ended in a win (the next wave began, or the run was cleared): every monster was
         // seen going to 0 HP and every point it lost was credited to a player. A missed message leaves HP standing.
-        function closeWave(complete) {
+        // Time in combat runs without a break (operator, 2026-11-23: it paused between waves): a wave counts from its
+        // start to the next wave's start, the last wave to its last message.
+        function closeWave(complete, endAt) {
             if (!battle || !cur) return;
             if (complete) {
                 const left = battle.m.reduce((s, u) => s + (u ? Math.max(0, u.hp) : 0), 0);
                 cur.check.waves++; if (left === 0 && battle.unassigned === 0) cur.check.balanced++; else cur.check.gap += left + battle.unassigned;
             }
-            cur.combatMs += Math.max(0, battle.lastAt - battle.startAt);
+            cur.combatMs += Math.max(0, (endAt != null ? endAt : battle.lastAt) - battle.startAt);
             battle = null;
         }
         function close(at, complete) {
@@ -325,7 +327,7 @@
         function newBattle(m, at) {
             let closed = null;
             if (cur && cur.battleId !== m.battleId) closed = close(undefined, cur.result === "clear");
-            else closeWave(true);
+            else closeWave(true, at);
             if (!cur) open(m, at);
             const players = (m.players || []).map((u, i) => unit(u, i, true)), monsters = (m.monsters || []).map((u, i) => unit(u, i, false));
             battle = { p: players, m: monsters, startAt: at, lastAt: at, spawnHp: monsters.reduce((s, u) => s + u.hp, 0), lost: 0, healed: 0, unassigned: 0 };
@@ -422,11 +424,12 @@
             }
             return true;
         }
-        // A copy of the session as it stands, the wave in progress counted up to its last message.
-        function snapshot() {
+        // A copy of the session as it stands, the wave in progress counted up to now while battle messages are still
+        // coming (within 15 s of the last), else to its last message.
+        function snapshot(now) {
             if (!cur) return null;
             const s = JSON.parse(JSON.stringify(cur));
-            if (battle) s.combatMs += Math.max(0, battle.lastAt - battle.startAt);
+            if (battle) { const end = now != null && now - battle.lastAt < 15000 ? Math.max(now, battle.lastAt) : battle.lastAt; s.combatMs += Math.max(0, end - battle.startAt); }
             s.live = true; s.seq = ++seq;
             return s;
         }
@@ -533,6 +536,8 @@
         if (!s || !s.players || !Object.keys(s.players).length) return;
         const k = `${s.zone || "?"}|${s.tier ?? ""}`;
         if (!state.streak || state.streak.key !== k) state.streak = { key: k, streak: true, zone: s.zone || null, tier: s.tier ?? null, players: {}, runs: 0 };
+        const gap = num(s.startAt) - num(state.streak.lastAt);
+        if (state.streak.runs && gap > 0 && gap < 120e3) state.streak.combatMs = num(state.streak.combatMs) + gap;
         meterAdd(state.streak, s); state.streak.runs++;
     }
     function streakCheck() {
@@ -2392,7 +2397,7 @@
  <div id="mds-dmg-meter"></div>
  <h4 data-noun="sessions">Sessions</h4>
  <div class="mds-wrap"><table><thead><tr><th>End</th><th>Where</th><th>Result</th><th>Combat time</th><th>Waves</th><th>Party damage</th><th>Party DPS</th><th>Your damage</th><th>Your share</th><th title="Finished waves in which every monster was seen going to 0 HP and every point was credited to a player">Checked</th></tr></thead><tbody id="mds-dmg-sessions"></tbody></table></div>
- <p class="mds-note">Click a player for their abilities: damage, uses, hits, misses and healing, then where their damage taken came from and what healed them. Damage is the HP the monsters lost, read from the game's battle messages: overkill is not counted. DPS runs over time in combat (each wave from its start to its last hit). A dungeon run is listed here only when the script saw it from wave 1 to its end (a reload in the middle of a wave is stitched back in; installing an update reloads the page, so that run is cut). On a planet a session runs until the battle changes, across reloads. Runs seen only in part still count: pick that dungeon's <b>totals</b> in the Session list. Parry and thorns are counter-attacks; damage over time is put on the ability that applied it. Healing done counts heal abilities, Life Drain and Bloom; everything else a player regained (regeneration, food, passives) shows under Healed. Click a session below to show it.</p>
+ <p class="mds-note">Click a player for their abilities: damage, uses, hits, misses and healing, then where their damage taken came from and what healed them. Damage is the HP the monsters lost, read from the game's battle messages: overkill is not counted. DPS runs over time in combat: from the first wave's start to the last hit, without a break between waves. A dungeon run is listed here only when the script saw it from wave 1 to its end (a reload in the middle of a wave is stitched back in; installing an update reloads the page, so that run is cut). On a planet a session runs until the battle changes, across reloads. Runs seen only in part still count: pick that dungeon's <b>totals</b> in the Session list. Parry and thorns are counter-attacks; damage over time is put on the ability that applied it. Healing done counts heal abilities, Life Drain and Bloom; everything else a player regained (regeneration, food, passives) shows under Healed. Click a session below to show it.</p>
 </div>
 <div class="mds-pane" data-pane="keys" hidden>
  <h4>Key crafting</h4>
@@ -3291,7 +3296,7 @@
         }
         function renderDamage() {
             if (!els["mds-dmg-meter"]) return;
-            const live = state.meter.snapshot(), list = damageSessions(), totals = damageTotals();
+            const live = state.meter.snapshot(serverNow()), list = damageSessions(), totals = damageTotals();
             const plain = h => h.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
             const isRun = s => !!(s.zone && ref.dungeons[s.zone]);
             const label = s => s.live ? `${isRun(s) ? "Current run" : "Current session"} · ${plain(meterWhere(s))} · ${meterResult(s)}`
@@ -3375,9 +3380,13 @@
             }
             const info = [...host.children].find(c => /BattlePanel_infoArea__/.test(c.className || ""));
             if (info) { if (info.nextElementSibling !== bmEl) info.after(bmEl); } else if (bmEl.parentNode !== host) host.appendChild(bmEl);
-            let s = state.meter.snapshot();
+            let s = state.meter.snapshot(serverNow());
             const st = state.streak;
-            if (!bmPerRun() && st) { const t = meterAdd(JSON.parse(JSON.stringify(st)), s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key ? s : {}); t.live = !!(s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key); s = t; }
+            if (!bmPerRun() && st) {
+                const same = !!(s && `${s.zone || "?"}|${s.tier ?? ""}` === st.key), t = JSON.parse(JSON.stringify(st));
+                if (same) { const gap = num(s.startAt) - num(st.lastAt); if (gap > 0 && gap < 120e3) t.combatMs = num(t.combatMs) + gap; meterAdd(t, s); }
+                t.live = same; s = t;
+            }
             if (!s) { const last = damageSessions()[0]; if (last && serverNow() - num(last.endAt || last.at) < 10 * 60e3) s = last; }
             const html = `<div class="mds-bm-head">${s ? (h => `<strong>Damage ${h.total}</strong><span class="mds-bm-dps">${h.dps} DPS</span><small>${h.line}</small>${h.badge}`)(meterHeadShort(s)) : `<strong>Damage</strong><small>starts with the next wave</small>`}<span class="mds-bm-btns"><button data-bm="mode" title="${bmPerRun() ? "Showing this run only. Click to show every run since the party went into combat" : "Showing every run since the party went into combat, on this page. Click to show this run only"}">${bmPerRun() ? "This run" : "All runs"}</button><button data-bm="open" title="Every saved session, in Dungeon Stats">Sessions</button><button data-bm="hide" title="Hide the meter here; Dungeon Stats Settings brings it back">Hide</button></span></div>${s ? `<div class="mds-bm-body">${meterView(s, bmExpanded).replace(/title="Click for /g, 'title="Details for ')}</div>` : ""}`;
             if (html !== bmHtml || !bmEl.firstChild) { morph(bmEl, html); bmHtml = html; }

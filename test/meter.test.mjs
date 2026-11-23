@@ -75,7 +75,9 @@ meter.update(upd(7, { 0: { cHP: 1000, atkCounter: 1 } }, { 0: { cHP: 0, dmgCount
 s = meter.snapshot();
 assert.deepEqual(s.check, { waves: 1, balanced: 1, gap: 0 });
 assert.equal(s.waves, 2);
-assert.equal(s.combatMs, 10000 + 1000, "wave 1 from its start to its last hit, wave 2 so far");
+assert.equal(s.combatMs, 11000 + 1000, "wave 1 from its start to wave 2's start (no pause between waves), wave 2 to its last message");
+assert.equal(meter.snapshot(12500).combatMs, 12500, "live: up to now while messages keep coming");
+assert.equal(meter.snapshot(40000).combatMs, 12000, "no message for 15 s: the clock stops at the last one");
 
 // A new battle id closes the session; a cleared session counts its last wave.
 meter.session.result = "clear";
