@@ -463,5 +463,6 @@
  "XP per hour since {time} ago": "{time} 전부터의 시간당 XP",
  "next level in {time}": "다음 레벨까지 {time}",
  "Meter columns": "미터 열",
- "Drag to set this column's width; double-click for automatic": "끌어서 이 열의 너비를 정하고, 두 번 클릭하면 자동"
+ "Drag to set this column's width; double-click for automatic": "끌어서 이 열의 너비를 정하고, 두 번 클릭하면 자동",
+ "Time in combat the meter has counted": "미터가 집계한 전투 시간"
 }

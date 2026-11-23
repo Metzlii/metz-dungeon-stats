@@ -463,5 +463,6 @@
  "XP per hour since {time} ago": "{time} 前からの 1 時間あたり XP",
  "next level in {time}": "次のレベルまで {time}",
  "Meter columns": "メーターの列",
- "Drag to set this column's width; double-click for automatic": "ドラッグでこの列の幅を設定、ダブルクリックで自動"
+ "Drag to set this column's width; double-click for automatic": "ドラッグでこの列の幅を設定、ダブルクリックで自動",
+ "Time in combat the meter has counted": "メーターが計測した戦闘時間"
 }

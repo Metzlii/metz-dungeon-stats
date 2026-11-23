@@ -463,5 +463,6 @@
  "XP per hour since {time} ago": "XP par heure depuis {time}",
  "next level in {time}": "niveau suivant dans {time}",
  "Meter columns": "Colonnes du compteur",
- "Drag to set this column's width; double-click for automatic": "Faites glisser pour fixer la largeur de cette colonne ; double-cliquez pour l'automatique"
+ "Drag to set this column's width; double-click for automatic": "Faites glisser pour fixer la largeur de cette colonne ; double-cliquez pour l'automatique",
+ "Time in combat the meter has counted": "Temps de combat compté par le compteur"
 }

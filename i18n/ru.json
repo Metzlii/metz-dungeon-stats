@@ -463,5 +463,6 @@
  "XP per hour since {time} ago": "Опыт в час за последние {time}",
  "next level in {time}": "следующий уровень через {time}",
  "Meter columns": "Столбцы счётчика",
- "Drag to set this column's width; double-click for automatic": "Перетащите, чтобы задать ширину столбца; двойной щелчок — автоматически"
+ "Drag to set this column's width; double-click for automatic": "Перетащите, чтобы задать ширину столбца; двойной щелчок — автоматически",
+ "Time in combat the meter has counted": "Время боя, учтённое счётчиком"
 }

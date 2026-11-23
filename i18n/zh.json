@@ -463,5 +463,6 @@
  "XP per hour since {time} ago": "{time} 前至今的每小时经验",
  "next level in {time}": "{time} 后升级",
  "Meter columns": "伤害统计列",
- "Drag to set this column's width; double-click for automatic": "拖动设置此列宽度；双击恢复自动"
+ "Drag to set this column's width; double-click for automatic": "拖动设置此列宽度；双击恢复自动",
+ "Time in combat the meter has counted": "统计已计入的战斗时间"
 }
