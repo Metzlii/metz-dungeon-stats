@@ -2243,7 +2243,7 @@
 #mds-toggle{position:fixed;left:10px;bottom:10px;z-index:2147483000;background:#1c2a35;color:#e6eff3;border:1px solid rgba(230,239,243,.16);border-radius:8px;padding:7px 12px;font:500 13px/1.2 "Inter",system-ui,sans-serif;cursor:pointer;box-shadow:0 0 0 1px #3f424d}
 #mds-toggle:hover{border-color:#45c8d8;color:#a9e9f1}
 #mds-toggle[hidden]{display:none}
-#mds-root{position:fixed;left:10px;bottom:46px;z-index:2147483000;width:min(840px,calc(100vw - 20px));max-height:min(72vh,700px);display:flex;flex-direction:column;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #595d6c,0 16px 40px rgba(0,0,0,.65);font:400 14px/1.5 "Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+#mds-root{position:fixed;left:10px;bottom:46px;z-index:2147483000;width:min(840px,calc(100vw - 20px));max-height:min(72vh,700px);display:flex;flex-direction:column;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #595d6c,0 16px 40px rgba(0,0,0,.65);font:400 14px/1.5 "Inter",system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
 #mds-root[hidden]{display:none}
 #mds-root.docked{position:static;z-index:auto;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;margin:0;text-align:left}
 /* z-index:auto matters: the strip is a flex container, and a flex item's z-index makes a stacking context even when static, which put the docked panel above the game's popups (z 300). */
@@ -2410,6 +2410,8 @@
 #mds-bm .mds-meter tr.mds-mrow:hover td.mds-mname::after{opacity:1;background:rgba(69,200,216,.18);border-color:#45c8d8}
 :is(#mds-root,#mds-bm) .mds-meter th .mds-hint{text-transform:none;letter-spacing:0;font-weight:400;color:rgba(230,239,243,.5)}
 /* A player's details from the battle meter open in a popup, so the meter keeps its size (operator, 2026-11-23). */
+/* Equal-width digits everywhere a number updates live (suggested 2026-11-23: the meter header jumped as its numbers changed). */
+#mds-bm,#mds-bm-pop,#mds-bkeys{font-variant-numeric:tabular-nums}
 #mds-bm-pop{position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.45)}
 #mds-bm-pop[hidden]{display:none}
 #mds-bm-pop *{box-sizing:border-box}
