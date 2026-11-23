@@ -454,5 +454,8 @@
  "Drink 3": "Напиток 3",
  "No battle seen on this page yet.": "На этой странице ещё не было боя.",
  "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "Количество на последней волне для всех в бою. Под каждым числом: на сколько хватит при темпе, с которым игрок расходует предмет с момента открытия страницы (– до 10 минут и одного использования). Ключи входа берутся из сообщения группы в начале каждого забега, по среднему времени забега подземелья.",
- "Drag a tab onto another to move it.": "Перетащите вкладку на другую, чтобы переместить её."
+ "Drag a tab onto another to move it.": "Перетащите вкладку на другую, чтобы переместить её.",
+ "Other (unidentified)": "Прочее (не определено)",
+ "Life steal": "Похищение жизни",
+ "Mana leech": "Похищение маны"
 }

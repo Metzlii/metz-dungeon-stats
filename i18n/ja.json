@@ -454,5 +454,8 @@
  "Drink 3": "ドリンク 3",
  "No battle seen on this page yet.": "このページではまだ戦闘を確認していません。",
  "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "最後のウェーブ時点での戦闘参加者全員の所持数。各数の下：このページを開いてからのそのプレイヤーの使用ペースでもつ時間（10 分かつ 1 回使用するまでは –）。入場キーは各周回開始時のゲームのパーティメッセージから、ダンジョンの平均周回時間で計算します。",
- "Drag a tab onto another to move it.": "タブを別のタブにドラッグすると移動できます。"
+ "Drag a tab onto another to move it.": "タブを別のタブにドラッグすると移動できます。",
+ "Other (unidentified)": "その他（未特定）",
+ "Life steal": "ライフスティール",
+ "Mana leech": "マナリーチ"
 }

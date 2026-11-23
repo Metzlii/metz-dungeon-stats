@@ -454,5 +454,8 @@
  "Drink 3": "음료 3",
  "No battle seen on this page yet.": "이 페이지에서 아직 전투를 보지 못했습니다.",
  "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "마지막 웨이브 기준, 전투 중인 모든 플레이어의 보유 수량. 각 수량 아래: 이 페이지를 연 뒤 해당 플레이어의 사용 속도로 버티는 시간(10분 및 1회 사용 전에는 –). 입장 열쇠는 매 회차 시작 시 게임의 파티 메시지에서 가져오며 던전 평균 클리어 시간으로 계산합니다.",
- "Drag a tab onto another to move it.": "탭을 다른 탭 위로 끌어 옮길 수 있습니다."
+ "Drag a tab onto another to move it.": "탭을 다른 탭 위로 끌어 옮길 수 있습니다.",
+ "Other (unidentified)": "기타 (미확인)",
+ "Life steal": "생명력 흡수",
+ "Mana leech": "마나 흡수"
 }

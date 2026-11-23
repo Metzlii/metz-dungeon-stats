@@ -127,6 +127,20 @@ const bs = bl.snapshot();
 assert.equal(bs.players.Druid.healDone, 100); assert.equal(bs.players.Druid.abilities.bloom.heal, 100); assert.equal(bs.players.Druid.abilities.bloom.hits, 1);
 assert.equal(bs.players.Mage.healBy["Druid: bloom"], 100); assert.equal(bs.players.Mage.healBy.regen, 100, "the gain during the auto is not Bloom");
 assert.equal(bs.players.Tank.healBy.regen, 100, "the second gain in the cast's message is not Bloom");
+// Life steal and mana leech: verified by the stat, the player acting, and the gain within damage x stat.
+{
+    const m3 = createMeter({ ability: h => info[h] || null });
+    const thief = { ...player("Thief", 9, 1000, "", { lifeSteal: 0.02, manaLeech: 0.02 }), currentHitpoints: 800, currentManapoints: 100, maxManapoints: 500 };
+    const plain = { ...player("Plain", 8, 1000, ""), currentHitpoints: 800 };
+    m3.newBattle({ type: "new_battle", battleId: 9, wave: 1, players: [thief, plain], monsters: [monster("Imp", 5000)] }, 0);
+    m3.update(upd(9, { 0: { cHP: 820, cMP: 120, atkCounter: 1, isAutoAtk: true } }, { 0: { cHP: 4000, dmgCounter: 1 } }), 1000);   // 1,000 damage, +20 HP, +20 MP
+    m3.update(upd(9, { 0: { cHP: 920, atkCounter: 2, isAutoAtk: true } }, { 0: { cHP: 3900, dmgCounter: 2 } }), 2000);              // 100 damage, +100 HP: too much to be life steal
+    m3.update(upd(9, { 1: { cHP: 830, atkCounter: 1, isAutoAtk: true } }, { 0: { cHP: 2900, dmgCounter: 3 } }), 3000);              // no stat: not life steal
+    const s3 = m3.close();
+    assert.deepEqual(s3.players.Thief.healSub.regen, { lifesteal: { amt: 20, hits: 0, misses: 0, n: 1 }, other: { amt: 100, hits: 0, misses: 0, n: 1 } });
+    assert.deepEqual(s3.players.Thief.mana.gain, { leech: { amt: 20, n: 1 } });
+    assert.deepEqual(Object.keys(s3.players.Plain.healSub.regen), ["other"]);
+}
 console.log("meter: rules ok");
 
 const capture = arg("--capture");

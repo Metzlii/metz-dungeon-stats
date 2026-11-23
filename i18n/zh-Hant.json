@@ -454,5 +454,8 @@
  "Drink 3": "飲料 3",
  "No battle seen on this page yet.": "此頁面尚未看到戰鬥。",
  "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "截至上一波，戰鬥中每個人的持有數量。每個數量下方：按該玩家自本頁面開啟以來的使用速度還能用多久（滿 10 分鐘且使用一次之前顯示 –）。入場鑰匙來自每次開始時遊戲的隊伍訊息，按該地下城的平均通關時間計算。",
- "Drag a tab onto another to move it.": "將分頁拖到另一個分頁上即可移動。"
+ "Drag a tab onto another to move it.": "將分頁拖到另一個分頁上即可移動。",
+ "Other (unidentified)": "其他（未識別）",
+ "Life steal": "生命偷取",
+ "Mana leech": "法力吸取"
 }
