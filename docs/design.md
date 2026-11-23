@@ -252,3 +252,7 @@ The damage meter header also names the party member who runs out of entry keys f
 ### Party consumables (0.2.8)
 
 Every new_battle carries each party member consumables with the count held. Per member and item the script keeps the count and the amount used since this page first saw it (memory only; 10 minutes and one use before an estimate; a 5-minute gap starts over). The soonest to run out is named in the meter header beside the key line, same colours and Settings hours; the tooltip lists each member soonest item. With the meter hidden or off the line sits beside the Keys label (alone in that spot outside a dungeon).
+
+### Mana in the damage meter (0.2.8)
+
+The popup has two more folded tables per player: Mana spent (by ability: the MP lost in the message where the player acts) and Mana gained (the regeneration tick when two or more players gain at once, food and drinks when one player gains alone with nobody acting, other). Sessions saved before 0.2.8 have no mana tables. The party consumables hover is by slot: hovering an own consumable lists each member item in the same food or drink slot.

@@ -438,5 +438,11 @@
  "{name} is out of {item}": "{name} 的 {item} 已用完",
  "Party consumables": "队伍消耗品",
  "Party food slot {n}": "队伍食物栏位 {n}",
- "Party drink slot {n}": "队伍饮料栏位 {n}"
+ "Party drink slot {n}": "队伍饮料栏位 {n}",
+ "Mana": "法力",
+ "Mana spent {n}": "消耗法力 {n}",
+ "Mana gained {n}": "回复法力 {n}",
+ "Food and drinks": "食物和饮料",
+ "Other": "其他",
+ "Times this source restored MP": "此来源回复 MP 的次数"
 }

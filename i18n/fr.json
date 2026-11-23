@@ -438,5 +438,11 @@
  "{name} is out of {item}": "{name} n'a plus de {item}",
  "Party consumables": "Consommables du groupe",
  "Party food slot {n}": "Nourriture du groupe, emplacement {n}",
- "Party drink slot {n}": "Boisson du groupe, emplacement {n}"
+ "Party drink slot {n}": "Boisson du groupe, emplacement {n}",
+ "Mana": "Mana",
+ "Mana spent {n}": "Mana dépensé {n}",
+ "Mana gained {n}": "Mana gagné {n}",
+ "Food and drinks": "Nourriture et boissons",
+ "Other": "Autre",
+ "Times this source restored MP": "Nombre de fois où cette source a rendu des PM"
 }

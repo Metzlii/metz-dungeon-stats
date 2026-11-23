@@ -438,5 +438,11 @@
  "{name} is out of {item}": "{name} の {item} がありません",
  "Party consumables": "パーティの消耗品",
  "Party food slot {n}": "パーティの食べ物スロット {n}",
- "Party drink slot {n}": "パーティのドリンクスロット {n}"
+ "Party drink slot {n}": "パーティのドリンクスロット {n}",
+ "Mana": "マナ",
+ "Mana spent {n}": "消費マナ {n}",
+ "Mana gained {n}": "回復マナ {n}",
+ "Food and drinks": "食べ物とドリンク",
+ "Other": "その他",
+ "Times this source restored MP": "この回復源が MP を回復した回数"
 }

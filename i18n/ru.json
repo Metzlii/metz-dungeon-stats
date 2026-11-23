@@ -438,5 +438,11 @@
  "{name} is out of {item}": "{name}: {item} кончился",
  "Party consumables": "Расходники группы",
  "Party food slot {n}": "Еда группы, слот {n}",
- "Party drink slot {n}": "Напитки группы, слот {n}"
+ "Party drink slot {n}": "Напитки группы, слот {n}",
+ "Mana": "Мана",
+ "Mana spent {n}": "Потрачено маны {n}",
+ "Mana gained {n}": "Получено маны {n}",
+ "Food and drinks": "Еда и напитки",
+ "Other": "Прочее",
+ "Times this source restored MP": "Сколько раз этот источник восстановил MP"
 }

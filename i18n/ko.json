@@ -438,5 +438,11 @@
  "{name} is out of {item}": "{name} {item} 없음",
  "Party consumables": "파티 소모품",
  "Party food slot {n}": "파티 음식 슬롯 {n}",
- "Party drink slot {n}": "파티 음료 슬롯 {n}"
+ "Party drink slot {n}": "파티 음료 슬롯 {n}",
+ "Mana": "마나",
+ "Mana spent {n}": "소모한 마나 {n}",
+ "Mana gained {n}": "회복한 마나 {n}",
+ "Food and drinks": "음식과 음료",
+ "Other": "기타",
+ "Times this source restored MP": "이 출처가 MP를 회복시킨 횟수"
 }
