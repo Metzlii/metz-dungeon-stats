@@ -4,7 +4,7 @@ Metz Dungeon Stats shows its own words in the game's language (the eight the gam
 game's nouns (items, abilities, monsters, places, skills) are not here: the script asks the game for them.
 
 - `en-keys.json`: every English string the script translates. A key may hold `{placeholders}`.
-- `<lang>.json`: English string -> translation. A missing or empty entry shows in English.
+- `<lang>.json`: English string -> translation. A missing or empty entry shows in English. (In the script the English is stored once and each language as its translations in the same order; `merge-locales.mjs` does that.)
 - `game-terms.json`: the game's own words for the few game terms our strings use (Loot & XP Log, Bloom, the
   Combat menu and Battle tab), from `node pull-game-terms.mjs`. Use them when a string mentions those.
 
