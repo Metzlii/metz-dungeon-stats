@@ -541,5 +541,5 @@
  "Drinks": "飲み物",
  "Click for each drink": "クリックで飲み物ごとに表示",
  "Total": "合計",
- "Effective DPS, an estimate: this player's own DPS plus what their buffs, debuffs and auras added to the other players' damage, per second. What they added to their own hits is already in their DPS": "実効 DPS（推定値）：このプレイヤー自身の DPS に、そのバフ・デバフ・オーラが他のプレイヤーのダメージに上乗せした分を 1 秒あたりで加えた値。自分の攻撃への上乗せ分はすでに DPS に含まれています"
+ "Effective DPS, an estimate: this player's damage, less what the other players' buffs, debuffs and auras added to it, plus what theirs added to the others, per second. The column adds up to the party's DPS": "実効 DPS（推定値）：このプレイヤーのダメージから、他のプレイヤーのバフ・デバフ・オーラによる上乗せ分を引き、自分のものが他のプレイヤーに上乗せした分を加えた 1 秒あたりの値。列の合計はパーティー DPS になります"
 }

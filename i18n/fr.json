@@ -541,5 +541,5 @@
  "Drinks": "Boissons",
  "Click for each drink": "Cliquez pour voir chaque boisson",
  "Total": "Total",
- "Effective DPS, an estimate: this player's own DPS plus what their buffs, debuffs and auras added to the other players' damage, per second. What they added to their own hits is already in their DPS": "DPS effectif, une estimation : le DPS propre de ce joueur plus ce que ses bonus, malus et auras ont ajouté aux dégâts des autres joueurs, par seconde. Ce qu'ils ont ajouté à ses propres coups est déjà dans son DPS"
+ "Effective DPS, an estimate: this player's damage, less what the other players' buffs, debuffs and auras added to it, plus what theirs added to the others, per second. The column adds up to the party's DPS": "DPS effectif, une estimation : les dégâts de ce joueur, moins ce que les bonus, malus et auras des autres y ont ajouté, plus ce que les siens ont ajouté aux autres, par seconde. La colonne totalise le DPS du groupe"
 }
