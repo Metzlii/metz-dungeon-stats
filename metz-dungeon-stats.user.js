@@ -2661,11 +2661,15 @@
         const FOLDS_KEY = PANEL_KEY + "-folds";
         let folds = {};
         try { folds = JSON.parse(localStorage.getItem(FOLDS_KEY) || "{}") || {}; } catch (_e) { folds = {}; }
+        // Settings opens with only General unfolded (operator, 2026-11-23). Every fold used to save itself as open the
+        // moment it was built, so the saved Settings states are dropped once for the new default to show.
+        const foldDefault = key => !key.startsWith("settings:") || key === "settings:general";
+        try { if (localStorage.getItem(FOLDS_KEY + "-settings2") !== "1") { for (const k of Object.keys(folds)) if (k.startsWith("settings:")) delete folds[k]; localStorage.setItem(FOLDS_KEY, JSON.stringify(folds)); localStorage.setItem(FOLDS_KEY + "-settings2", "1"); } } catch (_e) { /* fine */ }
         function foldify(scope) {
             for (const h of [...scope.querySelectorAll("h4")]) {
                 if (h.closest("details.mds-fold")) continue;
                 const parent = h.parentElement; const pane = h.closest(".mds-pane"); const key = `${pane ? pane.dataset.pane : "x"}:${cardKey(h.textContent)}`;
-                const d = document.createElement("details"); d.className = "mds-fold"; d.dataset.fold = key; if (h.dataset.noun) d.dataset.noun = h.dataset.noun; d.open = folds[key] !== false;
+                const d = document.createElement("details"); d.className = "mds-fold"; d.dataset.fold = key; if (h.dataset.noun) d.dataset.noun = h.dataset.noun; d.open = folds[key] != null ? folds[key] !== false : foldDefault(key);
                 const sum = document.createElement("summary"); sum.innerHTML = `<span class="mds-fold-title">${h.innerHTML}</span><span class="mds-fold-sum"></span>`;
                 const body = document.createElement("div"); body.className = "mds-fold-body";
                 d.append(sum, body); parent.insertBefore(d, h); h.remove();
