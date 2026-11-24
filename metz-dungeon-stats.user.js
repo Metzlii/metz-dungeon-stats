@@ -37,7 +37,7 @@
     const VERSION = "0.2.12";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-24.1";
+    const BUILD = "2026-11-24.2";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -4273,17 +4273,17 @@
             }
             return out;
         }
-        // Ctrl+click on a figure of the meter's total line: "eDPS: Nyepi 802, Metzli 781, ..." in the chat input. The
+        // Ctrl+click on a column's header or on its figure in the total line: "eDPS: Nyepi 802, Metzli 781, ..." in the chat input. The
         // party tab of the chat is opened first when it can be told apart (a tab named Party beside the input).
         document.addEventListener("click", e => {
-            const td = (e.ctrlKey || e.metaKey) && e.target && e.target.closest ? e.target.closest(".mds-meter td[data-mtot]") : null; if (!td || !chatOut) return;
-            const table = td.closest("table"), i = td.cellIndex, col = METER_COLS.find(c => c.k === td.dataset.mtot); if (!col) return;
+            const td = (e.ctrlKey || e.metaKey) && e.target && e.target.closest ? e.target.closest('.mds-meter td[data-mtot], .mds-meter th[data-mcol]:not([data-mcol="name"])') : null; if (!td || !chatOut || e.target.closest(".mds-colrz")) return;
+            const table = td.closest("table"), i = td.cellIndex, col = METER_COLS.find(c => c.k === (td.dataset.mtot || td.dataset.mcol)); if (!col) return;
             const list = [...table.tBodies[0].rows].filter(r => r.classList.contains("mds-mrow")).map(r => ({ name: r.cells[0].textContent.trim(), text: (r.cells[i] ? r.cells[i].textContent : "").trim(), v: (() => { const x = subCellValue(r.cells[i] ? r.cells[i].innerHTML : ""); return typeof x === "number" ? x : -Infinity; })() }));
             list.sort((x, y) => y.v - x.v);
             const line = `${t(col.label)}: ${list.map(x => `${x.name} ${x.text}`).join(", ")}`;
             e.preventDefault(); e.stopPropagation();
             const tabs = [...document.querySelectorAll('[class*="Chat_"] [role="tab"]')].filter(x => /^\s*Party/.test(x.textContent)), party = tabs.length === 1 ? tabs[0] : null;
-            if (party && party.getAttribute("aria-selected") !== "true") { party.click(); setTimeout(() => chatOut(line, td.parentElement), 120); } else chatOut(line, td.parentElement);
+            if (party && party.getAttribute("aria-selected") !== "true") { party.click(); setTimeout(() => chatOut(line, td), 120); } else chatOut(line, td);
         }, true);
         function meterView(s, expanded, withXp) {
             if (!s || !s.players || !Object.keys(s.players).length) return `<p class="mds-note">No battle seen yet: the meter starts with the next wave.</p>`;
