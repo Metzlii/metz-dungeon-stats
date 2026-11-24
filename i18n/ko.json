@@ -466,7 +466,6 @@
  "{n} party damage ({dps} DPS)": "{n} 파티 피해 ({dps} DPS)",
  "Cost / day": "비용 / 일",
  "{n}/day": "{n}/일",
- "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds up the food and drinks, and the entry keys too when the box beside Entry keys is ticked; a + marks an item with no ask left out.": "마지막 웨이브 기준, 전투 중인 모든 인원의 보유량입니다. 각 수량 아래: 이 페이지를 연 뒤 그 플레이어의 사용 속도로 얼마나 버티는지(10분이 지나고 한 번 사용하기 전에는 –), 이어서 하루 사용량과 거래소 판매가 기준 하루 비용. 입장 열쇠는 매 런 시작 시 게임의 파티 메시지에서 가져오며 던전의 평균 런 시간으로 계산합니다. 비용 / 일은 음식과 음료의 합계이며, 입장 열쇠 옆의 상자를 선택하면 입장 열쇠도 포함합니다. +는 판매 주문이 없어 빠진 아이템이 있음을 뜻합니다.",
  "Count entry keys in Cost / day": "입장 열쇠를 비용 / 일에 포함",
  "The row at the marketplace ask": "행을 거래소 판매가로 계산",
  "Wave": "웨이브",
@@ -525,6 +524,7 @@
  "{place}{tier}: {n} runs, {time} a run in all. A wave runs from its start to the next wave's start, so the time between waves is in it. The three slowest waves are marked.": "{place}{tier}: {n}런, 합계 런당 {time}. 웨이브는 시작부터 다음 웨이브 시작까지이므로 웨이브 사이 시간이 포함됩니다. 가장 느린 세 웨이브가 표시됩니다.",
  "{n} players": "{n}명",
  "{n} changes": "변경 {n}건",
- "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys in this table is ticked.": "위의 사용 속도로 그 일수를 버티기 위해 각 플레이어에게 부족한 수량과 거래소 판매가 기준 구매 비용입니다(속도를 아직 모르면 –, 충분하면 0). 이 표의 입장 열쇠 옆 상자를 선택하면 입장 열쇠도 비용에 포함됩니다.",
- "Count entry keys in Cost": "입장 열쇠를 비용에 포함"
+ "Count entry keys in Cost": "입장 열쇠를 비용에 포함",
+ "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask, entry keys at what crafting them costs with artisan tea (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys in this table is ticked.": "위의 사용 속도로 그 일수를 버티기 위해 각 플레이어에게 부족한 수량과 거래소 판매가 기준 구매 비용입니다(속도를 아직 모르면 –, 충분하면 0). 이 표의 입장 열쇠 옆 상자를 선택하면 입장 열쇠도 비용에 포함됩니다. 입장 열쇠는 장인의 차를 사용해 제작하는 비용으로 계산합니다.",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds up the food and drinks, and the entry keys (at what crafting them costs with artisan tea) when the box beside Entry keys is ticked; a + marks an item with no ask left out.": "마지막 웨이브 기준, 전투 중인 모든 인원의 보유량입니다. 각 수량 아래: 이 페이지를 연 뒤 그 플레이어의 사용 속도로 얼마나 버티는지(10분이 지나고 한 번 사용하기 전에는 –), 이어서 하루 사용량과 거래소 판매가 기준 하루 비용. 입장 열쇠는 매 런 시작 시 게임의 파티 메시지에서 가져오며 던전의 평균 런 시간으로 계산합니다. 비용 / 일은 음식과 음료의 합계이며, 입장 열쇠 옆의 상자를 선택하면 입장 열쇠도 포함합니다. +는 판매 주문이 없어 빠진 아이템이 있음을 뜻합니다. 입장 열쇠는 장인의 차를 사용해 제작하는 비용으로 계산합니다."
 }
