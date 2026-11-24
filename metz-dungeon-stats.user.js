@@ -3338,8 +3338,8 @@
                     const title = document.createElement("span"); title.className = "mds-set-title"; title.textContent = `${def.title} columns`; bar.appendChild(title);
                     def.cols.forEach((label, n) => {
                         const i = n + 1, lab = document.createElement("label"), inp = document.createElement("input"); inp.type = "checkbox"; inp.id = `mds-scol-${key}-${i}`;
-                        inp.checked = !subHidden(key).includes(i);
-                        inp.addEventListener("change", () => { const now = subHidden(key), st = subCols[key] || (subCols[key] = {}); st.hidden = now.filter(x => x !== i); if (!inp.checked) st.hidden.push(i); subColsChanged(); });
+                        inp.checked = !subHidden(key).includes(label);
+                        inp.addEventListener("change", () => { const now = subHidden(key), st = subCols[key] || (subCols[key] = { v: 2 }); st.hidden = now.filter(x => x !== label); if (!inp.checked) st.hidden.push(label); subColsChanged(); });
                         lab.appendChild(inp); lab.appendChild(document.createTextNode(" " + label)); bar.appendChild(lab);
                     });
                     host.appendChild(bar);
@@ -4150,7 +4150,7 @@
         // stays first. Built as text each redraw, so the order and sort are applied to the text: a row with the rows
         // it opened into moves as one piece. Kept per browser, one choice a table for the popup and the Damage tab.
         const SUB_TABLES = {
-            abilities: { title: "Damage dealt", cols: ["Damage", "Share", "DPS", "Uses", "Hits", "Misses", "Accuracy", "Healing", "Uptime", "Added", "eDPS", "Prevented"], off: [4, 5, 6] }, // Uses, Hits and Misses start hidden: Accuracy says it (operator, 2026-11-23)
+            abilities: { title: "Damage dealt", cols: ["Damage", "Share", "DPS", "Uses", "Hits", "Misses", "Accuracy", "Healing", "Uptime", "Added", "eDPS", "Prevented"], off: ["Uses", "Hits", "Misses"] }, // Uses, Hits and Misses start hidden: Accuracy says it (operator, 2026-11-23)
             taken: { title: "Damage taken", cols: ["Damage", "Share", "Per second", "Hits", "Misses"] },
             healed: { title: "Healed", cols: ["Healing", "Share", "Per second", "Times"] },
             deaths: { title: "Deaths", cols: ["Wave", "Killed by", "With", "Hit", "HP before", "Down for"] },
@@ -4162,6 +4162,13 @@
         const SUBCOLS_KEY = PANEL_KEY + "-subcols";
         let subCols = {};
         try { const v = JSON.parse(localStorage.getItem(SUBCOLS_KEY) || "null"); if (v && typeof v === "object") subCols = v; } catch (_e) { subCols = {}; }
+        // Columns are remembered by name (operator, 2026-11-23: a column added in the middle moved a saved choice
+        // onto its neighbour). A choice saved by position, from before eDPS existed, is read against that list.
+        for (const [key, st] of Object.entries(subCols)) {
+            if (!st || typeof st !== "object" || st.v === 2) continue;
+            const old = ((SUB_TABLES[key] || {}).cols || []).filter(c => !(key === "abilities" && c === "eDPS")), name = i => (Number.isInteger(i) && i > 0 ? old[i - 1] : null);
+            subCols[key] = { v: 2, ...(Array.isArray(st.hidden) ? { hidden: st.hidden.map(name).filter(Boolean) } : {}), ...(Array.isArray(st.order) ? { order: st.order.map(name).filter(Boolean) } : {}), sort: st.sort && name(st.sort.i) ? { c: name(st.sort.i), dir: st.sort.dir } : null };
+        }
         const subColsChanged = () => { try { localStorage.setItem(SUBCOLS_KEY, JSON.stringify(subCols)); } catch (_e) { /* fine */ } bmHtml = ""; bmPopHtml = ""; dmgHtml = ""; try { renderBattleMeter(); if (tab === "damage") renderDamage(); } catch (error) { warn("damage meter view", error); } };
         const subCellValue = html => {
             const tx = String(html).replace(/<[^>]*>/g, "").replace(/&[a-z#0-9]+;/gi, " ").replace(/^\s*≈\s*/, "").trim();
@@ -4172,18 +4179,19 @@
         };
         function subTable(key, head, rows) {
             const ths = head.match(/<th\b[\s\S]*?<\/th>/g) || [], n = ths.length, st = subCols[key] || {};
-            const saved = (Array.isArray(st.order) ? st.order : []).filter((i, at, l) => Number.isInteger(i) && i > 0 && i < n && l.indexOf(i) === at);
-            const hidden = subHidden(key);
+            const labels = ths.map(h => h.replace(/<[^>]*>/g, "").trim()), at = c => labels.indexOf(c);
+            const saved = (Array.isArray(st.order) ? st.order : []).map(at).filter((i, k, l) => i > 0 && l.indexOf(i) === k);
+            const hidden = subHidden(key).map(at).filter(i => i > 0);
             const order = [0].concat(saved, [...Array(n).keys()].filter(i => i > 0 && !saved.includes(i))).filter(i => !hidden.includes(i));
             const cellsOf = tr => tr.match(/<td\b[\s\S]*?<\/td>/g) || [];
             let list = rows.slice();
-            const so = st.sort && Number.isInteger(st.sort.i) && st.sort.i < n ? st.sort : null;
+            const so = st.sort && at(st.sort.c) >= 0 ? { i: at(st.sort.c), dir: st.sort.dir } : null;
             if (so) {
                 const dir = so.dir === "asc" ? 1 : -1, val = r => { const c = cellsOf((r.match(/<tr\b[\s\S]*?<\/tr>/) || [""])[0]); return c.length === n ? subCellValue(c[so.i]) : -Infinity; };
                 list = list.map((r, i) => ({ r, i, v: val(r) })).sort((a, b) => ((typeof a.v === "number" && typeof b.v === "number" ? a.v - b.v : String(a.v).localeCompare(String(b.v))) * dir) || a.i - b.i).map(x => x.r);
             }
             const body = list.map(r => r.replace(/(<tr\b[^>]*>)([\s\S]*?)(<\/tr>)/g, (all, a, inner, z) => { const c = cellsOf(inner); return c.length === n ? a + order.map(i => c[i]).join("") + z : all; })).join("");
-            const th = i => { const m = ths[i].match(/^<th\b([^>]*)>/), attrs = m ? m[1] : "", cls = [(attrs.match(/ class="([^"]*)"/) || [])[1] || "", so && so.i === i ? `mds-sort-${so.dir === "asc" ? "asc" : "desc"}` : ""].filter(Boolean).join(" "); return `<th data-scol="${i}"${i > 0 ? ` draggable="true"` : ""}${cls ? ` class="${cls}"` : ""}${attrs.replace(/ class="[^"]*"/, "")}>` + ths[i].slice(m ? m[0].length : 3); };
+            const th = i => { const m = ths[i].match(/^<th\b([^>]*)>/), attrs = m ? m[1] : "", cls = [(attrs.match(/ class="([^"]*)"/) || [])[1] || "", so && so.i === i ? `mds-sort-${so.dir === "asc" ? "asc" : "desc"}` : ""].filter(Boolean).join(" "); return `<th data-scol="${i}" data-slabel="${esc(labels[i])}"${i > 0 ? ` draggable="true"` : ""}${cls ? ` class="${cls}"` : ""}${attrs.replace(/ class="[^"]*"/, "")}>` + ths[i].slice(m ? m[0].length : 3); };
             return `<table class="mds-msub" data-sub-key="${esc(key)}"><thead><tr>${order.map(th).join("")}</tr></thead><tbody>${body}</tbody></table>`;
         }
         {
@@ -4191,18 +4199,18 @@
             const keyOf = th => th.closest("table[data-sub-key]").dataset.subKey;
             document.addEventListener("click", e => {
                 const th = subTh(e); if (!th) return;
-                const key = keyOf(th), i = Number(th.dataset.scol), st = subCols[key] || (subCols[key] = {}), cur = st.sort, first = i === 0 ? "asc" : "desc";
-                st.sort = !cur || cur.i !== i ? { i, dir: first } : cur.dir === first ? { i, dir: first === "asc" ? "desc" : "asc" } : null;
+                const key = keyOf(th), c = th.dataset.slabel, st = subCols[key] || (subCols[key] = { v: 2 }), cur = st.sort, first = th.dataset.scol === "0" ? "asc" : "desc";
+                st.sort = !cur || cur.c !== c ? { c, dir: first } : cur.dir === first ? { c, dir: first === "asc" ? "desc" : "asc" } : null;
                 subColsChanged();
             });
             let dragSub = null;
-            document.addEventListener("dragstart", e => { const th = subTh(e); if (!th || th.dataset.scol === "0") return; dragSub = { key: keyOf(th), i: Number(th.dataset.scol) }; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", th.textContent); } catch (_e) { /* fine */ } });
+            document.addEventListener("dragstart", e => { const th = subTh(e); if (!th || th.dataset.scol === "0") return; dragSub = { key: keyOf(th), i: Number(th.dataset.scol), c: th.dataset.slabel }; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", th.textContent); } catch (_e) { /* fine */ } });
             document.addEventListener("dragover", e => { if (!dragSub) return; const th = subTh(e); if (th && keyOf(th) === dragSub.key && th.dataset.scol !== "0" && Number(th.dataset.scol) !== dragSub.i) e.preventDefault(); });
             document.addEventListener("drop", e => {
                 if (!dragSub) return; const th = subTh(e); if (!th || keyOf(th) !== dragSub.key || th.dataset.scol === "0" || Number(th.dataset.scol) === dragSub.i) return; e.preventDefault();
-                const shown = [...th.parentElement.children].map(x => Number(x.dataset.scol)).filter(i => i > 0 && i !== dragSub.i), r = th.getBoundingClientRect();
-                shown.splice(shown.indexOf(Number(th.dataset.scol)) + (e.clientX > r.left + r.width / 2 ? 1 : 0), 0, dragSub.i);
-                const stD = subCols[dragSub.key] || (subCols[dragSub.key] = {}); stD.order = shown.concat((stD.order || []).filter(i => !shown.includes(i))); dragSub = null; subColsChanged();
+                const shown = [...th.parentElement.children].filter(x => x.dataset.scol !== "0").map(x => x.dataset.slabel).filter(c => c !== dragSub.c), r = th.getBoundingClientRect();
+                shown.splice(shown.indexOf(th.dataset.slabel) + (e.clientX > r.left + r.width / 2 ? 1 : 0), 0, dragSub.c);
+                const stD = subCols[dragSub.key] || (subCols[dragSub.key] = { v: 2 }); stD.order = shown.concat((stD.order || []).filter(c => !shown.includes(c))); dragSub = null; subColsChanged();
             });
             document.addEventListener("dragend", () => { dragSub = null; });
         }
