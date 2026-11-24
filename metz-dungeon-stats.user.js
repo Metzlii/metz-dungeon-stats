@@ -37,7 +37,7 @@
     const VERSION = "0.2.12";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-24.10";
+    const BUILD = "2026-11-24.11";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -2896,6 +2896,9 @@ html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_mi
 html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]>[class*="CombatUnit_combatUnit"]{position:absolute;left:0;top:0}
 html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"][data-mds-tgh]::before{content:"";order:var(--mds-tgo,0);grid-column-start:var(--mds-tgc,auto)}
 html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"][data-mds-tgh2]::after{content:"";order:var(--mds-tgo2,0);grid-column-start:var(--mds-tgc2,auto)}
+html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_guildPartyArea"]){align-items:flex-start !important}
+html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_guildPartyArea"])>[class*="BattlePanel_monstersArea"]{align-self:flex-start !important;margin-top:0 !important}
+html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_guildPartyArea"])>[class*="BattlePanel_monstersArea"]>[class*="BattlePanel_combatUnitGrid"]{align-content:start !important;align-items:start !important;margin-top:0 !important}
 #mds-tg-heads{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none}
 #mds-tg-heads .mds-tgh{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-sizing:border-box;text-align:center;font-size:10px;line-height:1.1;color:#e6eff3;background:rgba(230,239,243,.07);border:1px solid rgba(230,239,243,.26);border-radius:4px;overflow:hidden}
 #mds-tg-heads .mds-tgh .mds-icon{width:20px;height:20px}
