@@ -37,7 +37,7 @@
     const VERSION = "0.2.12";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-24.8";
+    const BUILD = "2026-11-24.9";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -4886,25 +4886,38 @@ html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"][data-mds-tgh2]::after{c
                 cards.push({ card, rank, name, i: cards.length });
             }
             const setOrder = (card, order) => { if (card.style.order !== order) { card.style.order = order; if (order) card.setAttribute("data-mds-tgo", "1"); else card.removeAttribute("data-mds-tgo"); } };
-            const groups = [];
+            let groups = [];
             if (sort) {
                 cards.sort((x, y) => x.rank - y.rank || x.name.localeCompare(y.name, undefined, { sensitivity: "base" }) || x.i - y.i);
-                cards.forEach((c, n) => { setOrder(c.card, String(c.rank * 1000 + n + 1)); const g = groups[groups.length - 1]; if (g && g.rank === c.rank) g.n++; else groups.push({ rank: c.rank, n: 1, first: c.card }); });
+                for (const c of cards) { const g = groups[groups.length - 1]; if (g && g.rank === c.rank) g.cards.push(c.card); else groups.push({ rank: c.rank, cards: [c.card] }); }
             } else for (const c of cards) setOrder(c.card, "");
-            // Where each class starts: on the row in progress when the whole class (label included) fits in what is
-            // left of it, else on a new row. A label is never the last place of a row.
+            // Which class goes where (operator, 2026-11-24: fill the empty space with classes that fit). Rows are
+            // packed: the next class in class order opens a row, then the largest remaining class that fits whole in
+            // what is left of the row follows it, and so on. A class longer than a row wraps; one that has to wrap
+            // anyway carries on in the row in progress when that saves a row. A label is never a row's last place.
             const perRow = Math.max(2, Math.floor((grid.clientWidth - pad + gap) / (w + gap)));
-            let at = 0;
-            for (const g of groups) {
-                const size = g.n + 1;
-                g.newRow = at > 0 && (at + size > perRow || at >= perRow - 1);
-                if (g.newRow) at = 0;
-                at = (at + size) % perRow;
+            {
+                const left = groups.slice(), placed = [];
+                let at = 0;
+                const put = (g, newRow) => { left.splice(left.indexOf(g), 1); g.newRow = newRow; if (newRow) at = 0; at = (at + g.cards.length + 1) % perRow; placed.push(g); };
+                while (left.length) {
+                    const g = left[0], size = g.cards.length + 1;
+                    const inline = at > 0 && at < perRow - 1 && size > perRow && Math.ceil((at + size) / perRow) - 1 < Math.ceil(size / perRow);
+                    put(g, at > 0 && !inline);
+                    for (;;) {
+                        if (!at || at >= perRow - 1) break;
+                        const room = perRow - at, fit = left.filter(x => x.cards.length + 1 <= room).sort((x, y) => y.cards.length - x.cards.length)[0];
+                        if (!fit) break;
+                        put(fit, false);
+                    }
+                }
+                groups = placed;
             }
+            groups.forEach((g, n) => { g.seq = n + 1; g.n = g.cards.length; g.first = g.cards[0]; g.cards.forEach((card, k) => setOrder(card, String(g.seq * 1000 + k + 1))); });
             cols.forEach((col, n) => {
                 for (const [attr, po, pc, g] of [["data-mds-tgh", "--mds-tgo", "--mds-tgc", groups[2 * n]], ["data-mds-tgh2", "--mds-tgo2", "--mds-tgc2", groups[2 * n + 1]]]) {
                     if (!g) { if (col.hasAttribute(attr)) { col.removeAttribute(attr); col.style.removeProperty(po); col.style.removeProperty(pc); } continue; }
-                    const order = String(g.rank * 1000), start = g.newRow ? "1" : "auto";
+                    const order = String(g.seq * 1000), start = g.newRow ? "1" : "auto";
                     if (!col.hasAttribute(attr)) col.setAttribute(attr, "1");
                     if (col.style.getPropertyValue(po) !== order) col.style.setProperty(po, order);
                     if (col.style.getPropertyValue(pc) !== start) col.style.setProperty(pc, start);
