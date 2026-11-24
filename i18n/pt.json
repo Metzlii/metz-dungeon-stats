@@ -545,12 +545,13 @@
  "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+clique: o valor de cada jogador, por ordem, para a caixa de chat",
  "Guild trial: fill the player cards row by row": "Provação da guilda: preencher os cartões dos jogadores linha a linha",
  "Sort them by class": "Ordená-los por classe",
- "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count.": "Ordem das classes: estocada, corte, esmagamento, à distância e depois magos de água, natureza e fogo, cada uma atrás de uma etiqueta com a contagem.",
  "Stab": "Estocada",
  "Slash": "Corte",
  "Smash": "Esmagar",
  "Ranged": "Distância",
  "Water": "Água",
  "Nature": "Natureza",
- "Fire": "Fogo"
+ "Fire": "Fogo",
+ "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "Ordem das classes: estocada, corte, esmagamento, à distância e depois magos de água, natureza e fogo, cada uma atrás de uma etiqueta com a contagem. A classe de um jogador da provação é lida das habilidades que ele usa, por isso preenche-se nos primeiros segundos.",
+ "Not seen yet": "Ainda não visto"
 }

@@ -545,12 +545,13 @@
  "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+щелчок: показатель каждого игрока по порядку — в поле чата",
  "Guild trial: fill the player cards row by row": "Испытание гильдии: заполнять карточки игроков по строкам",
  "Sort them by class": "Сортировать по классу",
- "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count.": "Порядок классов: укол, рубящий, дробящий, дальний бой, затем маги воды, природы и огня; перед каждой группой метка с числом игроков.",
  "Stab": "Укол",
  "Slash": "Рубящий",
  "Smash": "Дробящий",
  "Ranged": "Дальний бой",
  "Water": "Вода",
  "Nature": "Природа",
- "Fire": "Огонь"
+ "Fire": "Огонь",
+ "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "Порядок классов: укол, рубящий, дробящий, дальний бой, затем маги воды, природы и огня; перед каждой группой метка с числом игроков. Класс игрока в испытании определяется по применённым умениям, поэтому заполняется в первые секунды.",
+ "Not seen yet": "Пока не видно"
 }

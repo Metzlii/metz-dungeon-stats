@@ -545,12 +545,13 @@
  "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+點擊：按順序將每位玩家的數值填入聊天框",
  "Guild trial: fill the player cards row by row": "公會試煉：玩家卡片按行填滿",
  "Sort them by class": "按職業排序",
- "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count.": "職業順序：刺擊、斬擊、鈍擊、遠程，然後是水、自然、火法師；每組前有帶人數的標籤。",
  "Stab": "刺擊",
  "Slash": "斬擊",
  "Smash": "鈍擊",
  "Ranged": "遠程",
  "Water": "水",
  "Nature": "自然",
- "Fire": "火"
+ "Fire": "火",
+ "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "職業順序：刺擊、斬擊、鈍擊、遠程，然後是水、自然、火法師；每組前有帶人數的標籤。試煉玩家的職業根據其施放的技能判斷，因此會在最初幾秒內逐步填滿。",
+ "Not seen yet": "尚未識別"
 }

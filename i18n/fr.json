@@ -545,12 +545,13 @@
  "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+clic : le chiffre de chaque joueur, dans l'ordre, dans la zone de chat",
  "Guild trial: fill the player cards row by row": "Épreuve de guilde : remplir les cartes des joueurs ligne par ligne",
  "Sort them by class": "Les trier par classe",
- "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count.": "Ordre des classes : estoc, taille, écrasement, distance, puis mages d'eau, de nature et de feu, chacune derrière une étiquette avec son nombre.",
  "Stab": "Estoc",
  "Slash": "Taille",
  "Smash": "Écrasement",
  "Ranged": "Distance",
  "Water": "Eau",
  "Nature": "Nature",
- "Fire": "Feu"
+ "Fire": "Feu",
+ "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "Ordre des classes : estoc, taille, écrasement, distance, puis mages d'eau, de nature et de feu, chacune derrière une étiquette avec son nombre. La classe d'un joueur de l'épreuve est lue d'après les compétences qu'il lance ; elle se remplit donc dans les premières secondes.",
+ "Not seen yet": "Pas encore vu"
 }

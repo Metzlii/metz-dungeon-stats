@@ -545,12 +545,13 @@
  "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+clic: la cifra de cada jugador, en orden, al cuadro de chat",
  "Guild trial: fill the player cards row by row": "Prueba de gremio: llenar las tarjetas de jugadores fila por fila",
  "Sort them by class": "Ordenarlas por clase",
- "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count.": "Orden de clases: estocada, tajo, golpe, a distancia y luego magos de agua, naturaleza y fuego, cada una tras una etiqueta con su número.",
  "Stab": "Estocada",
  "Slash": "Tajo",
  "Smash": "Golpe",
  "Ranged": "Distancia",
  "Water": "Agua",
  "Nature": "Naturaleza",
- "Fire": "Fuego"
+ "Fire": "Fuego",
+ "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "Orden de clases: estocada, tajo, golpe, a distancia y luego magos de agua, naturaleza y fuego, cada una tras una etiqueta con su número. La clase de un jugador de la prueba se lee de las habilidades que lanza, así que se completa en los primeros segundos.",
+ "Not seen yet": "Sin ver aún"
 }
