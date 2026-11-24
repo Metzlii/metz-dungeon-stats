@@ -37,7 +37,7 @@
     const VERSION = "0.2.12";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-24.7";
+    const BUILD = "2026-11-24.8";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -2891,12 +2891,16 @@
 .mds-fx{display:inline-block;text-align:right}
 :is(#mds-root,#mds-bm) .mds-meter :is(th,td).n{min-width:4.8em}
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub :is(th,td).n{width:1px;min-width:5.8em;white-space:nowrap}
-html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]{display:grid !important;grid-template-columns:repeat(auto-fill,var(--mds-tg-w,40px));grid-auto-flow:row dense;justify-content:start;align-content:start;flex:1 1 auto;width:100%}
+html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]{display:grid !important;grid-template-columns:repeat(auto-fill,var(--mds-tg-w,40px));grid-auto-flow:row;justify-content:start;align-content:start;flex:1 1 auto;width:100%;position:relative;box-sizing:border-box;padding-left:var(--mds-tg-pad,100px);min-height:var(--mds-tg-leadh,0px)}
 html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]>[class*="MiniUnitGrid_miniUnitColumn"]{display:contents !important}
-html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]>[class*="CombatUnit_combatUnit"]{grid-column:span var(--mds-tg-span,3);grid-row:span 3;order:-1}
-html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"][data-mds-tgh]::before{content:attr(data-mds-tgh);order:var(--mds-tgo,0)}
-html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"][data-mds-tgh2]::after{content:attr(data-mds-tgh2);order:var(--mds-tgo2,0)}
-html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"]:is([data-mds-tgh]::before,[data-mds-tgh2]::after){display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;line-height:1.2;font-weight:600;color:#e6eff3;background:rgba(230,239,243,.08);border:1px solid rgba(230,239,243,.28);border-radius:4px;box-sizing:border-box;padding:1px;overflow-wrap:anywhere;white-space:normal}
+html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]>[class*="CombatUnit_combatUnit"]{position:absolute;left:0;top:0}
+html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"][data-mds-tgh]::before{content:"";order:var(--mds-tgo,0);grid-column-start:var(--mds-tgc,auto)}
+html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"][data-mds-tgh2]::after{content:"";order:var(--mds-tgo2,0);grid-column-start:var(--mds-tgc2,auto)}
+#mds-tg-heads{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none}
+#mds-tg-heads .mds-tgh{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-sizing:border-box;text-align:center;font-size:10px;line-height:1.1;color:#e6eff3;background:rgba(230,239,243,.07);border:1px solid rgba(230,239,243,.26);border-radius:4px;overflow:hidden}
+#mds-tg-heads .mds-tgh .mds-icon{width:20px;height:20px}
+#mds-tg-heads .mds-tgh b{font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mds-tg-heads .mds-tgh span{opacity:.8;font-variant-numeric:tabular-nums}
 .mds-meter th[data-mcol]{cursor:pointer;user-select:none}
 .mds-meter th[data-mcol]:hover{color:#e6eff3}
 .mds-meter th.mds-sort-asc::after{content:" ▲";color:#45c8d8}
@@ -4838,48 +4842,84 @@ html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"]:is([data-mds-tgh]::befo
         // card in a grid: pure CSS, no card is moved in the page. Sorting by class sets each card's CSS `order`.
         const TG_KEY = PANEL_KEY + "-trialgrid", TG_SORT_KEY = PANEL_KEY + "-trialsort";
         const TG_NAMES = { 1: "Stab", 2: "Slash", 3: "Smash", 4: "Ranged", 5: "Water", 6: "Nature", 7: "Fire" };
+        // The picture on a class's label: an ability of that class from the game's own sprite.
+        const TG_ICONS = { 1: "/abilities/impale", 2: "/abilities/cleave", 3: "/abilities/sweep", 4: "/abilities/quick_shot", 5: "/abilities/water_strike", 6: "/abilities/entangle", 7: "/abilities/fireball" };
         const tgOn = () => { try { return localStorage.getItem(TG_KEY) !== "off"; } catch (_e) { return true; } };
         const tgSort = () => { try { return localStorage.getItem(TG_SORT_KEY) !== "off"; } catch (_e) { return true; } };
+        let tgHeadsHtml = "";
+        function tgClear() {
+            const html = document.documentElement;
+            html.removeAttribute("data-mds-tg");
+            for (const el of document.querySelectorAll("[data-mds-tgo]")) { el.style.order = ""; el.removeAttribute("data-mds-tgo"); }
+            for (const el of document.querySelectorAll("[data-mds-tgh],[data-mds-tgh2]")) { el.removeAttribute("data-mds-tgh"); el.removeAttribute("data-mds-tgh2"); for (const v of ["--mds-tgo", "--mds-tgo2", "--mds-tgc", "--mds-tgc2"]) el.style.removeProperty(v); }
+            const heads = document.getElementById("mds-tg-heads"); if (heads) heads.remove();
+            tgHeadsHtml = "";
+        }
+        // Layout (operator, 2026-11-24): the large card stands alone at the left (taken out of the flow, the grid is
+        // padded by its width), so every row of small cards starts on the same line. With the sort on, the cards go
+        // by class and then by name; each class starts with a label in a card's place, and a class that would not fit
+        // in what is left of a row starts a new one, so a class is only split when it is longer than a row. The
+        // label's place is an empty ::before / ::after of a dissolved column (a cell of the grid, nothing added to
+        // the game's cards); the label itself, with its icon, is drawn over that place from a layer of our own.
         function trialGrid() {
             const html = document.documentElement, grid = document.querySelector('[class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]');
-            if (!grid || !tgOn()) {
-                if (html.hasAttribute("data-mds-tg")) { html.removeAttribute("data-mds-tg"); for (const el of document.querySelectorAll("[data-mds-tgo]")) { el.style.order = ""; el.removeAttribute("data-mds-tgo"); } for (const el of document.querySelectorAll("[data-mds-tgh],[data-mds-tgh2]")) { el.removeAttribute("data-mds-tgh"); el.removeAttribute("data-mds-tgh2"); el.style.removeProperty("--mds-tgo"); el.style.removeProperty("--mds-tgo2"); } }
-                return;
-            }
+            if (!grid || !tgOn()) { if (html.hasAttribute("data-mds-tg")) tgClear(); return; }
             const cols = [...grid.children].filter(el => /MiniUnitGrid_miniUnitColumn/.test(String(el.className)));
             if (!cols.length) return;
+            const gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
             if (!html.hasAttribute("data-mds-tg")) {
                 // Measured while the game's own layout still stands: a column is one card wide.
                 const w = cols[0].getBoundingClientRect().width, lead = [...grid.children].find(el => /CombatUnit_combatUnit/.test(String(el.className)));
-                const gap = parseFloat(getComputedStyle(grid).columnGap) || 0, lw = lead ? lead.getBoundingClientRect().width : 0;
+                const lr = lead ? lead.getBoundingClientRect() : { width: 0, height: 0 };
                 if (!(w > 0)) return;
-                html.style.setProperty("--mds-tg-w", w + "px"); html.style.setProperty("--mds-tg-span", String(Math.max(1, Math.ceil((lw + gap) / (w + gap)))));
+                html.style.setProperty("--mds-tg-w", w + "px"); html.style.setProperty("--mds-tg-pad", (lr.width ? lr.width + gap : 0) + "px"); html.style.setProperty("--mds-tg-leadh", lr.height + "px");
                 html.setAttribute("data-mds-tg", "1");
             }
-            const sort = tgSort(), count = {};
-            let i = 0;
+            const w = parseFloat(html.style.getPropertyValue("--mds-tg-w")) || 40, pad = parseFloat(html.style.getPropertyValue("--mds-tg-pad")) || 0;
+            const sort = tgSort(), cards = [];
             for (const col of cols) for (const card of col.children) {
-                i++;
-                let order = "";
+                let rank = 9, name = "";
                 if (sort) {
-                    let rank = 9;
                     const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
-                    for (let n = walker.nextNode(); n; n = walker.nextNode()) { const r = classRank(n.nodeValue.trim()); if (r) { rank = r; break; } }
-                    order = String(rank * 1000 + i); count[rank] = (count[rank] || 0) + 1;
+                    for (let n = walker.nextNode(); n; n = walker.nextNode()) { const text = n.nodeValue.trim(); if (!text) continue; if (!name) name = text; const r = classRank(text); if (r) { rank = r; name = text; break; } }
                 }
-                if (card.style.order !== order) { card.style.order = order; if (order) card.setAttribute("data-mds-tgo", "1"); else card.removeAttribute("data-mds-tgo"); }
+                cards.push({ card, rank, name, i: cards.length });
             }
-            // A label tile ahead of each class: the ::before of a dissolved column is a cell of the grid, so the
-            // labels take a card's place each and nothing is added to the game's markup. One column a label.
-            const heads = Object.keys(count).map(Number).sort((a, b) => a - b).map(r => ({ text: `${t(TG_NAMES[r] || "Not seen yet")} ${count[r]}`, order: String(r * 1000) }));
-            // Two labels a column (its ::before and its ::after), so a small party has enough places.
+            const setOrder = (card, order) => { if (card.style.order !== order) { card.style.order = order; if (order) card.setAttribute("data-mds-tgo", "1"); else card.removeAttribute("data-mds-tgo"); } };
+            const groups = [];
+            if (sort) {
+                cards.sort((x, y) => x.rank - y.rank || x.name.localeCompare(y.name, undefined, { sensitivity: "base" }) || x.i - y.i);
+                cards.forEach((c, n) => { setOrder(c.card, String(c.rank * 1000 + n + 1)); const g = groups[groups.length - 1]; if (g && g.rank === c.rank) g.n++; else groups.push({ rank: c.rank, n: 1, first: c.card }); });
+            } else for (const c of cards) setOrder(c.card, "");
+            // Where each class starts: on the row in progress when the whole class (label included) fits in what is
+            // left of it, else on a new row. A label is never the last place of a row.
+            const perRow = Math.max(2, Math.floor((grid.clientWidth - pad + gap) / (w + gap)));
+            let at = 0;
+            for (const g of groups) {
+                const size = g.n + 1;
+                g.newRow = at > 0 && (at + size > perRow || at >= perRow - 1);
+                if (g.newRow) at = 0;
+                at = (at + size) % perRow;
+            }
             cols.forEach((col, n) => {
-                for (const [attr, prop, h] of [["data-mds-tgh", "--mds-tgo", heads[2 * n]], ["data-mds-tgh2", "--mds-tgo2", heads[2 * n + 1]]]) {
-                    if (!h) { if (col.hasAttribute(attr)) { col.removeAttribute(attr); col.style.removeProperty(prop); } continue; }
-                    if (col.getAttribute(attr) !== h.text) col.setAttribute(attr, h.text);
-                    if (col.style.getPropertyValue(prop) !== h.order) col.style.setProperty(prop, h.order);
+                for (const [attr, po, pc, g] of [["data-mds-tgh", "--mds-tgo", "--mds-tgc", groups[2 * n]], ["data-mds-tgh2", "--mds-tgo2", "--mds-tgc2", groups[2 * n + 1]]]) {
+                    if (!g) { if (col.hasAttribute(attr)) { col.removeAttribute(attr); col.style.removeProperty(po); col.style.removeProperty(pc); } continue; }
+                    const order = String(g.rank * 1000), start = g.newRow ? "1" : "auto";
+                    if (!col.hasAttribute(attr)) col.setAttribute(attr, "1");
+                    if (col.style.getPropertyValue(po) !== order) col.style.setProperty(po, order);
+                    if (col.style.getPropertyValue(pc) !== start) col.style.setProperty(pc, start);
                 }
             });
+            // The labels, over the empty places: one card's pitch to the left of each class's first card.
+            let layer = document.getElementById("mds-tg-heads");
+            if (!groups.length) { if (layer) layer.remove(); tgHeadsHtml = ""; return; }
+            if (!layer || layer.parentElement !== grid) { if (layer) layer.remove(); layer = document.createElement("div"); layer.id = "mds-tg-heads"; grid.appendChild(layer); tgHeadsHtml = ""; }
+            const base = grid.getBoundingClientRect();
+            const out = groups.map(g => {
+                const r = g.first.getBoundingClientRect(), label = t(TG_NAMES[g.rank] || "Not seen yet");
+                return `<div class="mds-tgh" title="${esc(label)}" style="left:${(r.left - base.left - w - gap).toFixed(1)}px;top:${(r.top - base.top).toFixed(1)}px;width:${w.toFixed(1)}px;height:${r.height.toFixed(1)}px">${TG_ICONS[g.rank] ? abilityIcon(TG_ICONS[g.rank]) : ""}<b>${esc(label)}</b><span>${g.n}</span></div>`;
+            }).join("");
+            if (out !== tgHeadsHtml) { layer.innerHTML = out; tgHeadsHtml = out; }
         }
         function renderBattleMeter() {
             const host = document.querySelector('[class*="BattlePanel_battlePanel__"]');
