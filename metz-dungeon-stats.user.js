@@ -3079,7 +3079,7 @@
             root.querySelector("#mds-plan-wallet").addEventListener("click", () => { plan.budget = null; savePlan(); renderPlan(); });
             // Damage tab: the session picker, a player row opens its abilities, a session row shows that session.
             els["mds-dmg-pick"].addEventListener("change", e => { dmgPick = e.target.value; dmgHtml = ""; renderDamage(); });
-            els["mds-dmg-meter"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; if (metFoldClick(e)) return; if (metSubClick(e)) { dmgHtml = ""; renderDamage(); return; } const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else { dmgExpanded.add(n); metFoldsReset(); if (e.target.closest("td[data-mdeaths]")) { metFolds.clear(); metFolds.add("deaths"); } } dmgHtml = ""; renderDamage(); });
+            els["mds-dmg-meter"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; if (metFoldClick(e)) return; if (metSubClick(e)) { dmgHtml = ""; renderDamage(); return; } const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else { dmgExpanded.add(n); metFoldsReset(); metFoldsFor(e); } dmgHtml = ""; renderDamage(); });
             els["mds-dmg-sessions"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; const tr = e.target.closest("tr[data-sid]"); if (!tr) return; dmgPick = tr.dataset.sid; dmgHtml = ""; renderDamage(); });
             {
                 const on = root.querySelector("#mds-meter-on"), bmBox = root.querySelector("#mds-bm-on");
@@ -3994,6 +3994,10 @@
         // and healing folded, no source opened.
         const METER_FOLDS = ["abilities"];
         const metFolds = new Set(METER_FOLDS);
+        // A click on a meter cell opens the details with only that column's section unfolded (operator, 2026-11-23):
+        // Taken its damage taken, Healed its healing, Deaths its deaths; the name and the rest, damage dealt.
+        const COL_FOLD = { taken: "taken", healed: "healed", deaths: "deaths" };
+        function metFoldsFor(e) { const td = e.target.closest("td"), table = td && td.closest("table.mds-meter"), th = table && table.tHead && table.tHead.rows[0].cells[td.cellIndex]; const k = th && COL_FOLD[th.dataset.mcol]; if (k) { metFolds.clear(); metFolds.add(k); } }
         const metFoldsReset = () => { metFolds.clear(); for (const k of METER_FOLDS) metFolds.add(k); metSubs.clear(); };
         function metSubClick(e) { const tr = e.target.closest("tr[data-sub]"); if (!tr) return false; const k = tr.dataset.sub; if (metSubs.has(k)) metSubs.delete(k); else metSubs.add(k); return true; }
         function metFoldClick(e) { const sm = e.target.closest("summary[data-fold]"); if (!sm) return false; e.preventDefault(); const k = sm.dataset.fold; if (metFolds.has(k)) metFolds.delete(k); else metFolds.add(k); sm.parentElement.open = metFolds.has(k); return true; }
@@ -4337,7 +4341,7 @@
                     if (b) { if (b.dataset.bm === "hide") { try { localStorage.setItem(BM_KEY, "off"); } catch (_e) { /* fine */ } const cb = root && root.querySelector("#mds-bm-on"); if (cb) cb.checked = false; renderBattleMeter(); } else { tab = "damage"; dmgPick = "live"; setTab("damage", true); setOpen(true); } return; }
                     const tr = e.target.closest("tr.mds-mrow"); if (!tr) return;
                     if (e.ctrlKey || e.metaKey) { const line = rowChatLine(tr); if (line && chatOut) { e.preventDefault(); chatOut(line, tr); } return; }
-                    bmPopName = tr.dataset.player; bmPopHtml = ""; metFoldsReset(); if (e.target.closest("td[data-mdeaths]")) { metFolds.clear(); metFolds.add("deaths"); } renderBattleMeter();
+                    bmPopName = tr.dataset.player; bmPopHtml = ""; metFoldsReset(); metFoldsFor(e); renderBattleMeter();
                 });
             }
             const info = [...host.children].find(c => /BattlePanel_infoArea__/.test(c.className || ""));
