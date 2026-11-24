@@ -519,5 +519,7 @@
  "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds up the food and drinks, and the entry keys (at what crafting them costs with artisan tea) when the box beside Entry keys is ticked; a + marks an item with no ask left out.": "截至上一波，戰鬥中每個人的數量。每個數量下方：按該玩家自本頁面開啟以來的消耗速度還能用多久（滿 10 分鐘且使用過一次之前顯示 –），然後是每天的消耗量以及按市場賣價計算的每日花費。入場鑰匙來自每次開始時遊戲的隊伍訊息，按該地下城的平均通關時間計算。「花費 / 天」為食物和飲料的合計，勾選入場鑰匙旁的方框後也計入入場鑰匙；+ 表示有物品沒有賣單，未計入。 入場鑰匙按使用工匠茶製作的成本計算。",
  "none in this fight": "本場戰鬥沒有",
  "Recorded before deaths were detailed (update 0.2.12)": "記錄於死亡詳情功能之前（0.2.12 更新）",
- "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share within its duration of a cast that hit, not seen on the monster": "該技能的增益在玩家身上的戰鬥時間占比，依據每波開始時遊戲的增益列表以及其間的施放。對於減益：命中後處於其持續時間內的占比，並非在怪物身上觀察到"
+ "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share within its duration of a cast that hit, not seen on the monster": "該技能的增益在玩家身上的戰鬥時間占比，依據每波開始時遊戲的增益列表以及其間的施放。對於減益：命中後處於其持續時間內的占比，並非在怪物身上觀察到",
+ "Accuracy": "命中率",
+ "Hits out of hits and misses": "命中數 ÷（命中數 + 未命中數）"
 }

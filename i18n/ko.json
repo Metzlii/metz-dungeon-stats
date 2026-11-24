@@ -519,5 +519,7 @@
  "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds up the food and drinks, and the entry keys (at what crafting them costs with artisan tea) when the box beside Entry keys is ticked; a + marks an item with no ask left out.": "마지막 웨이브 기준, 전투 중인 모든 인원의 보유량입니다. 각 수량 아래: 이 페이지를 연 뒤 그 플레이어의 사용 속도로 얼마나 버티는지(10분이 지나고 한 번 사용하기 전에는 –), 이어서 하루 사용량과 거래소 판매가 기준 하루 비용. 입장 열쇠는 매 런 시작 시 게임의 파티 메시지에서 가져오며 던전의 평균 런 시간으로 계산합니다. 비용 / 일은 음식과 음료의 합계이며, 입장 열쇠 옆의 상자를 선택하면 입장 열쇠도 포함합니다. +는 판매 주문이 없어 빠진 아이템이 있음을 뜻합니다. 입장 열쇠는 장인의 차를 사용해 제작하는 비용으로 계산합니다.",
  "none in this fight": "이번 전투에서는 없음",
  "Recorded before deaths were detailed (update 0.2.12)": "사망 상세 기록 이전의 데이터 (업데이트 0.2.12)",
- "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share within its duration of a cast that hit, not seen on the monster": "이 어빌리티의 버프가 플레이어에게 있던 전투 시간의 비율. 각 웨이브 시작 시 게임의 버프 목록과 그 사이의 시전으로 계산. 디버프의 경우: 명중한 시전 후 지속 시간 안에 있던 비율이며 몬스터에서 직접 확인한 것은 아닙니다"
+ "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share within its duration of a cast that hit, not seen on the monster": "이 어빌리티의 버프가 플레이어에게 있던 전투 시간의 비율. 각 웨이브 시작 시 게임의 버프 목록과 그 사이의 시전으로 계산. 디버프의 경우: 명중한 시전 후 지속 시간 안에 있던 비율이며 몬스터에서 직접 확인한 것은 아닙니다",
+ "Accuracy": "명중률",
+ "Hits out of hits and misses": "명중 ÷ (명중 + 빗나감)"
 }

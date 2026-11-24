@@ -519,5 +519,7 @@
  "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds up the food and drinks, and the entry keys (at what crafting them costs with artisan tea) when the box beside Entry keys is ticked; a + marks an item with no ask left out.": "最後のウェーブ時点の、戦闘中の全員の所持数です。各所持数の下：このページを開いてからのそのプレイヤーの消費ペースで何日もつか（10 分経過し 1 回使うまでは –）、続いて 1 日あたりの消費数とマーケットの売値での 1 日分の費用。入場キーは各周回開始時のゲームのパーティーメッセージから、ダンジョンの平均周回時間で計算します。「費用 / 日」は食べ物と飲み物の合計で、入場キーの横のチェックを入れると入場キーも含みます。+ は売り注文がなく含まれていないアイテムがあることを示します。 入場キーは職人のお茶を使って作る場合の費用で計算します。",
  "none in this fight": "この戦闘ではなし",
  "Recorded before deaths were detailed (update 0.2.12)": "死亡の詳細を記録する前のデータ（アップデート 0.2.12）",
- "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share within its duration of a cast that hit, not seen on the monster": "このアビリティのバフがプレイヤーに付いていた戦闘時間の割合。各ウェーブ開始時のゲームのバフ一覧と、その間の詠唱から算出。デバフの場合：命中した詠唱から持続時間内だった割合で、モンスター側では確認していません"
+ "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share within its duration of a cast that hit, not seen on the monster": "このアビリティのバフがプレイヤーに付いていた戦闘時間の割合。各ウェーブ開始時のゲームのバフ一覧と、その間の詠唱から算出。デバフの場合：命中した詠唱から持続時間内だった割合で、モンスター側では確認していません",
+ "Accuracy": "命中率",
+ "Hits out of hits and misses": "命中数 ÷（命中数 + ミス数）"
 }
