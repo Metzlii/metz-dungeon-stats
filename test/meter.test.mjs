@@ -20,9 +20,9 @@ const ABILITIES = {
     "/abilities/natures_veil": { abilityEffects: [{ effectType: "/ability_effect_types/damage", blindChance: 0.5 }] },
 };
 const info = Object.fromEntries(Object.entries(ABILITIES).map(([h, d]) => [h, meterAbilityInfo(d)]));
-assert.deepEqual(info["/abilities/maim"], { heal: false, drain: false, dot: true });
-assert.deepEqual(info["/abilities/life_drain"], { heal: false, drain: true, dot: false });
-assert.deepEqual(info["/abilities/heal"], { heal: true, drain: false, dot: false });
+assert.deepEqual(info["/abilities/maim"], { heal: false, drain: false, dot: true, cost: 0, buffs: [] });
+assert.deepEqual(info["/abilities/life_drain"], { heal: false, drain: true, dot: false, cost: 0, buffs: [] });
+assert.deepEqual(info["/abilities/heal"], { heal: true, drain: false, dot: false, cost: 0, buffs: [] });
 
 const player = (name, id, hp, prep, extra = {}) => ({ isPlayer: true, character: { id, name }, name, currentHitpoints: hp, maxHitpoints: hp, attackAttemptCounter: 0, damageSplatCounter: 0, preparingAbilityHrid: prep || "", isPreparingAutoAttack: !prep, combatDetails: { combatStats: extra } });
 const monster = (name, hp) => ({ isPlayer: false, hrid: `/monsters/${name.toLowerCase()}`, name, currentHitpoints: hp, maxHitpoints: hp, attackAttemptCounter: 0, damageSplatCounter: 0, preparingAbilityHrid: "", isPreparingAutoAttack: true });
@@ -155,6 +155,43 @@ assert.equal(bs.players.Tank.healBy.regen, 100, "the second gain in the cast's m
     assert.deepEqual(s4.players.Vamp.healSub.regen, { lifesteal: { amt: 60, hits: 0, misses: 0, n: 1 }, other: { amt: 60, hits: 0, misses: 0, n: 1 } });
 }
 console.log("meter: rules ok");
+
+// Deaths, time down, time out of mana, buff uptime and wave times.
+{
+    const T0 = Date.parse("2026-11-23T09:00:00Z");
+    const inf = { "/abilities/berserk": meterAbilityInfo({ manaCost: 65, abilityEffects: [{ targetType: "self", effectType: "/ability_effect_types/buff", buffs: [{ uniqueHrid: "/buff_uniques/berserk", duration: 20e9 }] }] }),
+        "/abilities/aura": meterAbilityInfo({ manaCost: 100, abilityEffects: [{ targetType: "allAllies", effectType: "/ability_effect_types/buff", buffs: [{ uniqueHrid: "/buff_uniques/aura", duration: 120e9 }] }] }),
+        "/abilities/pollen": meterAbilityInfo({ manaCost: 45, abilityEffects: [{ targetType: "allEnemies", effectType: "/ability_effect_types/damage", buffs: [{ uniqueHrid: "/buff_uniques/pollen", duration: 10e9 }] }] }) };
+    assert.deepEqual(inf["/abilities/aura"].buffs, [{ u: "/buff_uniques/aura", ms: 120000, to: "allies" }]);
+    assert.equal(inf["/abilities/berserk"].cost, 65);
+    const pl = (name, id, hp, mp, prep, abilities, buffs = {}) => ({ ...player(name, id, hp, prep), currentManapoints: mp, maxManapoints: 1000, combatAbilities: abilities.map(h => ({ abilityHrid: h, level: 1 })), combatBuffMap: buffs });
+    const w = (n, at, extra = {}) => ({ type: "new_battle", battleId: 9, wave: n, players: [pl("A", 1, 1000, extra.mpA ?? 500, "/abilities/berserk", ["/abilities/berserk", "/abilities/pollen"], extra.buffsA), pl("B", 2, extra.hpB ?? 800, 500, "/abilities/aura", ["/abilities/aura"])], monsters: [monster("Imp", 5000)] });
+    const m3 = createMeter({ ability: h => inf[h] || null });
+    // Wave 1: a coffee already running for 5 s when the wave starts counts from the session's start only.
+    m3.newBattle(w(1, T0, { buffsA: { c: { uniqueHrid: "/buff_uniques/attack_coffee", startTime: new Date(T0 - 5000).toISOString(), duration: 300e9 } } }), T0);
+    m3.update(upd(9, { 0: { cHP: 1000, cMP: 435, atkCounter: 1, abilityHrid: "/abilities/pollen" } }, {}), T0 + 1000);          // A casts Berserk: 20 s on A
+    m3.update(upd(9, { 1: { cHP: 800, cMP: 400, atkCounter: 1, isAutoAtk: true } }, {}), T0 + 2000);                            // B casts the aura: 120 s on both
+    m3.update(upd(9, { 0: { cHP: 1000, cMP: 390, atkCounter: 2, isAutoAtk: true } }, { 0: { cHP: 4000, dmgCounter: 1 } }), T0 + 3000); // A's pollen hits: a debuff applied
+    // The imp hits B twice, the second kills; B is down until healed 6 s later.
+    m3.update(upd(9, { 1: { cHP: 300, dmgCounter: 1 } }, { 0: { cHP: 4000, atkCounter: 1 } }), T0 + 4000);
+    m3.update(upd(9, { 1: { cHP: 0, dmgCounter: 2 } }, { 0: { cHP: 4000, atkCounter: 2 } }), T0 + 5000);
+    m3.update(upd(9, { 1: { cHP: 400 } }, {}), T0 + 11000);
+    // A drops below the cheapest ability's cost (45 MP) for 4 s, then is back above it.
+    m3.update(upd(9, { 0: { cHP: 1000, cMP: 40 } }, {}), T0 + 12000);
+    m3.update(upd(9, { 0: { cHP: 1000, cMP: 200 } }, {}), T0 + 16000);
+    m3.newBattle(w(2, T0 + 30000), T0 + 30000);
+    const s3 = m3.snapshot(T0 + 30000), A = s3.players.A, B = s3.players.B;
+    assert.equal(B.deaths, 1); assert.equal(B.deadMs, 6000);
+    assert.deepEqual({ wave: B.deathLog[0].wave, by: B.deathLog[0].by, how: B.deathLog[0].how, dmg: B.deathLog[0].dmg, hpBefore: B.deathLog[0].hpBefore, downMs: B.deathLog[0].downMs }, { wave: 1, by: "Imp", how: "auto", dmg: 300, hpBefore: 300, downMs: 6000 });
+    assert.deepEqual(B.deathLog[0].recent.map(x => [x.ago, x.dmg]), [[1000, 500], [0, 300]], "the hits of the 10 s before, the killing one last");
+    assert.equal(A.oomMs, 4000); assert.equal(B.oomMs, 0);
+    assert.deepEqual(A.buffs["/buff_uniques/berserk"], { ms: 20000, until: T0 + 21000 });
+    assert.equal(A.buffs["/buff_uniques/aura"].ms, 120000); assert.equal(B.buffs["/buff_uniques/aura"].ms, 120000, "a party buff is on every living player");
+    assert.deepEqual(A.buffs["/buff_uniques/attack_coffee"], { ms: 295000, until: T0 + 295000 }, "clipped to the session's start");
+    assert.deepEqual(A.debuffs["/buff_uniques/pollen"], { ms: 10000, until: T0 + 13000 });
+    assert.deepEqual(s3.waveT, { 1: { ms: 30000, n: 1, mon: "Imp" } });
+    console.log("deaths, time down, out of mana, buff windows and wave times check out");
+}
 
 const capture = arg("--capture");
 if (capture) {
