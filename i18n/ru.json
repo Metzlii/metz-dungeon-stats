@@ -542,5 +542,5 @@
  "Click for each drink": "Нажмите, чтобы увидеть каждый напиток",
  "Total": "Итого",
  "Effective DPS, an estimate: this player's damage, less what the other players' buffs, debuffs and auras added to it, plus what theirs added to the others, per second. The column adds up to the party's DPS": "Эффективный DPS, оценка: урон игрока минус то, что к нему добавили баффы, дебаффы и ауры других, плюс то, что его собственные добавили другим, в секунду. Сумма столбца равна DPS группы",
- "Ctrl+click: every player's figure, in order, to the party chat": "Ctrl+щелчок: показатель каждого игрока по порядку — в чат группы"
+ "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+щелчок: показатель каждого игрока по порядку — в поле чата"
 }

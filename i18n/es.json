@@ -542,5 +542,5 @@
  "Click for each drink": "Haz clic para ver cada bebida",
  "Total": "Total",
  "Effective DPS, an estimate: this player's damage, less what the other players' buffs, debuffs and auras added to it, plus what theirs added to the others, per second. The column adds up to the party's DPS": "DPS efectivo, una estimación: el daño de este jugador, menos lo que las mejoras, perjuicios y auras de los demás le añadieron, más lo que los suyos añadieron a los demás, por segundo. La columna suma el DPS del grupo",
- "Ctrl+click: every player's figure, in order, to the party chat": "Ctrl+clic: la cifra de cada jugador, en orden, al chat del grupo"
+ "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+clic: la cifra de cada jugador, en orden, al cuadro de chat"
 }
