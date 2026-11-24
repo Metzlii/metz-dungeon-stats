@@ -37,7 +37,7 @@
     const VERSION = "0.2.12";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-24.9";
+    const BUILD = "2026-11-24.10";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -4894,7 +4894,7 @@ html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"][data-mds-tgh2]::after{c
             // Which class goes where (operator, 2026-11-24: fill the empty space with classes that fit). Rows are
             // packed: the next class in class order opens a row, then the largest remaining class that fits whole in
             // what is left of the row follows it, and so on. A class longer than a row wraps; one that has to wrap
-            // anyway carries on in the row in progress when that saves a row. A label is never a row's last place.
+            // anyway carries on in the row in progress instead of opening a new one. A label is never a row's last place.
             const perRow = Math.max(2, Math.floor((grid.clientWidth - pad + gap) / (w + gap)));
             {
                 const left = groups.slice(), placed = [];
@@ -4902,7 +4902,7 @@ html[data-mds-tg] [class*="MiniUnitGrid_miniUnitColumn"][data-mds-tgh2]::after{c
                 const put = (g, newRow) => { left.splice(left.indexOf(g), 1); g.newRow = newRow; if (newRow) at = 0; at = (at + g.cards.length + 1) % perRow; placed.push(g); };
                 while (left.length) {
                     const g = left[0], size = g.cards.length + 1;
-                    const inline = at > 0 && at < perRow - 1 && size > perRow && Math.ceil((at + size) / perRow) - 1 < Math.ceil(size / perRow);
+                    const inline = at > 0 && at < perRow - 1 && size > perRow;
                     put(g, at > 0 && !inline);
                     for (;;) {
                         if (!at || at >= perRow - 1) break;
