@@ -545,5 +545,12 @@
  "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+clic: la cifra de cada jugador, en orden, al cuadro de chat",
  "Guild trial: fill the player cards row by row": "Prueba de gremio: llenar las tarjetas de jugadores fila por fila",
  "Sort them by class": "Ordenarlas por clase",
- "Class order: melee, ranged, then water, nature and fire mages.": "Orden de clases: cuerpo a cuerpo, a distancia y luego magos de agua, naturaleza y fuego."
+ "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count.": "Orden de clases: estocada, tajo, golpe, a distancia y luego magos de agua, naturaleza y fuego, cada una tras una etiqueta con su número.",
+ "Stab": "Estocada",
+ "Slash": "Tajo",
+ "Smash": "Golpe",
+ "Ranged": "Distancia",
+ "Water": "Agua",
+ "Nature": "Naturaleza",
+ "Fire": "Fuego"
 }

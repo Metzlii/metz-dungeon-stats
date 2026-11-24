@@ -545,5 +545,12 @@
  "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+クリック：各プレイヤーの数値を順にチャット欄へ",
  "Guild trial: fill the player cards row by row": "ギルドトライアル：プレイヤーカードを行ごとに詰めて並べる",
  "Sort them by class": "クラス順に並べる",
- "Class order: melee, ranged, then water, nature and fire mages.": "クラスの順：近接、遠距離、続いて水・自然・火の魔法使い。"
+ "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count.": "クラスの順：突き、斬り、打撃、遠距離、続いて水・自然・火の魔法使い。各グループの先頭に人数付きのラベルが付きます。",
+ "Stab": "突き",
+ "Slash": "斬り",
+ "Smash": "打撃",
+ "Ranged": "遠距離",
+ "Water": "水",
+ "Nature": "自然",
+ "Fire": "火"
 }

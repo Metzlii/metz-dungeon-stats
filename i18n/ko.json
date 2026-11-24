@@ -545,5 +545,12 @@
  "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+클릭: 각 플레이어의 수치를 순서대로 채팅 입력창에",
  "Guild trial: fill the player cards row by row": "길드 시련: 플레이어 카드를 행 단위로 채우기",
  "Sort them by class": "직업별로 정렬",
- "Class order: melee, ranged, then water, nature and fire mages.": "직업 순서: 근접, 원거리, 그다음 물·자연·불 마법사."
+ "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count.": "직업 순서: 찌르기, 베기, 강타, 원거리, 그다음 물·자연·불 마법사. 각 그룹 앞에 인원수가 적힌 라벨이 붙습니다.",
+ "Stab": "찌르기",
+ "Slash": "베기",
+ "Smash": "강타",
+ "Ranged": "원거리",
+ "Water": "물",
+ "Nature": "자연",
+ "Fire": "불"
 }

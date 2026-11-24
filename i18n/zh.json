@@ -545,5 +545,12 @@
  "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+点击：按顺序将每位玩家的数值填入聊天框",
  "Guild trial: fill the player cards row by row": "公会试炼：玩家卡片按行填满",
  "Sort them by class": "按职业排序",
- "Class order: melee, ranged, then water, nature and fire mages.": "职业顺序：近战、远程，然后是水、自然、火法师。"
+ "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count.": "职业顺序：刺击、斩击、钝击、远程，然后是水、自然、火法师；每组前有带人数的标签。",
+ "Stab": "刺击",
+ "Slash": "斩击",
+ "Smash": "钝击",
+ "Ranged": "远程",
+ "Water": "水",
+ "Nature": "自然",
+ "Fire": "火"
 }
