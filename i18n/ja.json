@@ -537,5 +537,8 @@
  "Fury (gear)": "フューリー（装備）",
  "Weaken (gear)": "弱体化（装備）",
  "eDPS": "eDPS",
- "Effective DPS: the Added figure per second of the fight": "実効 DPS：「上乗せ」を戦闘 1 秒あたりに換算した値"
+ "Effective DPS: the Added figure per second of the fight": "実効 DPS：「上乗せ」を戦闘 1 秒あたりに換算した値",
+ "Drinks": "飲み物",
+ "Click for each drink": "クリックで飲み物ごとに表示",
+ "Total": "合計"
 }

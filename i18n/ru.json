@@ -537,5 +537,8 @@
  "Fury (gear)": "Ярость (экипировка)",
  "Weaken (gear)": "Ослабление (экипировка)",
  "eDPS": "eDPS",
- "Effective DPS: the Added figure per second of the fight": "Эффективный DPS: «Добавлено» в расчёте на секунду боя"
+ "Effective DPS: the Added figure per second of the fight": "Эффективный DPS: «Добавлено» в расчёте на секунду боя",
+ "Drinks": "Напитки",
+ "Click for each drink": "Нажмите, чтобы увидеть каждый напиток",
+ "Total": "Итого"
 }
