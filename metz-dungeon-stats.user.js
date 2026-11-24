@@ -3079,7 +3079,7 @@
             root.querySelector("#mds-plan-wallet").addEventListener("click", () => { plan.budget = null; savePlan(); renderPlan(); });
             // Damage tab: the session picker, a player row opens its abilities, a session row shows that session.
             els["mds-dmg-pick"].addEventListener("change", e => { dmgPick = e.target.value; dmgHtml = ""; renderDamage(); });
-            els["mds-dmg-meter"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; if (metFoldClick(e)) return; if (metSubClick(e)) { dmgHtml = ""; renderDamage(); return; } const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else { dmgExpanded.add(n); metFoldsReset(); if (e.target.closest("td[data-mdeaths]")) metFolds.add("deaths"); } dmgHtml = ""; renderDamage(); });
+            els["mds-dmg-meter"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; if (metFoldClick(e)) return; if (metSubClick(e)) { dmgHtml = ""; renderDamage(); return; } const tr = e.target.closest("tr.mds-mrow"); if (!tr) return; const n = tr.dataset.player; if (dmgExpanded.has(n)) dmgExpanded.delete(n); else { dmgExpanded.add(n); metFoldsReset(); if (e.target.closest("td[data-mdeaths]")) { metFolds.clear(); metFolds.add("deaths"); } } dmgHtml = ""; renderDamage(); });
             els["mds-dmg-sessions"].addEventListener("click", e => { if (e.ctrlKey || e.metaKey) return; const tr = e.target.closest("tr[data-sid]"); if (!tr) return; dmgPick = tr.dataset.sid; dmgHtml = ""; renderDamage(); });
             {
                 const on = root.querySelector("#mds-meter-on"), bmBox = root.querySelector("#mds-bm-on");
@@ -4337,7 +4337,7 @@
                     if (b) { if (b.dataset.bm === "hide") { try { localStorage.setItem(BM_KEY, "off"); } catch (_e) { /* fine */ } const cb = root && root.querySelector("#mds-bm-on"); if (cb) cb.checked = false; renderBattleMeter(); } else { tab = "damage"; dmgPick = "live"; setTab("damage", true); setOpen(true); } return; }
                     const tr = e.target.closest("tr.mds-mrow"); if (!tr) return;
                     if (e.ctrlKey || e.metaKey) { const line = rowChatLine(tr); if (line && chatOut) { e.preventDefault(); chatOut(line, tr); } return; }
-                    bmPopName = tr.dataset.player; bmPopHtml = ""; metFoldsReset(); if (e.target.closest("td[data-mdeaths]")) metFolds.add("deaths"); renderBattleMeter();
+                    bmPopName = tr.dataset.player; bmPopHtml = ""; metFoldsReset(); if (e.target.closest("td[data-mdeaths]")) { metFolds.clear(); metFolds.add("deaths"); } renderBattleMeter();
                 });
             }
             const info = [...host.children].find(c => /BattlePanel_infoArea__/.test(c.className || ""));
