@@ -2481,6 +2481,8 @@
 #mds-root .mds-tile small{color:#c5d4de;font-size:.786em;line-height:1.2}
 #mds-root a.mds-link{color:#a9e9f1;text-decoration:none;border-bottom:1px dotted rgba(169,233,241,.5)}
 #mds-root a.mds-link:hover{color:#45c8d8;border-bottom-color:#45c8d8}
+#mds-root a.mds-mk{color:inherit;text-decoration:none;cursor:pointer}
+#mds-root a.mds-mk:hover{color:#45c8d8}
 #mds-root .mds-num{width:7em;background:#1c2a35;border:1px solid rgba(230,239,243,.16);color:#e6eff3;border-radius:6px;padding:4px 6px;font:inherit}
 #mds-root input.mds-num.mds-num-wide{width:11.5em;min-width:11.5em}
 #mds-root th.mds-dragging{opacity:.5}
@@ -4233,6 +4235,8 @@
             const daily = (perDay, price) => (perDay == null ? "" : `<small style="color:#8fa3b0">${esc(t("{n}/day", { n: perDayText(perDay) }))}${price != null ? " · " + fmtCoins(perDay * price) : ""}</small>`);
             const keyItem = inDungeon ? ref.dungeons[zone].keyItem : null, keyNow = keyItem && askOf(keyItem) == null ? recipePriceNow(keyItem) : null;
             const keyPrice = keyItem ? (askOf(keyItem) != null ? askOf(keyItem) : keyNow ? keyNow.unitCost : null) : null, keysDay = avgMs > 0 ? 86400e3 / avgMs : null;
+            // An item's icon and count open it in the marketplace (operator, 2026-11-23).
+            const mk = (item, inner) => (item && !(ref.items[item] && ref.items[item].tradable === false) ? `<a href="#" class="mds-mk" data-market="${esc(item)}">${inner}</a>` : inner);
             const html = names.map(name => {
                 let total = 0, priced = 0, missing = false;
                 const add = (perDay, price) => { if (perDay == null) return; if (price == null) { missing = true; return; } total += perDay * price; priced++; };
@@ -4240,7 +4244,7 @@
                     const hit = Object.entries(rec).find(([, r]) => r.kind === kind && r.slot === slot); if (!hit) return `<td>–</td>`;
                     const [item, r] = hit, perDay = r.t - r.t0 >= 600e3 && r.used > 0 ? r.used / (r.t - r.t0) * 86400e3 : null, price = askOf(item);
                     add(perDay, price);
-                    return `<td title="${esc(itemName(item))}">${icon(item)}${Math.max(0, r.count).toLocaleString()}${time(consSec(r))}${daily(perDay, price)}</td>`;
+                    return `<td title="${esc(itemName(item))}">${mk(item, icon(item) + Math.max(0, r.count).toLocaleString())}${time(consSec(r))}${daily(perDay, price)}</td>`;
                 };
                 const k = pk && pk[name] != null ? pk[name] : null;
                 if (k != null && withKeys) add(keysDay, keyPrice);
@@ -4251,7 +4255,7 @@
                         if (perDay == null) return `<td>–</td>`;
                         const n = Math.max(0, Math.ceil(perDay * days - count)); any = true;
                         if (n > 0 && counts) { parts.push(`${n.toLocaleString()} ${itemName(item)}`); if (price == null) gap = true; else cost += n * price; }
-                        return `<td title="${esc(itemName(item))}">${icon(item)}${n.toLocaleString()}${n > 0 && price != null ? `<small style="color:#8fa3b0">${fmtCoins(n * price)}</small>` : ""}</td>`;
+                        return `<td title="${esc(itemName(item))}">${mk(item, icon(item) + n.toLocaleString())}${n > 0 && price != null ? `<small style="color:#8fa3b0">${fmtCoins(n * price)}</small>` : ""}</td>`;
                     };
                     const slot = (kind, i) => { const hit = Object.entries(rec).find(([, r]) => r.kind === kind && r.slot === i); if (!hit) return `<td>–</td>`; const [item, r] = hit; return need(item, Math.max(0, r.count), r.t - r.t0 >= 600e3 && r.used > 0 ? r.used / (r.t - r.t0) * 86400e3 : null, askOf(item), true); };
                     const keyCell = k != null && keyItem ? need(keyItem, k, keysDay, keyPrice, restockKeys) : `<td>–</td>`;
@@ -4260,7 +4264,7 @@
                     if (parts.length) restockLines.push(`${name}: ${parts.join(", ")}`);
                 }
                 const cells = `${[0, 1, 2].map(i => cell("food", i)).join("")}${[0, 1, 2].map(i => cell("drink", i)).join("")}`;
-                return `<tr><td class="k" translate="no">${esc(name)}</td><td>${k == null ? "–" : k.toLocaleString() + time(avgMs != null ? k * avgMs / 1000 : null) + daily(keysDay, keyPrice)}</td>${cells}<td>${priced ? fmtCoins(total) + (missing ? "+" : "") : "–"}</td></tr>`;
+                return `<tr><td class="k" translate="no">${esc(name)}</td><td>${k == null ? "–" : mk(keyItem, k.toLocaleString()) + time(avgMs != null ? k * avgMs / 1000 : null) + daily(keysDay, keyPrice)}</td>${cells}<td>${priced ? fmtCoins(total) + (missing ? "+" : "") : "–"}</td></tr>`;
             }).join("") || `<tr><td colspan="9" class="t">No battle seen on this page yet.</td></tr>`;
             if (html !== partyHtml) { body.innerHTML = html; partyHtml = html; const pane = body.closest(".mds-pane"); if (pane) localize(pane); }
             const rs = restock.join("") || `<tr><td colspan="9" class="t">No battle seen on this page yet.</td></tr>`;
