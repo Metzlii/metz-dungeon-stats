@@ -2596,6 +2596,9 @@
 .mds-meter th[data-mcol]:hover{color:#e6eff3}
 .mds-meter th.mds-sort-asc::after{content:" ▲";color:#45c8d8}
 .mds-meter th.mds-sort-desc::after{content:" ▼";color:#45c8d8}
+.mds-msub th.mds-sort-asc::after{content:" ▲";color:#45c8d8}
+.mds-msub th.mds-sort-desc::after{content:" ▼";color:#45c8d8}
+.mds-msub th[data-scol]{cursor:pointer;user-select:none}
 /* Fixed slots for the header's two live figures (operator, 2026-11-23): damage up to 999.99m, DPS up to 5 digits. */
 #mds-bm .mds-fixd{display:inline-block;min-width:6.9ch;text-align:left}
 #mds-bm .mds-fixp{display:inline-block;min-width:5.6ch;text-align:right}
@@ -3887,6 +3890,56 @@
         // MP below their cheapest ability; the figure is in the hover and in the details.
         const oomShown = (p, secs) => (p.oomMs || 0) >= 3000 && (p.oomMs || 0) / 1000 >= secs * 0.01;
         const oomText = (p, secs) => t("Out of mana for {time} ({pct} of the fight): MP below the cost of their cheapest ability", { time: fmtDur(p.oomMs || 0), pct: pct1((p.oomMs || 0) / 1000, secs) });
+        // The tables inside a player's details (operator, 2026-11-23): like every other table, drag a header onto
+        // another to reorder, click one to sort (again to reverse, a third time for the usual order). The first column
+        // stays first. Built as text each redraw, so the order and sort are applied to the text: a row with the rows
+        // it opened into moves as one piece. Kept per browser, one choice a table for the popup and the Damage tab.
+        const SUBCOLS_KEY = PANEL_KEY + "-subcols";
+        let subCols = {};
+        try { const v = JSON.parse(localStorage.getItem(SUBCOLS_KEY) || "null"); if (v && typeof v === "object") subCols = v; } catch (_e) { subCols = {}; }
+        const subColsChanged = () => { try { localStorage.setItem(SUBCOLS_KEY, JSON.stringify(subCols)); } catch (_e) { /* fine */ } bmHtml = ""; bmPopHtml = ""; dmgHtml = ""; try { renderBattleMeter(); if (tab === "damage") renderDamage(); } catch (error) { warn("damage meter view", error); } };
+        const subCellValue = html => {
+            const tx = String(html).replace(/<[^>]*>/g, "").replace(/&[a-z#0-9]+;/gi, " ").trim();
+            if (!tx || tx === "–") return -Infinity;
+            const tm = tx.match(/^(\d+):(\d\d)(?::(\d\d))?/); if (tm) return tm[3] != null ? Number(tm[1]) * 3600 + Number(tm[2]) * 60 + Number(tm[3]) : Number(tm[1]) * 60 + Number(tm[2]);
+            const m = tx.match(/^(-?[\d,]*\.?\d+)\s*([kmbt%]?)(?=$|[\s(])/i); if (!m) return tx;
+            return Number(m[1].replace(/,/g, "")) * ({ k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[m[2].toLowerCase()] || 1);
+        };
+        function subTable(key, head, rows) {
+            const ths = head.match(/<th\b[\s\S]*?<\/th>/g) || [], n = ths.length, st = subCols[key] || {};
+            const saved = (Array.isArray(st.order) ? st.order : []).filter((i, at, l) => Number.isInteger(i) && i > 0 && i < n && l.indexOf(i) === at);
+            const order = [0].concat(saved, [...Array(n).keys()].filter(i => i > 0 && !saved.includes(i)));
+            const cellsOf = tr => tr.match(/<td\b[\s\S]*?<\/td>/g) || [];
+            let list = rows.slice();
+            const so = st.sort && Number.isInteger(st.sort.i) && st.sort.i < n ? st.sort : null;
+            if (so) {
+                const dir = so.dir === "asc" ? 1 : -1, val = r => { const c = cellsOf((r.match(/<tr\b[\s\S]*?<\/tr>/) || [""])[0]); return c.length === n ? subCellValue(c[so.i]) : -Infinity; };
+                list = list.map((r, i) => ({ r, i, v: val(r) })).sort((a, b) => ((typeof a.v === "number" && typeof b.v === "number" ? a.v - b.v : String(a.v).localeCompare(String(b.v))) * dir) || a.i - b.i).map(x => x.r);
+            }
+            const body = list.map(r => r.replace(/(<tr\b[^>]*>)([\s\S]*?)(<\/tr>)/g, (all, a, inner, z) => { const c = cellsOf(inner); return c.length === n ? a + order.map(i => c[i]).join("") + z : all; })).join("");
+            const th = i => { const m = ths[i].match(/^<th\b([^>]*)>/), attrs = m ? m[1] : "", cls = [(attrs.match(/ class="([^"]*)"/) || [])[1] || "", so && so.i === i ? `mds-sort-${so.dir === "asc" ? "asc" : "desc"}` : ""].filter(Boolean).join(" "); return `<th data-scol="${i}"${i > 0 ? ` draggable="true"` : ""}${cls ? ` class="${cls}"` : ""}${attrs.replace(/ class="[^"]*"/, "")}>` + ths[i].slice(m ? m[0].length : 3); };
+            return `<table class="mds-msub" data-sub-key="${esc(key)}"><thead><tr>${order.map(th).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+        }
+        {
+            const subTh = e => { const th = e.target && e.target.closest ? e.target.closest(".mds-msub th[data-scol]") : null; return th && th.closest("table[data-sub-key]") ? th : null; };
+            const keyOf = th => th.closest("table[data-sub-key]").dataset.subKey;
+            document.addEventListener("click", e => {
+                const th = subTh(e); if (!th) return;
+                const key = keyOf(th), i = Number(th.dataset.scol), st = subCols[key] || (subCols[key] = {}), cur = st.sort, first = i === 0 ? "asc" : "desc";
+                st.sort = !cur || cur.i !== i ? { i, dir: first } : cur.dir === first ? { i, dir: first === "asc" ? "desc" : "asc" } : null;
+                subColsChanged();
+            });
+            let dragSub = null;
+            document.addEventListener("dragstart", e => { const th = subTh(e); if (!th || th.dataset.scol === "0") return; dragSub = { key: keyOf(th), i: Number(th.dataset.scol) }; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", th.textContent); } catch (_e) { /* fine */ } });
+            document.addEventListener("dragover", e => { if (!dragSub) return; const th = subTh(e); if (th && keyOf(th) === dragSub.key && th.dataset.scol !== "0" && Number(th.dataset.scol) !== dragSub.i) e.preventDefault(); });
+            document.addEventListener("drop", e => {
+                if (!dragSub) return; const th = subTh(e); if (!th || keyOf(th) !== dragSub.key || th.dataset.scol === "0" || Number(th.dataset.scol) === dragSub.i) return; e.preventDefault();
+                const shown = [...th.parentElement.children].map(x => Number(x.dataset.scol)).filter(i => i > 0 && i !== dragSub.i), r = th.getBoundingClientRect();
+                shown.splice(shown.indexOf(Number(th.dataset.scol)) + (e.clientX > r.left + r.width / 2 ? 1 : 0), 0, dragSub.i);
+                (subCols[dragSub.key] || (subCols[dragSub.key] = {})).order = shown; dragSub = null; subColsChanged();
+            });
+            document.addEventListener("dragend", () => { dragSub = null; });
+        }
         function meterView(s, expanded, withXp) {
             if (!s || !s.players || !Object.keys(s.players).length) return `<p class="mds-note">No battle seen yet: the meter starts with the next wave.</p>`;
             const secs = sessSecs(s), total = sessTotal(s);
@@ -3922,7 +3975,7 @@
             const healName = k => k === "regen" ? t("Regeneration, food and passives") : k.includes(": ") ? t("{name}'s {ability}", { name: k.slice(0, k.indexOf(": ")), ability: meterKeyName(k.slice(k.indexOf(": ") + 2)) }) : meterKeyName(k);
             const cnt = (o, k) => (o && o[k] != null ? Number(o[k]).toLocaleString() : "–");
             // Damage taken and healing, the abilities' format: a folded header with the total, open on a click.
-            const fold = (key, title, total, rows, head, noun = "source", nouns = noun + "s") => { const n = rows.length; return `<details class="mds-mfold"${metFolds.has(key) ? " open" : ""}><summary data-fold="${key}"><b>${esc(t(title + " {n}", { n: fmtN(total) }))}</b> <span class="mds-hint">· ${esc(t(n === 1 ? "{n} " + noun : "{n} " + nouns, { n }))}</span></summary>${n ? `<table class="mds-msub"><thead><tr>${head}</tr></thead><tbody>${rows.join("")}</tbody></table>` : ""}</details>`; };
+            const fold = (key, title, total, rows, head, noun = "source", nouns = noun + "s") => { const n = rows.length; return `<details class="mds-mfold"${metFolds.has(key) ? " open" : ""}><summary data-fold="${key}"><b>${esc(t(title + " {n}", { n: fmtN(total) }))}</b> <span class="mds-hint">· ${esc(t(n === 1 ? "{n} " + noun : "{n} " + nouns, { n }))}</span></summary>${n ? `${subTable(key, head, rows)}` : ""}</details>`; };
             const monsters = (s && s.monsters) || {};
             // A source row opens on a click into what made it up (its own rows, indented), when that was recorded.
             const head = (fold, k, label, iconHtml, cells, subs) => { const id = `${fold}|${k}`, has = subs && Object.keys(subs).length > 0, isOpen = has && metSubs.has(id); return `<tr class="${has ? `mds-subhead${isOpen ? " open" : ""}` : ""}"${has ? ` data-sub="${esc(id)}" title="${esc(t("Click for what made it up"))}"` : ""}><td translate="no">${iconHtml}${esc(label)}</td>${cells}</tr>`; };
@@ -3949,7 +4002,7 @@
             const manaHtml = !p.mana ? "" : fold("mpspent", "Mana spent", p.mpSpent || 0, manaRows(p.mana.spent, p.mpSpent), `<th>Ability</th><th class="n">Mana</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n">Uses</th>`, "ability", "abilities") + fold("mpgain", "Mana gained", p.mpGain || 0, manaRows(p.mana.gain, p.mpGain), `<th>Source</th><th class="n">Mana</th><th class="n">Share</th><th class="n" title="Per second in combat">Per second</th><th class="n" title="Times this source restored MP">Times</th>`);
             // Deaths (0.2.12): one row a death, open on a click into the hits of the 10 s before it.
             const end = Number(s && (s.endAt || s.lastAt)) || 0;
-            const fold2 = (key, title, count, rows, head) => `<details class="mds-mfold"${metFolds.has(key) ? " open" : ""}><summary data-fold="${key}"><b>${esc(title)}</b> <span class="mds-hint">· ${esc(count)}</span></summary>${rows.length ? `<table class="mds-msub"><thead><tr>${head}</tr></thead><tbody>${rows.join("")}</tbody></table>` : ""}</details>`;
+            const fold2 = (key, title, count, rows, head) => `<details class="mds-mfold"${metFolds.has(key) ? " open" : ""}><summary data-fold="${key}"><b>${esc(title)}</b> <span class="mds-hint">· ${esc(count)}</span></summary>${rows.length ? `${subTable(key, head, rows)}` : ""}</details>`;
             const srcName = k => (monsters[k] ? gameName("monsterNames", monsters[k], k) : k === "Own actions (HP cost)" || k === "Damage over time" ? t(k) : k);
             const deathRows = (p.deathLog || []).map(d => {
                 const id = `deaths|${d.at}`, isOpen = metSubs.has(id), rc = d.recent || [];
