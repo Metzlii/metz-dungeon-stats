@@ -162,7 +162,7 @@ console.log("meter: rules ok");
     const inf = { "/abilities/berserk": meterAbilityInfo({ manaCost: 65, abilityEffects: [{ targetType: "self", effectType: "/ability_effect_types/buff", buffs: [{ uniqueHrid: "/buff_uniques/berserk", duration: 20e9 }] }] }),
         "/abilities/aura": meterAbilityInfo({ manaCost: 100, abilityEffects: [{ targetType: "allAllies", effectType: "/ability_effect_types/buff", buffs: [{ uniqueHrid: "/buff_uniques/aura", duration: 120e9 }] }] }),
         "/abilities/pollen": meterAbilityInfo({ manaCost: 45, abilityEffects: [{ targetType: "allEnemies", effectType: "/ability_effect_types/damage", buffs: [{ uniqueHrid: "/buff_uniques/pollen", duration: 10e9 }] }] }) };
-    assert.deepEqual(inf["/abilities/aura"].buffs, [{ u: "/buff_uniques/aura", ms: 120000, to: "allies" }]);
+    assert.deepEqual(inf["/abilities/aura"].buffs.map(b => [b.u, b.ms, b.to]), [["/buff_uniques/aura", 120000, "allies"]]);
     assert.equal(inf["/abilities/berserk"].cost, 65);
     const pl = (name, id, hp, mp, prep, abilities, buffs = {}) => ({ ...player(name, id, hp, prep), currentManapoints: mp, maxManapoints: 1000, combatAbilities: abilities.map(h => ({ abilityHrid: h, level: 1 })), combatBuffMap: buffs });
     const w = (n, at, extra = {}) => ({ type: "new_battle", battleId: 9, wave: n, players: [pl("A", 1, 1000, extra.mpA ?? 500, "/abilities/berserk", ["/abilities/berserk", "/abilities/pollen"], extra.buffsA), pl("B", 2, extra.hpB ?? 800, 500, "/abilities/aura", ["/abilities/aura"])], monsters: [monster("Imp", 5000)] });

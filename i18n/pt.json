@@ -527,5 +527,7 @@
  "Healed columns": "Colunas de cura recebida",
  "Deaths columns": "Colunas de mortes",
  "Mana spent columns": "Colunas de mana gasta",
- "Mana gained columns": "Colunas de mana ganha"
+ "Mana gained columns": "Colunas de mana ganha",
+ "Added": "Acrescentado",
+ "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. Speed, accuracy and level buffs are not counted": "Uma estimativa: o dano que o bónus ou a penalização desta habilidade acrescentou aos golpes em que estava ativo (os de todo o grupo no caso de uma aura ou penalização), segundo a fórmula de dano do jogo. Bruto: o tempo e a mana do lançamento não são descontados. Bónus de velocidade, precisão e nível não são contados"
 }

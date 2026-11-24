@@ -527,5 +527,7 @@
  "Healed columns": "Colonnes des soins reçus",
  "Deaths columns": "Colonnes des morts",
  "Mana spent columns": "Colonnes du mana dépensé",
- "Mana gained columns": "Colonnes du mana gagné"
+ "Mana gained columns": "Colonnes du mana gagné",
+ "Added": "Ajouté",
+ "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. Speed, accuracy and level buffs are not counted": "Une estimation : les dégâts que le bonus ou le malus de cette capacité a ajoutés aux coups sur lesquels il était actif (ceux de tout le groupe pour une aura ou un malus), d'après la formule de dégâts du jeu. Brut : le temps et le mana du lancer ne sont pas déduits. Les bonus de vitesse, de précision et de niveau ne sont pas comptés"
 }

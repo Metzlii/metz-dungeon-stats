@@ -527,5 +527,7 @@
  "Healed columns": "회복 열",
  "Deaths columns": "사망 열",
  "Mana spent columns": "소모 마나 열",
- "Mana gained columns": "획득 마나 열"
+ "Mana gained columns": "획득 마나 열",
+ "Added": "추가분",
+ "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. Speed, accuracy and level buffs are not counted": "추정치: 이 어빌리티의 버프/디버프가 적용된 공격에 더해 준 피해(오라와 디버프는 파티 전체분). 게임의 피해 공식 기준. 총량이며 시전 시간과 마나는 빼지 않았습니다. 속도·명중·레벨 버프는 포함하지 않습니다"
 }

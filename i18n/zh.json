@@ -527,5 +527,7 @@
  "Healed columns": "治疗的列",
  "Deaths columns": "死亡的列",
  "Mana spent columns": "消耗法力的列",
- "Mana gained columns": "获得法力的列"
+ "Mana gained columns": "获得法力的列",
+ "Added": "增加量",
+ "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. Speed, accuracy and level buffs are not counted": "估算值：该技能的增益或减益为其生效期间的攻击增加的伤害（光环和减益计入全队），按游戏的伤害公式计算。为总量：未扣除施放所花的时间和法力。不计速度、命中和等级类增益"
 }
