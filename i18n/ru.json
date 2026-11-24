@@ -540,5 +540,6 @@
  "Effective DPS: the Added figure per second of the fight": "Эффективный DPS: «Добавлено» в расчёте на секунду боя",
  "Drinks": "Напитки",
  "Click for each drink": "Нажмите, чтобы увидеть каждый напиток",
- "Total": "Итого"
+ "Total": "Итого",
+ "Effective DPS, an estimate: this player's own DPS plus what their buffs, debuffs and auras added to the other players' damage, per second. What they added to their own hits is already in their DPS": "Эффективный DPS, оценка: собственный DPS игрока плюс то, что его баффы, дебаффы и ауры добавили к урону других игроков, в секунду. То, что они добавили к его собственным ударам, уже входит в его DPS"
 }

@@ -540,5 +540,6 @@
  "Effective DPS: the Added figure per second of the fight": "有效 DPS：增加量按战斗每秒折算",
  "Drinks": "饮料",
  "Click for each drink": "点击查看每种饮料",
- "Total": "合计"
+ "Total": "合计",
+ "Effective DPS, an estimate: this player's own DPS plus what their buffs, debuffs and auras added to the other players' damage, per second. What they added to their own hits is already in their DPS": "有效 DPS（估算值）：该玩家自身的 DPS，加上其增益、减益和光环为其他玩家的伤害增加的部分（按每秒计）。为自身攻击增加的部分已包含在其 DPS 中"
 }

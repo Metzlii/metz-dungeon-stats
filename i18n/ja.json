@@ -540,5 +540,6 @@
  "Effective DPS: the Added figure per second of the fight": "実効 DPS：「上乗せ」を戦闘 1 秒あたりに換算した値",
  "Drinks": "飲み物",
  "Click for each drink": "クリックで飲み物ごとに表示",
- "Total": "合計"
+ "Total": "合計",
+ "Effective DPS, an estimate: this player's own DPS plus what their buffs, debuffs and auras added to the other players' damage, per second. What they added to their own hits is already in their DPS": "実効 DPS（推定値）：このプレイヤー自身の DPS に、そのバフ・デバフ・オーラが他のプレイヤーのダメージに上乗せした分を 1 秒あたりで加えた値。自分の攻撃への上乗せ分はすでに DPS に含まれています"
 }

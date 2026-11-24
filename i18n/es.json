@@ -540,5 +540,6 @@
  "Effective DPS: the Added figure per second of the fight": "DPS efectivo: la cifra de Añadido por segundo de combate",
  "Drinks": "Bebidas",
  "Click for each drink": "Haz clic para ver cada bebida",
- "Total": "Total"
+ "Total": "Total",
+ "Effective DPS, an estimate: this player's own DPS plus what their buffs, debuffs and auras added to the other players' damage, per second. What they added to their own hits is already in their DPS": "DPS efectivo, una estimación: el DPS propio de este jugador más lo que sus mejoras, perjuicios y auras añadieron al daño de los demás jugadores, por segundo. Lo que añadieron a sus propios golpes ya está en su DPS"
 }

@@ -540,5 +540,6 @@
  "Effective DPS: the Added figure per second of the fight": "유효 DPS: 추가분을 전투 1초당으로 환산한 값",
  "Drinks": "음료",
  "Click for each drink": "클릭하면 음료별로 표시",
- "Total": "합계"
+ "Total": "합계",
+ "Effective DPS, an estimate: this player's own DPS plus what their buffs, debuffs and auras added to the other players' damage, per second. What they added to their own hits is already in their DPS": "유효 DPS(추정치): 이 플레이어 자신의 DPS에, 그 버프·디버프·오라가 다른 플레이어의 피해에 더해 준 양을 초당으로 더한 값. 자신의 공격에 더해진 양은 이미 DPS에 포함되어 있습니다"
 }
