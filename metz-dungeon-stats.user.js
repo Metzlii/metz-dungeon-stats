@@ -431,8 +431,9 @@
     // An ESTIMATE, the one figure here that is calculated and not seen. The game's damage formula (the simulator's
     // kernel, attack.rs): a hit is  amplify of its damage type x damage buffs x the crit expectation x the target's
     // damage taken x the target's armour or resistance ratio.  For each hit, each ability with a buff on the hitter or
-    // a debuff on the monster is credited  damage x (1 - the product without it / the product with it): gross, the
-    // cast's own time and mana not taken off.
+    // a debuff on the monster is credited its share of  damage x (1 - the product with none of them / the product with
+    // all): its Shapley value, so the credits on a hit add up to the true combined gain. Gross, the cast's own time
+    // and mana not taken off.
     //   - What is on a player: combatBuffMap at each wave start gives every buff with its final amount; the gear part
     //     of a stat is the stat less the buffs running then (in the capture that came out the same in all 67 waves:
     //     water amplify 1.0991, crit rate 0.1168). A cast between waves adds its buffs at the amount last seen for
@@ -473,8 +474,8 @@
         const resistRatio = (r, pen) => { if (pen > 0 && r > 0) r = r / (1 + pen); return r < 0 ? (100 - r) / 100 : 100 / (100 + r); };
         const hitChance = (acc, eva) => { const a = Math.pow(Math.max(0, acc), 1.4), e = Math.pow(Math.max(0, eva), 1.4); return a + e > 0 ? a / (a + e) : 1; };
         // The product a hit's damage carries, with every buff and debuff running at `at`, or without one ability's.
-        function hitProduct(src, tgt, dtype, style, at, without) {
-            const keep = x => x.until > at && !(without && x.src === without.src && x.by === without.by);
+        function hitProduct(src, tgt, dtype, style, at, present) {
+            const keep = x => x.until > at && (!present || present(x));
             const mine = [...src.fx.list.values()].filter(keep), theirs = [...tgt.debuffs.values()].filter(keep);
             const sum = (l, type, f) => l.reduce((a, x) => a + (x.type === type ? x[f] : 0), 0);
             const d = String(dtype || "").split("/").pop(), st = String(style || "").split("/").pop();
@@ -493,13 +494,26 @@
             const hk = /^dot:/.test(key) ? key.slice(4) : key; if (hk !== "auto" && !/^\/abilities\//.test(hk)) return;
             const info = hk === "auto" ? null : abilityOf(hk);
             const dtype = (info && info.dtype) || src.cs.damageType, style = (info && info.style) || (src.cs.combatStyleHrids || [])[0];
-            const full = hitProduct(src, tgt, dtype, style, at, null); if (!(full > 0)) return;
-            const seen = new Set();
-            for (const x of [...src.fx.list.values(), ...tgt.debuffs.values()]) {
-                if (!x.src || !x.by || !(x.until > at) || seen.has(x.src + "|" + x.by)) continue; seen.add(x.src + "|" + x.by);
-                const less = hitProduct(src, tgt, dtype, style, at, x); if (!(less < full)) continue;
-                const pl = cur.players[x.by]; if (!pl) continue;
-                const row = abilityRow(pl, x.src); row.added = (row.added || 0) + dmg * (1 - less / full);
+            // The abilities with something on this hit. Each one's share is its Shapley value (operator, 2026-11-23:
+            // the credits must add up to the true combined gain, by the real math and not a scale factor): its
+            // marginal gain averaged over every order the abilities could be added in. Buffs of one type pool, so
+            // they split as before; buffs that multiply each other share the part they earn together. The shares
+            // add up to exactly  1 - the product with none of them / the product with all.
+            const ids = [], seen = new Map();
+            for (const x of [...src.fx.list.values(), ...tgt.debuffs.values()]) { if (!x.src || !x.by || !(x.until > at)) continue; const k = x.src + "|" + x.by; if (!seen.has(k)) { seen.set(k, ids.length); ids.push(x); } }
+            const n = Math.min(ids.length, 10); if (!n) return;
+            const bit = x => { const i = x.src && x.by ? seen.get(x.src + "|" + x.by) : undefined; return i == null || i >= n ? -1 : i; };
+            const M = new Array(1 << n);
+            for (let mask = 0; mask < M.length; mask++) M[mask] = hitProduct(src, tgt, dtype, style, at, x => { const i = bit(x); return i < 0 || ((mask >> i) & 1) === 1; });
+            const full = M[M.length - 1]; if (!(full > 0)) return;
+            const fact = [1]; for (let i = 1; i <= n; i++) fact[i] = fact[i - 1] * i;
+            const bits = m => { let c = 0; for (; m; m &= m - 1) c++; return c; };
+            for (let i = 0; i < n; i++) {
+                let phi = 0;
+                for (let mask = 0; mask < M.length; mask++) { if ((mask >> i) & 1) continue; const k = bits(mask); phi += fact[k] * fact[n - k - 1] / fact[n] * (M[mask | (1 << i)] - M[mask]); }
+                if (!(phi > 0)) continue;
+                const pl = cur.players[ids[i].by]; if (!pl) continue;
+                const row = abilityRow(pl, ids[i].src); row.added = (row.added || 0) + dmg * phi / full;
             }
         }
         const addWin = (o, k, a, b) => { const r = o[k] || (o[k] = { ms: 0, until: 0 }); if (cur && a < cur.startAt) a = cur.startAt; if (b <= r.until || b <= a) return; r.ms += b - Math.max(a, r.until); r.until = b; };

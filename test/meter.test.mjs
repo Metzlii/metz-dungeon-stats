@@ -193,6 +193,24 @@ console.log("meter: rules ok");
     console.log("deaths, time down, out of mana, buff windows and wave times check out");
 }
 
+// Damage a buff added: two buffs that multiply each other share the hit's gain, and the shares add up to it exactly.
+{
+    const T0 = Date.parse("2026-11-23T10:00:00Z");
+    const inf = { "/abilities/strike": meterAbilityInfo({ abilityEffects: [{ targetType: "enemy", effectType: "/ability_effect_types/damage", damageType: "/damage_types/water", combatStyleHrid: "/combat_styles/magic" }] }) };
+    const buff = (u, type, flat, ratio) => ({ uniqueHrid: u, typeHrid: "/buff_types/" + type, flatBoost: flat, ratioBoost: ratio, startTime: new Date(T0 - 1000).toISOString(), duration: 20e9 });
+    const a = { ...player("A", 1, 1000, "/abilities/strike", { waterAmplify: 0.5, damageType: "/damage_types/water", combatStyleHrids: ["/combat_styles/magic"] }), combatAbilities: ["/abilities/strike", "/abilities/ea", "/abilities/ins"].map(h => ({ abilityHrid: h, level: 1 })),
+        combatBuffMap: { x: buff("/buff_uniques/ea", "water_amplify", 0.5, 0), y: buff("/buff_uniques/ins", "damage", 0, 0.25) } };
+    const m4 = createMeter({ ability: h => inf[h] || null, buffSource: u => ({ "/buff_uniques/ea": "/abilities/ea", "/buff_uniques/ins": "/abilities/ins" })[u] || null });
+    m4.newBattle({ type: "new_battle", battleId: 11, wave: 1, players: [a], monsters: [monster("Imp", 5000)] }, T0);
+    m4.update(upd(11, { 0: { cHP: 1000, atkCounter: 1, isAutoAtk: true } }, { 0: { cHP: 3500, dmgCounter: 1 } }), T0 + 1000);
+    const ab = m4.snapshot(T0 + 1000).players.A.abilities;
+    // The product is 1.5 x 1.25 = 1.875: amplify alone gives 1.5, the damage buff alone 1.25. Shapley: 0.5625 and 0.3125 of it.
+    assert.ok(Math.abs(ab["/abilities/ea"].added - 450) < 1e-6, `amplify's share, got ${ab["/abilities/ea"].added}`);
+    assert.ok(Math.abs(ab["/abilities/ins"].added - 250) < 1e-6, `the damage buff's share, got ${ab["/abilities/ins"].added}`);
+    assert.ok(Math.abs(ab["/abilities/ea"].added + ab["/abilities/ins"].added - 1500 * (1 - 1 / 1.875)) < 1e-6, "the shares add up to the hit's whole gain");
+    console.log("buff shares add up to the combined gain");
+}
+
 const capture = arg("--capture");
 if (capture) {
     const gd = JSON.parse(fs.readFileSync(arg("--game-data") || path.join(here, "..", "..", "rust_combat_Metz", "dist", "zone-site", "init_client_data.json"), "utf8")).abilityDetailMap;
