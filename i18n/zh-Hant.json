@@ -451,7 +451,6 @@
  "Drink 2": "飲料 2",
  "Drink 3": "飲料 3",
  "No battle seen on this page yet.": "此頁面尚未看到戰鬥。",
- "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "截至上一波，戰鬥中每個人的持有數量。每個數量下方：按該玩家自本頁面開啟以來的使用速度還能用多久（滿 10 分鐘且使用一次之前顯示 –）。入場鑰匙來自每次開始時遊戲的隊伍訊息，按該地下城的平均通關時間計算。",
  "Drag a tab onto another to move it.": "將分頁拖到另一個分頁上即可移動。",
  "Other (unidentified)": "其他（未識別）",
  "Life steal": "生命偷取",
@@ -464,5 +463,9 @@
  "Drag to set this column's width; double-click for automatic": "拖曳設定此欄寬度；按兩下恢復自動",
  "Time in combat the meter has counted": "統計已計入的戰鬥時間",
  "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} 傷害 · {share} 隊伍佔比 · {dps} DPS · {taken} 承受 · {healed} 受到治療",
- "{n} party damage ({dps} DPS)": "{n} 隊伍傷害（{dps} DPS）"
+ "{n} party damage ({dps} DPS)": "{n} 隊伍傷害（{dps} DPS）",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds the row up; a + marks an item with no ask left out.": "截至上一波，戰鬥中每個人的數量。每個數量下方：按該玩家自本頁面開啟以來的消耗速度還能用多久（滿 10 分鐘且使用過一次之前顯示 –），然後是每天的消耗量以及按市場賣價計算的每日花費。入場鑰匙來自每次開始時遊戲的隊伍訊息，按該地下城的平均通關時間計算。「花費 / 天」為整列合計；+ 表示有物品沒有賣單，未計入。",
+ "Cost / day": "花費 / 天",
+ "Everything in the row at the marketplace ask": "整列按市場賣價計算",
+ "{n}/day": "{n}/天"
 }

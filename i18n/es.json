@@ -451,7 +451,6 @@
  "Drink 2": "Bebida 2",
  "Drink 3": "Bebida 3",
  "No battle seen on this page yet.": "Aún no se ha visto ninguna batalla en esta página.",
- "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "Cantidades a la última oleada, para todos en la batalla. Bajo cada cantidad: cuánto dura al ritmo al que ese jugador la ha usado desde que se abrió esta página (– hasta 10 minutos y un uso). Las llaves de entrada vienen del mensaje de grupo del juego al inicio de cada partida, al tiempo medio de partida de la mazmorra.",
  "Drag a tab onto another to move it.": "Arrastra una pestaña sobre otra para moverla.",
  "Other (unidentified)": "Otros (sin identificar)",
  "Life steal": "Robo de vida",
@@ -464,5 +463,9 @@
  "Drag to set this column's width; double-click for automatic": "Arrastra para fijar el ancho de esta columna; doble clic para automático",
  "Time in combat the meter has counted": "Tiempo en combate que ha contado el medidor",
  "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} de daño · {share} del grupo · {dps} DPS · {taken} recibido · {healed} curado",
- "{n} party damage ({dps} DPS)": "{n} de daño del grupo ({dps} DPS)"
+ "{n} party damage ({dps} DPS)": "{n} de daño del grupo ({dps} DPS)",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds the row up; a + marks an item with no ask left out.": "Cantidades tras la última oleada, para todos en el combate. Bajo cada cantidad: cuánto dura al ritmo al que ese jugador lo ha usado desde que se abrió esta página (– hasta 10 minutos y un uso), luego cuántos son al día y cuánto cuesta un día al precio de venta del mercado. Las llaves de entrada vienen del mensaje de grupo del juego al inicio de cada partida, al tiempo medio de la mazmorra. Coste / día suma la fila; un + indica un objeto sin oferta de venta que queda fuera.",
+ "Cost / day": "Coste / día",
+ "Everything in the row at the marketplace ask": "Todo lo de la fila al precio de venta del mercado",
+ "{n}/day": "{n}/día"
 }

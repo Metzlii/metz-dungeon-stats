@@ -451,7 +451,6 @@
  "Drink 2": "Напиток 2",
  "Drink 3": "Напиток 3",
  "No battle seen on this page yet.": "На этой странице ещё не было боя.",
- "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "Количество на последней волне для всех в бою. Под каждым числом: на сколько хватит при темпе, с которым игрок расходует предмет с момента открытия страницы (– до 10 минут и одного использования). Ключи входа берутся из сообщения группы в начале каждого забега, по среднему времени забега подземелья.",
  "Drag a tab onto another to move it.": "Перетащите вкладку на другую, чтобы переместить её.",
  "Other (unidentified)": "Прочее (не определено)",
  "Life steal": "Похищение жизни",
@@ -464,5 +463,9 @@
  "Drag to set this column's width; double-click for automatic": "Перетащите, чтобы задать ширину столбца; двойной щелчок — автоматически",
  "Time in combat the meter has counted": "Время боя, учтённое счётчиком",
  "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} урона · {share} группы · {dps} DPS · {taken} получено · {healed} вылечено",
- "{n} party damage ({dps} DPS)": "{n} урона группы ({dps} DPS)"
+ "{n} party damage ({dps} DPS)": "{n} урона группы ({dps} DPS)",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds the row up; a + marks an item with no ask left out.": "Количество на момент последней волны для всех в бою. Под каждым числом: на сколько его хватит при темпе, с которым этот игрок расходует его с открытия страницы (– до 10 минут и одного использования), затем расход в день и стоимость дня по цене продажи на рынке. Ключи входа берутся из сообщения группы в начале каждого забега, по среднему времени забега в подземелье. «Стоимость / день» — сумма по строке; + означает, что предмет без предложений продажи не учтён.",
+ "Cost / day": "Стоимость / день",
+ "Everything in the row at the marketplace ask": "Вся строка по цене продажи на рынке",
+ "{n}/day": "{n}/день"
 }

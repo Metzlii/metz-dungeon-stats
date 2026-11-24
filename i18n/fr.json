@@ -451,7 +451,6 @@
  "Drink 2": "Boisson 2",
  "Drink 3": "Boisson 3",
  "No battle seen on this page yet.": "Aucun combat vu sur cette page pour l'instant.",
- "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "Quantités à la dernière vague, pour tous les joueurs du combat. Sous chaque quantité : sa durée au rythme auquel ce joueur l'a utilisée depuis l'ouverture de cette page (– avant 10 minutes et une utilisation). Les clés d'entrée viennent du message de groupe du jeu au début de chaque run, au temps de run moyen du donjon.",
  "Drag a tab onto another to move it.": "Faites glisser un onglet sur un autre pour le déplacer.",
  "Other (unidentified)": "Autre (non identifié)",
  "Life steal": "Vol de vie",
@@ -464,5 +463,9 @@
  "Drag to set this column's width; double-click for automatic": "Faites glisser pour fixer la largeur de cette colonne ; double-cliquez pour l'automatique",
  "Time in combat the meter has counted": "Temps de combat compté par le compteur",
  "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} dégâts · {share} du groupe · {dps} DPS · {taken} subis · {healed} soignés",
- "{n} party damage ({dps} DPS)": "{n} dégâts du groupe ({dps} DPS)"
+ "{n} party damage ({dps} DPS)": "{n} dégâts du groupe ({dps} DPS)",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds the row up; a + marks an item with no ask left out.": "Quantités à la dernière vague, pour tous les joueurs du combat. Sous chaque quantité : sa durée au rythme auquel ce joueur l'a utilisée depuis l'ouverture de cette page (– jusqu'à 10 minutes et une utilisation), puis le nombre par jour et le coût d'une journée au prix de vente du marché. Les clés d'entrée viennent du message de groupe du jeu au début de chaque run, au temps moyen du donjon. Coût / jour additionne la ligne ; un + signale un objet sans offre de vente, laissé de côté.",
+ "Cost / day": "Coût / jour",
+ "Everything in the row at the marketplace ask": "Toute la ligne au prix de vente du marché",
+ "{n}/day": "{n}/jour"
 }

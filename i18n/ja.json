@@ -451,7 +451,6 @@
  "Drink 2": "ドリンク 2",
  "Drink 3": "ドリンク 3",
  "No battle seen on this page yet.": "このページではまだ戦闘を確認していません。",
- "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use). Entry keys are from the game's party message at each run start, at the dungeon's average run time.": "最後のウェーブ時点での戦闘参加者全員の所持数。各数の下：このページを開いてからのそのプレイヤーの使用ペースでもつ時間（10 分かつ 1 回使用するまでは –）。入場キーは各周回開始時のゲームのパーティメッセージから、ダンジョンの平均周回時間で計算します。",
  "Drag a tab onto another to move it.": "タブを別のタブにドラッグすると移動できます。",
  "Other (unidentified)": "その他（未特定）",
  "Life steal": "ライフスティール",
@@ -464,5 +463,9 @@
  "Drag to set this column's width; double-click for automatic": "ドラッグでこの列の幅を設定、ダブルクリックで自動",
  "Time in combat the meter has counted": "メーターが計測した戦闘時間",
  "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} ダメージ · パーティーの {share} · {dps} DPS · {taken} 被ダメージ · {healed} 回復",
- "{n} party damage ({dps} DPS)": "{n} パーティーダメージ（{dps} DPS）"
+ "{n} party damage ({dps} DPS)": "{n} パーティーダメージ（{dps} DPS）",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds the row up; a + marks an item with no ask left out.": "最後のウェーブ時点の、戦闘中の全員の所持数です。各所持数の下：このページを開いてからのそのプレイヤーの消費ペースで何日もつか（10 分経過し 1 回使うまでは –）、続いて 1 日あたりの消費数とマーケットの売値での 1 日分の費用。入場キーは各周回開始時のゲームのパーティーメッセージから、ダンジョンの平均周回時間で計算します。「費用 / 日」は行の合計です。+ は売り注文がなく含まれていないアイテムがあることを示します。",
+ "Cost / day": "費用 / 日",
+ "Everything in the row at the marketplace ask": "行のすべてをマーケットの売値で計算",
+ "{n}/day": "{n}/日"
 }
