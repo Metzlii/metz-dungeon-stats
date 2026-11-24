@@ -20,9 +20,9 @@ const ABILITIES = {
     "/abilities/natures_veil": { abilityEffects: [{ effectType: "/ability_effect_types/damage", blindChance: 0.5 }] },
 };
 const info = Object.fromEntries(Object.entries(ABILITIES).map(([h, d]) => [h, meterAbilityInfo(d)]));
-assert.deepEqual(info["/abilities/maim"], { heal: false, drain: false, dot: true, cost: 0, buffs: [] });
-assert.deepEqual(info["/abilities/life_drain"], { heal: false, drain: true, dot: false, cost: 0, buffs: [] });
-assert.deepEqual(info["/abilities/heal"], { heal: true, drain: false, dot: false, cost: 0, buffs: [] });
+assert.deepEqual(info["/abilities/maim"], { heal: false, drain: false, dot: true, cost: 0, cd: 0, buffs: [] });
+assert.deepEqual(info["/abilities/life_drain"], { heal: false, drain: true, dot: false, cost: 0, cd: 0, buffs: [] });
+assert.deepEqual(info["/abilities/heal"], { heal: true, drain: false, dot: false, cost: 0, cd: 0, buffs: [] });
 
 const player = (name, id, hp, prep, extra = {}) => ({ isPlayer: true, character: { id, name }, name, currentHitpoints: hp, maxHitpoints: hp, attackAttemptCounter: 0, damageSplatCounter: 0, preparingAbilityHrid: prep || "", isPreparingAutoAttack: !prep, combatDetails: { combatStats: extra } });
 const monster = (name, hp) => ({ isPlayer: false, hrid: `/monsters/${name.toLowerCase()}`, name, currentHitpoints: hp, maxHitpoints: hp, attackAttemptCounter: 0, damageSplatCounter: 0, preparingAbilityHrid: "", isPreparingAutoAttack: true });
@@ -209,6 +209,23 @@ console.log("meter: rules ok");
     assert.ok(Math.abs(ab["/abilities/ins"].added - 250) < 1e-6, `the damage buff's share, got ${ab["/abilities/ins"].added}`);
     assert.ok(Math.abs(ab["/abilities/ea"].added + ab["/abilities/ins"].added - 1500 * (1 - 1 / 1.875)) < 1e-6, "the shares add up to the hit's whole gain");
     console.log("buff shares add up to the combined gain");
+}
+
+// A slow on a monster: the attacks it had no time for are damage prevented.
+{
+    const T0 = Date.parse("2026-11-23T11:00:00Z");
+    const inf = { "/abilities/ice": meterAbilityInfo({ abilityEffects: [{ targetType: "enemy", effectType: "/ability_effect_types/damage", damageType: "/damage_types/water", combatStyleHrid: "/combat_styles/magic", buffs: [{ uniqueHrid: "/buff_uniques/ice", typeHrid: "/buff_types/attack_speed", ratioBoost: -0.25, duration: 8e9 }] }] }) };
+    const a = { ...player("A", 1, 1000, "/abilities/ice"), combatAbilities: [{ abilityHrid: "/abilities/ice", level: 0 }], combatBuffMap: {} };
+    const m5 = createMeter({ ability: h => inf[h] || null });
+    m5.newBattle({ type: "new_battle", battleId: 12, wave: 1, players: [a], monsters: [monster("Imp", 5000)] }, T0);
+    m5.update(upd(12, { 0: { cHP: 1000, atkCounter: 1, isAutoAtk: true } }, { 0: { cHP: 4000, dmgCounter: 1 } }), T0 + 1000);   // the ice lands
+    m5.update(upd(12, { 0: { cHP: 900, dmgCounter: 1 } }, { 0: { cHP: 4000, atkCounter: 1, isAutoAtk: true } }), T0 + 2000);   // an attack started before it; the next one starts slowed
+    m5.update(upd(12, { 0: { cHP: 600, dmgCounter: 2 } }, { 0: { cHP: 4000, atkCounter: 2, isAutoAtk: true } }), T0 + 5000);   // the slowed attack lands for 300
+    const row = m5.snapshot(T0 + 5000).players.A.abilities["/abilities/ice"];
+    // Slowed by 25% its interval is 1 / 0.75 as long: a third more attacks would have fitted, 100 of damage.
+    assert.ok(Math.abs(row.prevented - 100) < 1e-6, `prevented by the slow, got ${row.prevented}`);
+    assert.deepEqual(Object.keys(row.preventedBy), ["A"]);
+    console.log("a slow's prevented damage checks out");
 }
 
 const capture = arg("--capture");

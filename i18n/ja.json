@@ -529,8 +529,11 @@
  "Mana gained columns": "獲得マナの列",
  "Added": "上乗せ",
  "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share with a living monster carrying it, kept from the casts that hit": "このアビリティのバフがプレイヤーに付いていた戦闘時間の割合。各ウェーブ開始時のゲームのバフ一覧と、その間の詠唱から算出。デバフの場合：それを受けた生存中のモンスターがいた割合（命中した詠唱から追跡）",
- "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. A speed buff is counted by the time it saved on each action": "推定値：このアビリティのバフ／デバフが、有効だった攻撃に上乗せしたダメージ（オーラやデバフはパーティー全員分）。ゲームのダメージ計算式による。総量であり、詠唱の時間とマナは差し引いていません。速度バフは各行動で短縮した時間から算出します",
  "Prevented": "軽減",
  "Click for which players it was for": "クリックで対象プレイヤー別に表示",
- "An estimate: the damage this ability's defensive buff, or its debuff on a monster, kept off the players. A dodged attack counts for that attack's average damage so far": "推定値：このアビリティの防御バフ、またはモンスターへのデバフがプレイヤーから防いだダメージ。回避した攻撃は、その攻撃のこれまでの平均ダメージで数えます"
+ "An estimate: the damage this ability's defensive buff, or its debuff on a monster, kept off the players. A dodged attack counts for that attack's average damage so far": "推定値：このアビリティの防御バフ、またはモンスターへのデバフがプレイヤーから防いだダメージ。回避した攻撃は、その攻撃のこれまでの平均ダメージで数えます",
+ "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. A speed buff is counted by the time it saved: more auto attacks or no-cooldown casts, and with a Ripple weapon the cooldown casts those bring": "推定値：このアビリティのバフ／デバフが、有効だった攻撃に上乗せしたダメージ（オーラやデバフはパーティー全員分）。ゲームのダメージ計算式による。総量であり、詠唱の時間とマナは差し引いていません。速度バフは短縮した時間から算出します：通常攻撃やクールダウンなしの詠唱の増加分、リップル武器ではそれによって増えるクールダウン付き詠唱も含みます",
+ "Curse (gear)": "呪い（装備）",
+ "Fury (gear)": "フューリー（装備）",
+ "Weaken (gear)": "弱体化（装備）"
 }

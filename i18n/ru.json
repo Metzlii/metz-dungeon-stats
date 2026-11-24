@@ -529,8 +529,11 @@
  "Mana gained columns": "Столбцы полученной маны",
  "Added": "Добавлено",
  "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share with a living monster carrying it, kept from the casts that hit": "Доля боя, когда бафф этой способности был на игроке: по списку баффов игры в начале каждой волны и применениям между ними. Для дебаффа: доля времени, когда он был на живом монстре, по попавшим применениям",
- "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. A speed buff is counted by the time it saved on each action": "Оценка: урон, который бафф или дебафф этой способности добавил к ударам, на которые он действовал (для ауры или дебаффа — удары всей группы), по формуле урона игры. Без вычета времени и маны на применение. Бафф скорости считается по времени, сэкономленному на каждом действии",
  "Prevented": "Предотвращено",
  "Click for which players it was for": "Нажмите, чтобы увидеть по игрокам",
- "An estimate: the damage this ability's defensive buff, or its debuff on a monster, kept off the players. A dodged attack counts for that attack's average damage so far": "Оценка: урон, который защитный бафф этой способности или её дебафф на монстре не дал нанести игрокам. Уклонение считается по среднему урону этой атаки на данный момент"
+ "An estimate: the damage this ability's defensive buff, or its debuff on a monster, kept off the players. A dodged attack counts for that attack's average damage so far": "Оценка: урон, который защитный бафф этой способности или её дебафф на монстре не дал нанести игрокам. Уклонение считается по среднему урону этой атаки на данный момент",
+ "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. A speed buff is counted by the time it saved: more auto attacks or no-cooldown casts, and with a Ripple weapon the cooldown casts those bring": "Оценка: урон, который бафф или дебафф этой способности добавил к ударам, на которые он действовал (для ауры или дебаффа — удары всей группы), по формуле урона игры. Без вычета времени и маны на применение. Бафф скорости считается по сэкономленному времени: больше автоатак или применений без перезарядки, а с оружием с «Рябью» — и применения с перезарядкой, которые они дают",
+ "Curse (gear)": "Проклятие (экипировка)",
+ "Fury (gear)": "Ярость (экипировка)",
+ "Weaken (gear)": "Ослабление (экипировка)"
 }
