@@ -521,5 +521,11 @@
  "Recorded before deaths were detailed (update 0.2.12)": "Registado antes de as mortes serem detalhadas (atualização 0.2.12)",
  "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share within its duration of a cast that hit, not seen on the monster": "Parte do combate em que o bónus desta habilidade esteve no jogador, segundo a lista de bónus do jogo no início de cada vaga e os lançamentos entre elas. Para uma penalização: a parte dentro da sua duração após um lançamento que acertou, não observada no monstro",
  "Accuracy": "Precisão",
- "Hits out of hits and misses": "Acertos sobre acertos e falhas"
+ "Hits out of hits and misses": "Acertos sobre acertos e falhas",
+ "Damage dealt columns": "Colunas de dano causado",
+ "Damage taken columns": "Colunas de dano sofrido",
+ "Healed columns": "Colunas de cura recebida",
+ "Deaths columns": "Colunas de mortes",
+ "Mana spent columns": "Colunas de mana gasta",
+ "Mana gained columns": "Colunas de mana ganha"
 }

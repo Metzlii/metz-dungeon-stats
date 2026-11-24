@@ -521,5 +521,11 @@
  "Recorded before deaths were detailed (update 0.2.12)": "記錄於死亡詳情功能之前（0.2.12 更新）",
  "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share within its duration of a cast that hit, not seen on the monster": "該技能的增益在玩家身上的戰鬥時間占比，依據每波開始時遊戲的增益列表以及其間的施放。對於減益：命中後處於其持續時間內的占比，並非在怪物身上觀察到",
  "Accuracy": "命中率",
- "Hits out of hits and misses": "命中數 ÷（命中數 + 未命中數）"
+ "Hits out of hits and misses": "命中數 ÷（命中數 + 未命中數）",
+ "Damage dealt columns": "造成傷害的欄",
+ "Damage taken columns": "承受傷害的欄",
+ "Healed columns": "治療的欄",
+ "Deaths columns": "死亡的欄",
+ "Mana spent columns": "消耗法力的欄",
+ "Mana gained columns": "獲得法力的欄"
 }
