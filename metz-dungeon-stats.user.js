@@ -37,7 +37,7 @@
     const VERSION = "0.2.12";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-24.13";
+    const BUILD = "2026-11-24.12";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -1422,25 +1422,8 @@
     function noteTrialPlayers(m) {
         state.trialNames = ((m && m.players) || []).map(u => (u && (u.name || (u.character && u.character.name))) || null);
         if (!state.trialVotes) state.trialVotes = {};
-        // The pause between tiers (operator, 2026-11-24: to be measured over a whole trial): from the message that
-        // put the last monster at 0 HP to this one, with how far the server's start stamp is from its arrival.
-        // Kept in this browser only (localStorage, the newest 300); read with __mds.trialGaps().
-        const now = Date.now(), dead = state.trialDeadAt || 0;
-        state.trialDeadAt = 0; state.trialMonHp = {}; state.trialMonCount = ((m && m.monsters) || []).length;
-        if (dead && now - dead < 60000) {
-            const row = { at: new Date(now).toISOString(), tier: m.tier, battleId: m.battleId, gapMs: now - dead, startVsArrivalMs: Date.parse(m.combatStartTime) - now };
-            try { const list = JSON.parse(localStorage.getItem(TRIAL_GAPS_KEY) || "[]"); list.push(row); localStorage.setItem(TRIAL_GAPS_KEY, JSON.stringify(list.slice(-300))); } catch (_e) { /* fine */ }
-        }
     }
-    const TRIAL_GAPS_KEY = "mds-trial-gaps-v1";
     function noteTrialCasts(m) {
-        // Monster HP as the updates carry it (each lists only the units that changed).
-        if (m && m.mMap && state.trialMonCount) {
-            const hp = state.trialMonHp || (state.trialMonHp = {});
-            for (const [i, u] of Object.entries(m.mMap)) if (u && u.cHP != null) hp[i] = Number(u.cHP);
-            const seen = Object.values(hp);
-            if (!state.trialDeadAt && seen.length >= state.trialMonCount && seen.every(v => v <= 0)) state.trialDeadAt = Date.now();
-        }
         const names = state.trialNames; if (!names || !m || !m.pMap) return;
         for (const [i, u] of Object.entries(m.pMap)) {
             const name = names[i], info = u && u.abilityHrid && ref.abilities && ref.abilities[u.abilityHrid] && ref.abilities[u.abilityHrid].meter;
@@ -5171,6 +5154,6 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
     const boot = () => { panel.refresh(); };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { trialGaps: () => { try { return JSON.parse(localStorage.getItem(TRIAL_GAPS_KEY) || "[]"); } catch (_e) { return []; } }, state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();
