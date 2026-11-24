@@ -211,9 +211,9 @@
     //     {placeholders}, which then match the same text with any values in them. A string with no translation stays
     //     English, so a half-done language is always safe. localize() translates what the panel wrote, text nodes
     //     and title/placeholder/aria-label/label attributes, and never inside translate="no" (player names).
-    const I18N_SRC = {};   // lang -> JSON text of its translations, in the order of the English keys (locale block, end of file)
-    let I18N_KEYS_SRC = "[]", I18N_KEYS = null;   // the English keys, once, as JSON text; parsed with the first language used
-    const I18N = {};       // lang -> parsed dictionary, only for the languages actually used
+    const I18N_SRC = {}; // lang -> JSON text of its translations, in the order of the English keys (locale block, end of file)
+    let I18N_KEYS_SRC = "[]", I18N_KEYS = null; // the English keys, once, as JSON text; parsed with the first language used
+    const I18N = {}; // lang -> parsed dictionary, only for the languages actually used
     const LANGS = ["en", "es", "fr", "ja", "ko", "pt", "ru", "zh", "zh-Hant"];
     let gameI18nNode = null, gameI18nAt = 0;
     function gameI18n() {
@@ -249,7 +249,7 @@
         const g = gameI18n(); if (!g) return english;
         try { const k = `${section}.${hrid}`, v = g.t(k); return v && v !== k && typeof v === "string" ? v : english; } catch (_e) { return english; }
     }
-    const i18nCache = new Map();   // lang -> { exact: Map, patterns: [{re, to, anchor}] }
+    const i18nCache = new Map(); // lang -> { exact: Map, patterns: [{re, to, anchor}] }
     function i18nTable(lang) {
         let tb = i18nCache.get(lang); if (tb) return tb;
         tb = { exact: new Map(), patterns: [], all: new Map() };
@@ -263,7 +263,7 @@
         }
         for (const [en, to] of Object.entries(I18N[lang] || {})) {
             if (!to) continue;
-            tb.all.set(en, to);   // t() looks a template up by its English, placeholders and all
+            tb.all.set(en, to); // t() looks a template up by its English, placeholders and all
             if (!/\{[a-z0-9_]+\}/i.test(en)) { tb.exact.set(en, to); continue; }
             const names = []; const anchor = en.split(/\{[a-z0-9_]+\}/i).sort((a, b) => b.length - a.length)[0];
             const re = new RegExp("^" + en.split(/(\{[a-z0-9_]+\})/i).map(part => { const m = /^\{([a-z0-9_]+)\}$/i.exec(part); if (m) { names.push(m[1]); return "([^·]+?)"; } return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("") + "$");
@@ -302,7 +302,7 @@
     // Translate what the panel wrote under `el`. Cheap when nothing changed: every string is memoised.
     // Each text and attribute remembers the English it was translated from, so a change of the game's language (or
     // back to English) is translated from the English again rather than from the last language.
-    const l10nText = new WeakMap(), l10nAttr = new WeakMap();   // node -> {en, out}; element -> {attr: {en, out}}
+    const l10nText = new WeakMap(), l10nAttr = new WeakMap(); // node -> {en, out}; element -> {attr: {en, out}}
     let l10nUsed = false;
     function localize(el) {
         const lang = uiLang(); if (!el || (lang === "en" && !l10nUsed && !W.__mdsI18nCollect)) return;
@@ -359,36 +359,36 @@
     // ---------------------------------------------------------------------------------------------------------------
     const state = {
         characterId: null, characterName: null, record: null, ready: false, startedAt: Date.now(),
-        meta: {},                       // loaded meta rows by key
-        inventory: new Map(),           // hash -> row (inventory location and others)
-        lifetimeXp: {},                 // skillHrid -> experience (lifetime)
-        lifetimeAbilityXp: {},          // abilityHrid -> experience (lifetime), from characterAbilities / endCharacterAbilities
-        levels: {},                     // skill or ability hrid -> level the game last reported
-        listings: new Map(),            // listing id -> {filledQuantity, taxTaken, unclaimedCoinCount, unclaimedItemCount, isSell, itemHrid, price, status}
-        pendingOrders: [],              // outgoing post_market_order frames waiting for their inventory rows
-        battleItems: new Set(),         // consumables slotted in the current battle (self)
-        run: null,                      // live run in progress
-        chatRun: null,                  // run opened by the party chat ledger
-        lastBattle: null,               // {battleId, wave}
+        meta: {}, // loaded meta rows by key
+        inventory: new Map(), // hash -> row (inventory location and others)
+        lifetimeXp: {}, // skillHrid -> experience (lifetime)
+        lifetimeAbilityXp: {}, // abilityHrid -> experience (lifetime), from characterAbilities / endCharacterAbilities
+        levels: {}, // skill or ability hrid -> level the game last reported
+        listings: new Map(), // listing id -> {filledQuantity, taxTaken, unclaimedCoinCount, unclaimedItemCount, isSell, itemHrid, price, status}
+        pendingOrders: [], // outgoing post_market_order frames waiting for their inventory rows
+        battleItems: new Set(), // consumables slotted in the current battle (self)
+        run: null, // live run in progress
+        chatRun: null, // run opened by the party chat ledger
+        lastBattle: null, // {battleId, wave}
         lastChatAt: 0,
-        chatSeen: new Set(),            // "id:<chat id>" and "tm:<t>|<m>" of recorded party system messages (replay dedupe)
-        timeline: [], timelineRev: 0,   // every non-consume event, oldest first: what derive() reads
-        consumeTotals: new Map(),       // itemHrid -> {qty, cost, unknownQty} over every consume event (they stay out of the timeline)
-        artisan: {},                    // actionType -> {rate, tea, at}: the game's artisan buff (tea × pouch), from consumableActionTypeBuffsMap
-        lootLog: new Map(),             // characterActionId -> session from the game's Loot & XP Log (loot_log_updated) and Toolasha's copy
+        chatSeen: new Set(), // "id:<chat id>" and "tm:<t>|<m>" of recorded party system messages (replay dedupe)
+        timeline: [], timelineRev: 0, // every non-consume event, oldest first: what derive() reads
+        consumeTotals: new Map(), // itemHrid -> {qty, cost, unknownQty} over every consume event (they stay out of the timeline)
+        artisan: {}, // actionType -> {rate, tea, at}: the game's artisan buff (tea × pouch), from consumableActionTypeBuffsMap
+        lootLog: new Map(), // characterActionId -> session from the game's Loot & XP Log (loot_log_updated) and Toolasha's copy
         lootLogRev: 0, lootLogAt: 0, lootLogReadThisSession: false,
-        marketHistory: new Map(),       // listing id -> {id, at, item, level, price, qty, ordered, isSell, src}: this PC's Toolasha store + imported files
-        ledger: new Map(),              // itemHrid -> {qty, cost} running purchase ledger (average cost)
-        keyLots: new Map(),             // keyItem -> [{qty, unitCost, basis, craftId}]
+        marketHistory: new Map(), // listing id -> {id, at, item, level, price, qty, ordered, isSell, src}: this PC's Toolasha store + imported files
+        ledger: new Map(), // itemHrid -> {qty, cost} running purchase ledger (average cost)
+        keyLots: new Map(), // keyItem -> [{qty, unitCost, basis, craftId}]
         counts: { frames: 0, byType: new Map(), events: 0 },
-        frameCounts: new Map(),         // type -> retained count
+        frameCounts: new Map(), // type -> retained count
         reviews: 0,
-        events: [],                     // recent events for the panel (newest first, capped)
+        events: [], // recent events for the panel (newest first, capped)
         sockets: 0, viaData: 0,
-        triggers: { ability: null, consumable: null },   // our own combat triggers, for the change log (0.2.12)
-        meter: null,                    // the damage meter's live session (0.2.0)
-        damage: [],                     // saved damage sessions: the record's "damage" events
-        streak: null,                   // the battle tab's running total: every session since the party went into combat, this page only
+        triggers: { ability: null, consumable: null }, // our own combat triggers, for the change log (0.2.12)
+        meter: null, // the damage meter's live session (0.2.0)
+        damage: [], // saved damage sessions: the record's "damage" events
+        streak: null, // the battle tab's running total: every session since the party went into combat, this page only
     };
 
     // <meter>
@@ -973,7 +973,7 @@
         const snap = state.meter.snapshot(); delete snap.live; delete snap.seq;
         state.record.queue("meta", { key: "meterOpen", value: snap }); meterCheckpointAt = s.lastAt;
     }
-    let meterZoneLast = null;   // the last place a session was tagged with: {zone, tier, at}
+    let meterZoneLast = null; // the last place a session was tagged with: {zone, tier, at}
     function meterTag(s) {
         if (!s) return;
         if (!s.zone) {
@@ -1923,7 +1923,7 @@
             const k = naturalKey(e);
             if ((k && nat.has(k)) || sameTimed(e)) { out.duplicate++; continue; }
             const ev = { ...e, fromRecord: d.device || label || "import" };
-            fixImportedTax(ev);   // a record exported before 0.1.3 still carries the old figure
+            fixImportedTax(ev); // a record exported before 0.1.3 still carries the old figure
             state.record.queue("events", ev); ids.set(ev.id, ev); if (k) nat.add(k); noteTimed(ev);
             if (ev.kind === "consume") addConsume(ev); else if (ev.kind === "damage") state.damage.push(ev); else state.timeline.push(ev);
             out.added++; out.byKind[ev.kind] = (out.byKind[ev.kind] || 0) + 1; state.counts.events++;
@@ -2042,7 +2042,7 @@
             if (retaxed.length) { for (const e of retaxed) state.record.queue("events", e); for (const e of state.events) fixImportedTax(e); info(`imported sales re-taxed by the game's rule: ${retaxed.length}`); }
             state.consumeTotals = new Map(); for (const c of await state.record.getAll("events", "kind", IDBKeyRange.only("consume"))) addConsume(c);
             state.damage = await state.record.getAll("events", "kind", IDBKeyRange.only("damage"));
-            {   // Sessions saved with no place (the login race above): the run record that covers them names it.
+            { // Sessions saved with no place (the login race above): the run record that covers them names it.
                 const lost = state.damage.filter(e => !e.zone);
                 if (lost.length) {
                     const runs = await state.record.getAll("runs");
@@ -2973,7 +2973,7 @@
             const st = sorts[key] || null;
             for (const th of head.children) { const on = st && Number(th.dataset.oi) === st.oi; th.classList.toggle("mds-sort-asc", !!(on && st.dir === "asc")); th.classList.toggle("mds-sort-desc", !!(on && st.dir === "desc")); }
             const rows = [...tb.rows].filter(r => !(r.cells.length === 1 && r.cells[0].colSpan > 1)); if (rows.length < 2) return;
-            if (rows.some(r => r.dataset.ord == null)) rows.forEach((r, i) => { r.dataset.ord = String(i); });   // fresh rows: this is the table's own order
+            if (rows.some(r => r.dataset.ord == null)) rows.forEach((r, i) => { r.dataset.ord = String(i); }); // fresh rows: this is the table's own order
             const ord = r => Number(r.dataset.ord);
             let want;
             if (!st) want = rows.slice().sort((a, b) => ord(a) - ord(b));
@@ -2984,7 +2984,7 @@
                 want = rows.slice().sort((a, b) => {
                     const x = val.get(a), y = val.get(b);
                     const xe = numeric ? x.n == null : !x.s, ye = numeric ? y.n == null : !y.s;
-                    if (xe !== ye) return xe ? 1 : -1;            // empty cells last, whichever way
+                    if (xe !== ye) return xe ? 1 : -1; // empty cells last, whichever way
                     const c = xe ? 0 : numeric ? x.n - y.n : x.s.localeCompare(y.s, undefined, { numeric: true });
                     return c ? c * dir : ord(a) - ord(b);
                 });
@@ -3706,7 +3706,7 @@
         const PLAN_KEY = PANEL_KEY + "-plan";
         // qty null = as many as the budget buys; budget null = follow the coins in the bag.
         let plan = { key: null, qty: null, budget: null, owned: true };
-        let lastPlanWant = null;   // the keys the plan shows, for the shopping list
+        let lastPlanWant = null; // the keys the plan shows, for the shopping list
         try { const v = JSON.parse(localStorage.getItem(PLAN_KEY) || "null"); if (v && typeof v === "object") plan = { key: v.key || null, qty: Number(v.qty) > 0 ? Math.floor(Number(v.qty)) : null, budget: Number(v.budget) >= 0 && v.budget !== null ? Math.floor(Number(v.budget)) : null, owned: v.owned !== false }; } catch (_e) { /* fine */ }
         const savePlan = () => { try { localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); } catch (_e) { /* fine */ } };
         let lastPlanRows = null;
@@ -4462,7 +4462,7 @@
         try { const v = Number(localStorage.getItem(SPLIT_KEY)); if (v >= 15 && v <= 85) splitPct = v; } catch (_e) { splitPct = null; }
         function applySplit() {
             if (!splitStyle) { splitStyle = document.createElement("style"); splitStyle.id = "mds-split-style"; document.documentElement.appendChild(splitStyle); }
-            const css = splitPct == null ? "" : `[class*="BattlePanel_battleArea__"]>[class*="BattlePanel_playersArea__"]{flex:0 0 ${splitPct}% !important}[class*="BattlePanel_battleArea__"]>[class*="BattlePanel_monstersArea__"]{flex:1 1 0 !important}[class*="BattlePanel_battleArea__"]::after{left:${splitPct}% !important}`;   // the game's own line is battleArea::after at left:50% (its stylesheet)
+            const css = splitPct == null ? "" : `[class*="BattlePanel_battleArea__"]>[class*="BattlePanel_playersArea__"]{flex:0 0 ${splitPct}% !important}[class*="BattlePanel_battleArea__"]>[class*="BattlePanel_monstersArea__"]{flex:1 1 0 !important}[class*="BattlePanel_battleArea__"]::after{left:${splitPct}% !important}`; // the game's own line is battleArea::after at left:50% (its stylesheet)
             if (splitStyle.textContent !== css) splitStyle.textContent = css;
             if (splitEl) splitEl.style.left = `calc(${splitPct == null ? 50 : splitPct}% - 5px)`;
         }
@@ -4684,7 +4684,7 @@
                 for (const r of used) for (const ch of (r.chests || [])) if (ch.item === c) row.chests += Number(ch.qty) || 0;
             }
             for (const x of items) if (!x.entry) x.perRun = used.length && x.chests > 0 ? x.chests / used.length : 1;
-            const pk = state.partyKeys ? state.partyKeys.counts : null;   // the newest message; a run joined part-way starts later than its key-count message, so no time guard
+            const pk = state.partyKeys ? state.partyKeys.counts : null; // the newest message; a run joined part-way starts later than its key-count message, so no time guard
             const html = `<div class="mds-bk-label">${esc(t("Keys"))}${bmOn() && meterEnabled() ? "" : keysWarning() + consWarning()}</div><div class="mds-bk-grid">` + items.map(x => {
                 const n = held(x.item), sec = avgMs != null ? n / x.perRun * avgMs / 1000 : NaN;
                 const tip = [itemName(x.item), avgMs != null ? t("Lasts about {time} at {run} a run", { time: runwayText(sec), run: fmtDur(avgMs) }) : t("No run time for this dungeon yet")];
@@ -4814,7 +4814,7 @@
             if (!prices.map && !prices.fetching && !prices.error) fetchPrices(false).then(() => touch(), () => {});
             const used = state.events.filter(e => e.kind === "consume").reduce((s, e) => { s.n += e.qty; s.cost += e.unitCost != null ? e.unitCost * e.qty : 0; return s; }, { n: 0, cost: 0 });
             const runLine = state.run ? `${zoneLabel(state.run.zone, state.run.tier)} · ${t("wave {n}", { n: state.run.waves })} · ${fmtDur(serverNow() - state.run.startAt)}` : t("between runs");
-            els["mds-status"].setAttribute("translate", "no");   // put together from translated parts here; the name stays as it is
+            els["mds-status"].setAttribute("translate", "no"); // put together from translated parts here; the name stays as it is
             els["mds-status"].textContent = `${state.characterName || t("waiting for login")}${state.meta.recordStart ? " · " + t("record since {date}", { date: fmtTime(state.meta.recordStart) }) : " · " + t("no record yet")} · ${t("{n} events", { n: state.counts.events })}${state.reviews ? " · " + t("{n} for review", { n: state.reviews }) : ""} · ${runLine}${used.n ? " · " + t("consumables used {n} ({cost} at purchase price, recent events)", { n: used.n, cost: fmtCoins(used.cost) }) : ""}`;
             root.querySelector("#mds-banner").hidden = bannerDismissed || state.lootLogReadThisSession || !state.ready;
             setTimeout(() => { foldSummaries(); localize(root); }, 0);
@@ -4871,7 +4871,7 @@
         state.damage = []; state.meta.damagePartial = {}; state.streak = null;
         state.record.queue("meta", { key: "damagePartial", value: {} }); state.record.queue("meta", { key: "meterOpen", value: null });
         meterNoStreakBattle = (state.meter.session && state.meter.session.battleId) ?? (meterLast && meterLast.battleId) ?? null;
-        meterLast = null;   // the next wave of this battle opens a fresh session
+        meterLast = null; // the next wave of this battle opens a fresh session
         state.meter.restore(null);
         state.events = state.events.filter(e => e.kind !== "damage");
         await state.record.flush();
