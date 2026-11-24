@@ -542,5 +542,8 @@
  "Click for each drink": "クリックで飲み物ごとに表示",
  "Total": "合計",
  "Effective DPS, an estimate: this player's damage, less what the other players' buffs, debuffs and auras added to it, plus what theirs added to the others, per second. The column adds up to the party's DPS": "実効 DPS（推定値）：このプレイヤーのダメージから、他のプレイヤーのバフ・デバフ・オーラによる上乗せ分を引き、自分のものが他のプレイヤーに上乗せした分を加えた 1 秒あたりの値。列の合計はパーティー DPS になります",
- "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+クリック：各プレイヤーの数値を順にチャット欄へ"
+ "Ctrl+click: every player's figure, in order, to the chat box": "Ctrl+クリック：各プレイヤーの数値を順にチャット欄へ",
+ "Guild trial: fill the player cards row by row": "ギルドトライアル：プレイヤーカードを行ごとに詰めて並べる",
+ "Sort them by class": "クラス順に並べる",
+ "Class order: melee, ranged, then water, nature and fire mages.": "クラスの順：近接、遠距離、続いて水・自然・火の魔法使い。"
 }
