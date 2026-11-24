@@ -487,7 +487,6 @@
  "Copy restock list": "複製補貨清單",
  "One line a player, for the party chat": "每位玩家一行，用於隊伍聊天",
  "What is missing, at the marketplace ask": "缺少的部分，按市場賣價計算",
- "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys is ticked.": "按上方的消耗速度，每位玩家要撐過這些天還缺多少，以及按市場賣價購買的花費（速度未知時顯示 –，足夠時為 0）。勾選入場鑰匙旁的方框後，入場鑰匙也計入花費。",
  "No run recorded with wave times yet: they are kept from version 0.2.12 on.": "還沒有記錄波次用時的通關：從 0.2.12 版本起才會儲存。",
  "No change seen yet. The first battle only notes what everyone carries; a change shows from the next one on.": "尚未發現變更。第一場戰鬥只記錄每個人攜帶的內容，從下一場起才會顯示變更。",
  "Click a count for each death: what killed the player and how long they were down": "點擊數字查看每次死亡：被什麼擊殺以及倒地多久",
@@ -525,5 +524,7 @@
  "{n} more stats": "另有 {n} 項屬性",
  "{place}{tier}: {n} runs, {time} a run in all. A wave runs from its start to the next wave's start, so the time between waves is in it. The three slowest waves are marked.": "{place}{tier}：{n} 次通關，合計每次 {time}。一個波次從其開始到下一波開始，因此包含波次之間的時間。最慢的三個波次已標出。",
  "{n} players": "{n} 名玩家",
- "{n} changes": "{n} 項變更"
+ "{n} changes": "{n} 項變更",
+ "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys in this table is ticked.": "按上方的消耗速度，每位玩家要撐過這些天還缺多少，以及按市場賣價購買的花費（速度未知時顯示 –，足夠時為 0）。勾選本表入場鑰匙旁的方框後，入場鑰匙也計入花費。",
+ "Count entry keys in Cost": "將入場鑰匙計入「花費」"
 }

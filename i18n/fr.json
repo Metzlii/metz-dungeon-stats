@@ -487,7 +487,6 @@
  "Copy restock list": "Copier la liste",
  "One line a player, for the party chat": "Une ligne par joueur, pour le chat de groupe",
  "What is missing, at the marketplace ask": "Ce qui manque, au prix de vente du marché",
- "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys is ticked.": "Ce qui manque à chaque joueur pour couvrir ce nombre de jours au rythme ci-dessus, et ce que coûte l'achat au prix de vente du marché (– tant que le rythme n'est pas connu, 0 s'il en a assez). Les clés d'entrée comptent dans le coût si la case à côté de Clés d'entrée est cochée.",
  "No run recorded with wave times yet: they are kept from version 0.2.12 on.": "Aucun run avec des temps par vague pour l'instant : ils sont conservés à partir de la version 0.2.12.",
  "No change seen yet. The first battle only notes what everyone carries; a change shows from the next one on.": "Aucun changement vu pour l'instant. Le premier combat note seulement ce que chacun porte ; un changement apparaît à partir du suivant.",
  "Click a count for each death: what killed the player and how long they were down": "Cliquez sur un nombre pour chaque mort : ce qui a tué le joueur et combien de temps il est resté à terre",
@@ -525,5 +524,7 @@
  "{n} more stats": "{n} autres statistiques",
  "{place}{tier}: {n} runs, {time} a run in all. A wave runs from its start to the next wave's start, so the time between waves is in it. The three slowest waves are marked.": "{place}{tier} : {n} runs, {time} par run au total. Une vague va de son début au début de la suivante, le temps entre les vagues y est donc compris. Les trois vagues les plus lentes sont marquées.",
  "{n} players": "{n} joueurs",
- "{n} changes": "{n} changements"
+ "{n} changes": "{n} changements",
+ "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys in this table is ticked.": "Ce qui manque à chaque joueur pour couvrir ce nombre de jours au rythme ci-dessus, et ce que coûte l'achat au prix de vente du marché (– tant que le rythme n'est pas connu, 0 s'il en a assez). Les clés d'entrée comptent dans le coût si la case à côté de Clés d'entrée de ce tableau est cochée.",
+ "Count entry keys in Cost": "Compter les clés d'entrée dans Coût"
 }

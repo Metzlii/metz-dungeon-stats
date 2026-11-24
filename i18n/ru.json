@@ -487,7 +487,6 @@
  "Copy restock list": "Скопировать список",
  "One line a player, for the party chat": "По строке на игрока, для чата группы",
  "What is missing, at the marketplace ask": "Недостающее по цене продажи на рынке",
- "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys is ticked.": "Чего не хватает каждому игроку, чтобы покрыть столько дней при темпе выше, и сколько стоит покупка по цене продажи на рынке (– пока темп неизвестен, 0 если запаса хватает). Ключи входа учитываются в стоимости, если отмечен флажок рядом с ключами входа.",
  "No run recorded with wave times yet: they are kept from version 0.2.12 on.": "Пока нет забегов с временем по волнам: оно сохраняется начиная с версии 0.2.12.",
  "No change seen yet. The first battle only notes what everyone carries; a change shows from the next one on.": "Изменений пока нет. Первый бой только запоминает, что есть у каждого; изменения видны начиная со следующего.",
  "Click a count for each death: what killed the player and how long they were down": "Нажмите на число, чтобы увидеть каждую смерть: что убило игрока и как долго он лежал",
@@ -525,5 +524,7 @@
  "{n} more stats": "ещё характеристик: {n}",
  "{place}{tier}: {n} runs, {time} a run in all. A wave runs from its start to the next wave's start, so the time between waves is in it. The three slowest waves are marked.": "{place}{tier}: забегов {n}, всего {time} на забег. Волна длится от своего начала до начала следующей, поэтому время между волнами в неё входит. Три самые медленные волны отмечены.",
  "{n} players": "игроков: {n}",
- "{n} changes": "изменений: {n}"
+ "{n} changes": "изменений: {n}",
+ "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys in this table is ticked.": "Чего не хватает каждому игроку, чтобы покрыть столько дней при темпе выше, и сколько стоит покупка по цене продажи на рынке (– пока темп неизвестен, 0 если запаса хватает). Ключи входа учитываются в стоимости, если отмечен флажок рядом с ключами входа в этой таблице.",
+ "Count entry keys in Cost": "Учитывать ключи входа в «Стоимость»"
 }

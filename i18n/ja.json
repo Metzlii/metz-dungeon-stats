@@ -487,7 +487,6 @@
  "Copy restock list": "補充リストをコピー",
  "One line a player, for the party chat": "プレイヤーごとに 1 行、パーティーチャット用",
  "What is missing, at the marketplace ask": "不足分をマーケットの売値で計算",
- "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys is ticked.": "上の消費ペースでその日数をまかなうために各プレイヤーに不足している数と、マーケットの売値での購入費用です（ペースがまだ不明なら –、足りていれば 0）。入場キーの横のチェックを入れると、入場キーも費用に含まれます。",
  "No run recorded with wave times yet: they are kept from version 0.2.12 on.": "ウェーブ別の時間が記録された周回はまだありません。バージョン 0.2.12 以降に保存されます。",
  "No change seen yet. The first battle only notes what everyone carries; a change shows from the next one on.": "まだ変更はありません。最初の戦闘では全員の持ち物を記録するだけで、変更は次の戦闘から表示されます。",
  "Click a count for each death: what killed the player and how long they were down": "数字をクリックすると各死亡の詳細：何に倒されたか、どれだけ倒れていたか",
@@ -525,5 +524,7 @@
  "{n} more stats": "ほか {n} 個のステータス",
  "{place}{tier}: {n} runs, {time} a run in all. A wave runs from its start to the next wave's start, so the time between waves is in it. The three slowest waves are marked.": "{place}{tier}：{n} 周、合計 1 周あたり {time}。ウェーブはその開始から次のウェーブの開始までで、ウェーブ間の時間を含みます。最も遅い 3 つのウェーブに印が付きます。",
  "{n} players": "{n} 人",
- "{n} changes": "変更 {n} 件"
+ "{n} changes": "変更 {n} 件",
+ "What each player is short of to cover that many days at the rate above, and what buying it costs at the marketplace ask (– while the rate is not known yet, 0 when they hold enough). Entry keys count in the cost when the box beside Entry keys in this table is ticked.": "上の消費ペースでその日数をまかなうために各プレイヤーに不足している数と、マーケットの売値での購入費用です（ペースがまだ不明なら –、足りていれば 0）。この表の入場キーの横のチェックを入れると、入場キーも費用に含まれます。",
+ "Count entry keys in Cost": "入場キーを「費用」に含める"
 }
