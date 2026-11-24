@@ -2862,7 +2862,7 @@
 :is(#mds-root,#mds-bm) .mds-meter :is(th,td).n{min-width:4.8em}
 :is(#mds-root,#mds-bm,#mds-bm-pop) .mds-msub :is(th,td).n{width:1px;min-width:5.8em;white-space:nowrap}
 html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]{display:grid !important;grid-template-columns:repeat(auto-fill,var(--mds-tg-w,40px));grid-auto-flow:row dense;justify-content:start;align-content:start;flex:1 1 auto;width:100%}
-html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]>[class*="MiniUnitGrid_miniUnitColumn"]{display:contents}
+html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]>[class*="MiniUnitGrid_miniUnitColumn"]{display:contents !important}
 html[data-mds-tg] [class*="BattlePanel_guildPartyArea"] [class*="MiniUnitGrid_miniUnitGrid"]>[class*="CombatUnit_combatUnit"]{grid-column:span var(--mds-tg-span,3);grid-row:span 3;order:-1}
 .mds-meter th[data-mcol]{cursor:pointer;user-select:none}
 .mds-meter th[data-mcol]:hover{color:#e6eff3}
