@@ -541,5 +541,6 @@
  "Drinks": "Boissons",
  "Click for each drink": "Cliquez pour voir chaque boisson",
  "Total": "Total",
- "Effective DPS, an estimate: this player's damage, less what the other players' buffs, debuffs and auras added to it, plus what theirs added to the others, per second. The column adds up to the party's DPS": "DPS effectif, une estimation : les dégâts de ce joueur, moins ce que les bonus, malus et auras des autres y ont ajouté, plus ce que les siens ont ajouté aux autres, par seconde. La colonne totalise le DPS du groupe"
+ "Effective DPS, an estimate: this player's damage, less what the other players' buffs, debuffs and auras added to it, plus what theirs added to the others, per second. The column adds up to the party's DPS": "DPS effectif, une estimation : les dégâts de ce joueur, moins ce que les bonus, malus et auras des autres y ont ajouté, plus ce que les siens ont ajouté aux autres, par seconde. La colonne totalise le DPS du groupe",
+ "Ctrl+click: every player's figure, in order, to the party chat": "Ctrl+clic : le chiffre de chaque joueur, dans l'ordre, vers le chat de groupe"
 }

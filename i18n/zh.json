@@ -541,5 +541,6 @@
  "Drinks": "饮料",
  "Click for each drink": "点击查看每种饮料",
  "Total": "合计",
- "Effective DPS, an estimate: this player's damage, less what the other players' buffs, debuffs and auras added to it, plus what theirs added to the others, per second. The column adds up to the party's DPS": "有效 DPS（估算值）：该玩家的伤害，减去其他玩家的增益、减益和光环为其增加的部分，加上其自身为其他玩家增加的部分（按每秒计）。该列合计等于队伍 DPS"
+ "Effective DPS, an estimate: this player's damage, less what the other players' buffs, debuffs and auras added to it, plus what theirs added to the others, per second. The column adds up to the party's DPS": "有效 DPS（估算值）：该玩家的伤害，减去其他玩家的增益、减益和光环为其增加的部分，加上其自身为其他玩家增加的部分（按每秒计）。该列合计等于队伍 DPS",
+ "Ctrl+click: every player's figure, in order, to the party chat": "Ctrl+点击：按顺序将每位玩家的数值发到队伍聊天"
 }
