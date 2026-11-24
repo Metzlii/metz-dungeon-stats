@@ -315,7 +315,7 @@
  "Sessions in the game's Loot & XP Log",
  "Settings",
  "Share",
- "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share within its duration of a cast that hit, not seen on the monster",
+ "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share with a living monster carrying it, kept from the casts that hit",
  "Show",
  "Show the meter under the battle cards (Combat → Battle)",
  "Showing every run since the party went into combat, on this page. Click to show this run only",
