@@ -53,6 +53,7 @@
  "Click a count for each death: what killed the player and how long they were down",
  "Click a player for their abilities: damage, uses, hits, misses and healing, then where their damage taken came from and what healed them. Damage is the HP the monsters lost, read from the game's battle messages: overkill is not counted. DPS runs over time in combat: from the first wave's start to the last hit, without a break between waves. A dungeon run is listed here only when the script saw it from wave 1 to its end (a reload in the middle of a wave is stitched back in; installing an update reloads the page, so that run is cut). On a planet a session runs until the battle changes, across reloads. Runs seen only in part still count: pick that dungeon's totals in the Session list. Parry and thorns are counter-attacks; damage over time is put on the ability that applied it. Healing done counts heal abilities, Life Drain and Bloom; everything else a player regained (regeneration, food, passives) shows under Healed. Click a session below to show it.",
  "Click for the hits before it",
+ "Click for whose damage it was added to",
  "Click for {name}'s abilities",
  "Click to open in the marketplace.",
  "Close",
