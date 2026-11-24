@@ -528,7 +528,9 @@
  "Mana spent columns": "소모 마나 열",
  "Mana gained columns": "획득 마나 열",
  "Added": "추가분",
- "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. Speed, accuracy and level buffs are not counted": "추정치: 이 어빌리티의 버프/디버프가 적용된 공격에 더해 준 피해(오라와 디버프는 파티 전체분). 게임의 피해 공식 기준. 총량이며 시전 시간과 마나는 빼지 않았습니다. 속도·명중·레벨 버프는 포함하지 않습니다",
  "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share with a living monster carrying it, kept from the casts that hit": "이 어빌리티의 버프가 플레이어에게 있던 전투 시간의 비율. 각 웨이브 시작 시 게임의 버프 목록과 그 사이의 시전으로 계산. 디버프의 경우: 디버프가 걸린 살아 있는 몬스터가 있던 비율(명중한 시전에서 추적)",
- "Click for whose damage it was added to": "클릭하면 누구의 피해에 더해졌는지 표시"
+ "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. A speed buff is counted by the time it saved on each action": "추정치: 이 어빌리티의 버프/디버프가 적용된 공격에 더해 준 피해(오라와 디버프는 파티 전체분). 게임의 피해 공식 기준. 총량이며 시전 시간과 마나는 빼지 않았습니다. 속도 버프는 각 행동에서 줄인 시간으로 계산합니다",
+ "Prevented": "방지",
+ "Click for which players it was for": "클릭하면 대상 플레이어별로 표시",
+ "An estimate: the damage this ability's defensive buff, or its debuff on a monster, kept off the players. A dodged attack counts for that attack's average damage so far": "추정치: 이 어빌리티의 방어 버프 또는 몬스터에게 건 디버프가 플레이어에게서 막아 준 피해. 회피한 공격은 그 공격의 지금까지 평균 피해로 계산합니다"
 }

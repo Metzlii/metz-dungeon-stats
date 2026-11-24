@@ -528,7 +528,9 @@
  "Mana spent columns": "消耗法力的欄",
  "Mana gained columns": "獲得法力的欄",
  "Added": "增加量",
- "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. Speed, accuracy and level buffs are not counted": "估算值：該技能的增益或減益為其生效期間的攻擊增加的傷害（光環和減益計入全隊），按遊戲的傷害公式計算。為總量：未扣除施放所花的時間和法力。不計速度、命中和等級類增益",
  "Share of the fight this ability's buff was on the player, from the game's buff list at each wave start and the casts between. For a debuff: the share with a living monster carrying it, kept from the casts that hit": "該技能的增益在玩家身上的戰鬥時間占比，依據每波開始時遊戲的增益列表以及其間的施放。對於減益：有存活怪物帶著它的占比，依據命中的施放追蹤",
- "Click for whose damage it was added to": "點擊查看增加到了誰的傷害上"
+ "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. A speed buff is counted by the time it saved on each action": "估算值：該技能的增益或減益為其生效期間的攻擊增加的傷害（光環和減益計入全隊），按遊戲的傷害公式計算。為總量：未扣除施放所花的時間和法力。速度類增益按其在每次行動上節省的時間計算",
+ "Prevented": "減免量",
+ "Click for which players it was for": "點擊查看按玩家的明細",
+ "An estimate: the damage this ability's defensive buff, or its debuff on a monster, kept off the players. A dodged attack counts for that attack's average damage so far": "估算值：該技能的防禦增益或其對怪物的減益為玩家擋下的傷害。被閃避的攻擊按該攻擊至今的平均傷害計算"
 }
