@@ -535,5 +535,7 @@
  "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. A speed buff is counted by the time it saved: more auto attacks or no-cooldown casts, and with a Ripple weapon the cooldown casts those bring": "Une estimation : les dégâts que le bonus ou le malus de cette capacité a ajoutés aux coups sur lesquels il était actif (ceux de tout le groupe pour une aura ou un malus), d'après la formule de dégâts du jeu. Brut : le temps et le mana du lancer ne sont pas déduits. Un bonus de vitesse compte pour le temps gagné : plus d'attaques automatiques ou de lancers sans recharge et, avec une arme à Ondulation, les lancers à recharge qu'ils amènent",
  "Curse (gear)": "Malédiction (équipement)",
  "Fury (gear)": "Furie (équipement)",
- "Weaken (gear)": "Affaiblissement (équipement)"
+ "Weaken (gear)": "Affaiblissement (équipement)",
+ "eDPS": "eDPS",
+ "Effective DPS: the Added figure per second of the fight": "DPS effectif : le chiffre Ajouté par seconde de combat"
 }

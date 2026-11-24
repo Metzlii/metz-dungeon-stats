@@ -535,5 +535,7 @@
  "An estimate: the damage this ability's buff or debuff added to the hits it was on, the whole party's for an aura or a debuff, by the game's damage formula. Gross: the cast's time and mana are not taken off. A speed buff is counted by the time it saved: more auto attacks or no-cooldown casts, and with a Ripple weapon the cooldown casts those bring": "估算值：該技能的增益或減益為其生效期間的攻擊增加的傷害（光環和減益計入全隊），按遊戲的傷害公式計算。為總量：未扣除施放所花的時間和法力。速度類增益按其節省的時間計算：更多的普通攻擊或無冷卻施放，使用漣漪武器時還包括由此帶來的冷卻技能施放",
  "Curse (gear)": "詛咒（裝備）",
  "Fury (gear)": "狂怒（裝備）",
- "Weaken (gear)": "削弱（裝備）"
+ "Weaken (gear)": "削弱（裝備）",
+ "eDPS": "eDPS",
+ "Effective DPS: the Added figure per second of the fight": "有效 DPS：增加量按戰鬥每秒折算"
 }
