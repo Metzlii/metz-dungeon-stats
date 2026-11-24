@@ -284,3 +284,4 @@ The battle meter has an XP/hr column per player (all skills; the tooltip lists e
 The meter columns can be dragged into any order, sorted by a click on the header (again to reverse, a third time for most damage first) and switched off in Settings (Meter columns). One choice for the battle meter and the Damage tab, kept per browser.
 
 Meter columns take the width of their content and the damage bar takes the rest; a light line separates columns, and the right edge of a header sets that column width by hand (double-click for automatic).
+- Parry counts as damage prevented (2026-11-24): each parry seen is worth the average of that monster's same attack on the party so far (damage landed over hits and misses). The target is not in the messages, so there is no per-player split; a parry whose counter missed the monster cannot be seen.

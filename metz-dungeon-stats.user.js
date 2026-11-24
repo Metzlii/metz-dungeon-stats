@@ -37,7 +37,7 @@
     const VERSION = "0.2.12";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-24.3";
+    const BUILD = "2026-11-24.4";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -608,6 +608,21 @@
             const had = u.fx.list.get("/buff_uniques/fury_damage"), st = had && had.until > at ? (had.stacks != null ? had.stacks : had.ratio / f) : 0, now = hit ? Math.min(5, st + 1) : st / 2;
             for (const [k, type] of [["/buff_uniques/fury_damage", "damage"], ["/buff_uniques/fury_accuracy", "accuracy"]]) { if (now > 0) u.fx.list.set(k, { type, flat: 0, ratio: f * now, stacks: now, until: at + 15000, src: "fury", by: u.name }); else u.fx.list.delete(k); }
         }
+        // A parry (operator, 2026-11-24): the monster's attack is turned back on it and hits nobody (the kernel checks
+        // the parry before the attack is rolled). What it kept off the party is what that attack does on average:
+        // the damage that monster's same attack has landed on the party, over its hits and misses together. Who it
+        // was aimed at is not in the messages, so there is no per-player split. A parry seen before that monster has
+        // landed that attack on anyone waits for the first such hit. Only a parry whose counter landed can be seen.
+        function parryPay() {
+            if (!cur.parryWait || !cur.parryWait.length) return;
+            cur.parryWait = cur.parryWait.filter(w => {
+                let amt = 0, n = 0;
+                for (const pl of Object.values(cur.players)) { const r = pl.takenSub && pl.takenSub[w.src] && pl.takenSub[w.src][w.how]; if (r) { amt += r.amt; n += r.hits + r.misses; } }
+                if (!(amt > 0) || !n) return true;
+                const pl = cur.players[w.by]; if (pl) { const row = abilityRow(pl, "parry"); row.prevented = (row.prevented || 0) + amt / n; }
+                return false;
+            });
+        }
         // The shares paid out: on the ability's row for whoever cast it, with whose hits it was (the breakdown).
         function payShares(shares, dmg, hitter) {
             for (const x of shares) { const pl = cur.players[x.by]; if (!pl) continue; const row = abilityRow(pl, x.src), amt = dmg * x.frac; row.added = (row.added || 0) + amt; const by = row.addedBy || (row.addedBy = {}); by[hitter] = (by[hitter] || 0) + amt; }
@@ -788,6 +803,7 @@
                 }
                 if (!who) { cur.unassigned += dmg; battle.unassigned += dmg; continue; }
                 const p = P(who), row = abilityRow(p, key); p.dealt += dmg; row.dmg += dmg; row.hits++; p.hits++;
+                if (key === "parry" && ma.length) { (cur.parryWait || (cur.parryWait = [])).push({ by: who.s.name, src: ma[0].s.name, how: ma[0].used }); parryPay(); }
                 // A damage-over-time tick is a fixed share of the hit that applied it (the kernel: the ticks are set
                 // from that hit's damage and nothing later changes them), so it carries that hit's shares.
                 if (who === actor && e.s.debuffs) {
@@ -839,6 +855,7 @@
                     else { src = "Damage over time"; how = "dot:?"; }
                     p.takenBy[src] = (p.takenBy[src] || 0) + dmg; p.takenHits[src] = (p.takenHits[src] || 0) + 1;
                     const r = sub(p.takenSub || (p.takenSub = {}), src, how); r.amt += dmg; r.hits++;
+                    parryPay();
                     if (ma.length) { payGuard(guardShares(ma[0].s, e.s, how, at, true, dmg), e.s.name); if (ma[0].s.slowDone) payGuard(ma[0].s.slowDone.map(x => ({ by: x.by, src: x.src, amt: dmg * x.k })), e.s.name); weakenBy(ma[0].s, e.s); }
                     const rc = recent[e.s.name] || (recent[e.s.name] = []); rc.push({ at, src, how, dmg }); if (rc.length > 8) rc.shift();
                     if (e.s.hp <= 0 && !e.s.dead) {
