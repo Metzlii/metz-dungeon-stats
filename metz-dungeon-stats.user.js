@@ -3338,8 +3338,8 @@
                     const title = document.createElement("span"); title.className = "mds-set-title"; title.textContent = `${def.title} columns`; bar.appendChild(title);
                     def.cols.forEach((label, n) => {
                         const i = n + 1, lab = document.createElement("label"), inp = document.createElement("input"); inp.type = "checkbox"; inp.id = `mds-scol-${key}-${i}`;
-                        inp.checked = !((subCols[key] || {}).hidden || []).includes(i);
-                        inp.addEventListener("change", () => { const st = subCols[key] || (subCols[key] = {}); st.hidden = (st.hidden || []).filter(x => x !== i); if (!inp.checked) st.hidden.push(i); subColsChanged(); });
+                        inp.checked = !subHidden(key).includes(i);
+                        inp.addEventListener("change", () => { const now = subHidden(key), st = subCols[key] || (subCols[key] = {}); st.hidden = now.filter(x => x !== i); if (!inp.checked) st.hidden.push(i); subColsChanged(); });
                         lab.appendChild(inp); lab.appendChild(document.createTextNode(" " + label)); bar.appendChild(lab);
                     });
                     host.appendChild(bar);
@@ -4150,13 +4150,15 @@
         // stays first. Built as text each redraw, so the order and sort are applied to the text: a row with the rows
         // it opened into moves as one piece. Kept per browser, one choice a table for the popup and the Damage tab.
         const SUB_TABLES = {
-            abilities: { title: "Damage dealt", cols: ["Damage", "Share", "DPS", "Uses", "Hits", "Misses", "Accuracy", "Healing", "Uptime", "Added", "eDPS", "Prevented"] },
+            abilities: { title: "Damage dealt", cols: ["Damage", "Share", "DPS", "Uses", "Hits", "Misses", "Accuracy", "Healing", "Uptime", "Added", "eDPS", "Prevented"], off: [4, 5, 6] }, // Uses, Hits and Misses start hidden: Accuracy says it (operator, 2026-11-23)
             taken: { title: "Damage taken", cols: ["Damage", "Share", "Per second", "Hits", "Misses"] },
             healed: { title: "Healed", cols: ["Healing", "Share", "Per second", "Times"] },
             deaths: { title: "Deaths", cols: ["Wave", "Killed by", "With", "Hit", "HP before", "Down for"] },
             mpspent: { title: "Mana spent", cols: ["Mana", "Share", "Per second", "Uses"] },
             mpgain: { title: "Mana gained", cols: ["Mana", "Share", "Per second", "Times"] },
         };
+        // The columns a details table hides: the player's own choice once made, else the table's defaults.
+        const subHidden = key => { const st = subCols[key] || {}; return Array.isArray(st.hidden) ? st.hidden : (SUB_TABLES[key] && SUB_TABLES[key].off) || []; };
         const SUBCOLS_KEY = PANEL_KEY + "-subcols";
         let subCols = {};
         try { const v = JSON.parse(localStorage.getItem(SUBCOLS_KEY) || "null"); if (v && typeof v === "object") subCols = v; } catch (_e) { subCols = {}; }
@@ -4171,7 +4173,7 @@
         function subTable(key, head, rows) {
             const ths = head.match(/<th\b[\s\S]*?<\/th>/g) || [], n = ths.length, st = subCols[key] || {};
             const saved = (Array.isArray(st.order) ? st.order : []).filter((i, at, l) => Number.isInteger(i) && i > 0 && i < n && l.indexOf(i) === at);
-            const hidden = Array.isArray(st.hidden) ? st.hidden : [];
+            const hidden = subHidden(key);
             const order = [0].concat(saved, [...Array(n).keys()].filter(i => i > 0 && !saved.includes(i))).filter(i => !hidden.includes(i));
             const cellsOf = tr => tr.match(/<td\b[\s\S]*?<\/td>/g) || [];
             let list = rows.slice();
