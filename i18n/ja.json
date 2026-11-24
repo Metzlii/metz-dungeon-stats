@@ -464,8 +464,9 @@
  "Time in combat the meter has counted": "メーターが計測した戦闘時間",
  "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} ダメージ · パーティーの {share} · {dps} DPS · {taken} 被ダメージ · {healed} 回復",
  "{n} party damage ({dps} DPS)": "{n} パーティーダメージ（{dps} DPS）",
- "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds the row up; a + marks an item with no ask left out.": "最後のウェーブ時点の、戦闘中の全員の所持数です。各所持数の下：このページを開いてからのそのプレイヤーの消費ペースで何日もつか（10 分経過し 1 回使うまでは –）、続いて 1 日あたりの消費数とマーケットの売値での 1 日分の費用。入場キーは各周回開始時のゲームのパーティーメッセージから、ダンジョンの平均周回時間で計算します。「費用 / 日」は行の合計です。+ は売り注文がなく含まれていないアイテムがあることを示します。",
  "Cost / day": "費用 / 日",
- "Everything in the row at the marketplace ask": "行のすべてをマーケットの売値で計算",
- "{n}/day": "{n}/日"
+ "{n}/day": "{n}/日",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds up the food and drinks, and the entry keys too when the box beside Entry keys is ticked; a + marks an item with no ask left out.": "最後のウェーブ時点の、戦闘中の全員の所持数です。各所持数の下：このページを開いてからのそのプレイヤーの消費ペースで何日もつか（10 分経過し 1 回使うまでは –）、続いて 1 日あたりの消費数とマーケットの売値での 1 日分の費用。入場キーは各周回開始時のゲームのパーティーメッセージから、ダンジョンの平均周回時間で計算します。「費用 / 日」は食べ物と飲み物の合計で、入場キーの横のチェックを入れると入場キーも含みます。+ は売り注文がなく含まれていないアイテムがあることを示します。",
+ "Count entry keys in Cost / day": "入場キーを「費用 / 日」に含める",
+ "The row at the marketplace ask": "行をマーケットの売値で計算"
 }

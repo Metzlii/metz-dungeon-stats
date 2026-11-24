@@ -464,8 +464,9 @@
  "Time in combat the meter has counted": "미터가 집계한 전투 시간",
  "{dmg} damage · {share} of the party · {dps} DPS · {taken} taken · {healed} healed": "{dmg} 피해 · 파티의 {share} · {dps} DPS · {taken} 받은 피해 · {healed} 회복",
  "{n} party damage ({dps} DPS)": "{n} 파티 피해 ({dps} DPS)",
- "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds the row up; a + marks an item with no ask left out.": "마지막 웨이브 기준, 전투 중인 모든 인원의 보유량입니다. 각 수량 아래: 이 페이지를 연 뒤 그 플레이어의 사용 속도로 얼마나 버티는지(10분이 지나고 한 번 사용하기 전에는 –), 이어서 하루 사용량과 거래소 판매가 기준 하루 비용. 입장 열쇠는 매 런 시작 시 게임의 파티 메시지에서 가져오며 던전의 평균 런 시간으로 계산합니다. 비용 / 일은 행의 합계이며, +는 판매 주문이 없어 빠진 아이템이 있음을 뜻합니다.",
  "Cost / day": "비용 / 일",
- "Everything in the row at the marketplace ask": "행의 모든 항목을 거래소 판매가로 계산",
- "{n}/day": "{n}/일"
+ "{n}/day": "{n}/일",
+ "Counts as of the last wave, for everyone in the battle. Under each count: how long it lasts at the rate that player has used it since this page opened (– until 10 minutes and one use), then how many that is a day and what a day of it costs at the marketplace ask. Entry keys are from the game's party message at each run start, at the dungeon's average run time. Cost / day adds up the food and drinks, and the entry keys too when the box beside Entry keys is ticked; a + marks an item with no ask left out.": "마지막 웨이브 기준, 전투 중인 모든 인원의 보유량입니다. 각 수량 아래: 이 페이지를 연 뒤 그 플레이어의 사용 속도로 얼마나 버티는지(10분이 지나고 한 번 사용하기 전에는 –), 이어서 하루 사용량과 거래소 판매가 기준 하루 비용. 입장 열쇠는 매 런 시작 시 게임의 파티 메시지에서 가져오며 던전의 평균 런 시간으로 계산합니다. 비용 / 일은 음식과 음료의 합계이며, 입장 열쇠 옆의 상자를 선택하면 입장 열쇠도 포함합니다. +는 판매 주문이 없어 빠진 아이템이 있음을 뜻합니다.",
+ "Count entry keys in Cost / day": "입장 열쇠를 비용 / 일에 포함",
+ "The row at the marketplace ask": "행을 거래소 판매가로 계산"
 }
