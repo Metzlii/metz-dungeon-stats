@@ -30,6 +30,12 @@ hit restarts its 5 s. The export also has the other reading, hits in the 5 s bef
 every 3 s tells the two apart: under the first the damage keeps falling for four hits, under the second it stops
 after one.
 
+The **Armor track** row is your armor and resistances as the game states them: read at every wave start and
+every clicked card, with the run of hits that had landed on you just before the reading. The messages between
+wave starts carry HP and counters and no stats, so those two moments are when the game says the number; with one
+monster at a time a wave starts every few seconds. Any buff on you whose name contains "fortify" is listed under
+it with its type, ratio, flat amount and duration, exactly as the game sends it.
+
 The line under the status shows the last unit card you clicked: total armor and resistances, and any of the
 special stats the game lists on it. **Click your own card** whenever the armor matters.
 
@@ -56,8 +62,8 @@ everything else unslotted so the rest are auto attacks. A single-monster zone wh
 - has real armor (Shatter has something to ignore);
 - hits you often and for more than a scratch (Fortify has something to reduce).
 
-**Run.** Label `all3`, Start, and fight for 45 to 60 minutes: about 1,000 swings. Twice during it, right after the
-monster has hit you two or three times in a row, click your own card; and click the monster's card once.
+**Run.** Label `all3`, Start, and fight for 45 to 60 minutes: about 1,000 swings. Nothing to click: your armor
+is read at every wave start. Clicking your own card mid-fight adds a reading at that moment if you want one.
 
 **Smite needs a boss.** Then 10 to 15 minutes in a planet whose boss you can reach (label `all3 boss`), same gear.
 Only the hits on the boss matter there; the star in the table marks it.
@@ -72,7 +78,7 @@ What each special is read from:
 | Shatter | `crit` against the largest `plain` on the same monster, with your critical damage and the monster's armor from the stat blocks | How much armor a crit ignores, and whether it adds to your penetration or multiplies |
 | Echo | `2+ numbers` on the ability's row against its casts, and the "within 0.4 s of a cast" count | The chance (12% x (1 + power)), whether the repeat lands with the cast or after, and its size against the cast's (half?) |
 | Overkill | `after a kill` against `not after a kill`: with one monster at a time, the first hit on each new one | Whether the stored damage is added to the next hit, about how much, and whether mitigation applies to it |
-| Fortify | `Hits taken` by run of hits, your card after two or three hits, and the buffs listed on you at each wave start | Whether a stack is a share of your armor or points, whether a hit restarts the timer, and the cap of 4 |
+| Fortify | `Armor track`: your armor and resistances by the run of hits before each reading, and the Fortify buff as the game lists it. `Hits taken` shows the same thing in damage | Whether a stack is a share of your armor or points, whether a hit restarts the timer, and the cap of 4 |
 | Smite | Largest `plain` hit on the boss against what your stats predict without it | Whether it is a plain 12% x (1 + power) multiplier |
 | Talisman Power | Your stat block against the talismans' printed values | Whether a line is worth `value x (1 + power)` |
 

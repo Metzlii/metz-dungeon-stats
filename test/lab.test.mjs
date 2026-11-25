@@ -75,4 +75,22 @@ assert.equal(lab.dump().rows.at(-1).label, "without");
 assert.deepEqual(lab.dump().labels.map(l => [l.label, l.to != null]), [["with", true], ["without", false]]);
 assert.equal(lab.unitCard({ type: "battle_unit_fetched", unit: { name: "rat", combatDetails: { totalArmor: 12 } } }, at).totalArmor, 12);
 assert.ok(lab.dump().cards.some(c => c.source === "clicked" && c.details.totalArmor === 12));
+// The armor track: one reading per wave start and per clicked player card, with the run of hits just before it.
+{
+    const lab2 = createLab(); let t2 = 0;
+    const me = (armor, buffs) => ({ ...player("Me", 1000), combatDetails: { totalArmor: armor, totalWaterResistance: armor / 2, totalNatureResistance: 1, totalFireResistance: 1, combatStats: {} }, combatBuffMap: buffs || {} });
+    const fight = (armor, buffs) => lab2.newBattle({ type: "new_battle", battleId: 3, wave: 1, players: [me(armor, buffs)], monsters: [monster("rat", 100)] }, t2);
+    const hitMe = hp => lab2.update(upd({ 0: { cHP: hp, dmgCounter: 1000 - hp } }, { 0: { atkCounter: 1000 - hp } }), t2);
+    lab2.mark("f", t2);
+    fight(100);                       // nothing has hit yet
+    t2 += 1000; hitMe(990); t2 += 500; fight(104, { a: { uniqueHrid: "/buff_uniques/fortify", typeHrid: "/buff_types/armor", ratioBoost: 0.04, duration: 5e9, startTime: "x" } });
+    t2 += 2500; hitMe(980); t2 += 500; fight(108);   // second hit 3 s after the first: the run goes on
+    t2 += 7000; fight(100);           // 7 s without a hit: lapsed
+    lab2.unitCard({ type: "battle_unit_fetched", unit: me(100) }, t2);
+    const tr = lab2.summary().track[0];
+    assert.deepEqual(lab2.dump().armor.map(a => [a.source, a.armor, a.chain, a.hitsBefore]), [["new_battle", 100, 0, 0], ["new_battle", 104, 1, 1], ["new_battle", 108, 2, 2], ["new_battle", 100, 0, 0], ["clicked", 100, 0, 0]]);
+    assert.deepEqual(tr.armorByChain.map(v => v && v.mean), [100, 104, 108, null, null]);
+    assert.deepEqual(tr.waterByChain.map(v => v && v.mean), [50, 52, 54, null, null]);
+    assert.deepEqual(tr.fortifyBuffs, ["/buff_uniques/fortify /buff_types/armor ratio 0.04 flat 0 5000 ms"]);
+}
 console.log("ok: the lab logs each hit with its ability, crit and damage numbers, the first hit after a kill, the hits in the 5 s before one taken, and keeps what it cannot attribute apart");

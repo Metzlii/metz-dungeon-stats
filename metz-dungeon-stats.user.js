@@ -38,7 +38,7 @@
     const VERSION = "0.2.13";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-25.3";
+    const BUILD = "2026-11-25.4";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -414,7 +414,19 @@
     // message carries the HP, floored at 0), and a unit's armor between waves unless its card is clicked.
     function createLab(opts) {
         const LIMIT = (opts && opts.limit) || 300000, FORTIFY_MS = 5000, LAB_FLAGS = ["isBlinded", "isStunned", "isSilenced"];
-        let battle = null, label = "", labels = [], rows = [], cards = [], login = null, dropped = 0, lastKill = {}, hitsOn = {}, chain = {}, lastCast = null;
+        let battle = null, label = "", labels = [], rows = [], cards = [], armor = [], login = null, dropped = 0, lastKill = {}, hitsOn = {}, chain = {}, lastCast = null;
+        // Armor track (operator, 2026-11-25: "verify fortify stacks by tracking my armor and resistance stat"). The
+        // game states a player's total armor and resistances, and every buff on them with its start and duration,
+        // in each new_battle and on a clicked card; battle_updated carries no stats. So each wave start and each
+        // click is one reading, kept with how many hits had landed on that player just before it. With one monster
+        // at a time a wave starts every few seconds, which makes this a track rather than a guess from damage.
+        const STAT_KEYS = ["totalArmor", "totalWaterResistance", "totalNatureResistance", "totalFireResistance"];
+        function reading(source, at, name, details, buffMap) {
+            if (!details || details.totalArmor == null) return;
+            const list = (hitsOn[name] || []).filter(t => at - t < FORTIFY_MS), c = chain[name];
+            const buffs = Object.values(buffMap || {}).filter(b => b && b.uniqueHrid).map(b => ({ u: b.uniqueHrid, type: b.typeHrid, ratio: num(b.ratioBoost), flat: num(b.flatBoost), start: b.startTime, ms: num(b.duration) / 1e6 }));
+            if (armor.length < LIMIT) armor.push({ at, label, source, name, armor: num(details.totalArmor), water: num(details.totalWaterResistance), nature: num(details.totalNatureResistance), fire: num(details.totalFireResistance), hitsBefore: list.length, chain: c && at - c.at < FORTIFY_MS ? c.n : 0, sinceHit: c ? at - c.at : null, buffs });
+        }
         const num = v => Number(v) || 0;
         const nameOf = (u, isPlayer, i) => (isPlayer ? (u.character && u.character.name) || u.name : u.name || String(u.hrid || "").split("/").pop()) || `#${i}`;
         function unit(u, i, isPlayer) {
@@ -434,7 +446,7 @@
         function newBattle(m, at) {
             const players = (m.players || []).map((u, i) => unit(u, i, true)), monsters = (m.monsters || []).map((u, i) => unit(u, i, false));
             battle = { id: m.battleId, wave: num(m.wave), p: players, m: monsters };
-            (m.players || []).forEach((u, i) => { if (u && u.combatDetails) card("new_battle", at, players[i].name, u.combatDetails); });
+            (m.players || []).forEach((u, i) => { if (u && u.combatDetails) { card("new_battle", at, players[i].name, u.combatDetails); reading("new_battle", at, players[i].name, u.combatDetails, u.combatBuffMap); } });
             (m.monsters || []).forEach((u, i) => { if (u && u.combatDetails) card("new_battle", at, monsters[i].name, u.combatDetails); });
         }
         function update(m, at) {
@@ -499,6 +511,7 @@
         function unitCard(m, at) {
             const u = findDetails(m, 0);
             card("clicked", at, u ? nameOf(u, !!(u.character || u.isPlayer), 0) : "?", u ? u.combatDetails : m);
+            if (u && (u.character || u.isPlayer)) reading("clicked", at, nameOf(u, true, 0), u.combatDetails, u.combatBuffMap);
             return u ? u.combatDetails : null;
         }
         function setLogin(body) { login = body; }
@@ -525,10 +538,19 @@
                 out.push(row);
             }
             const other = rows.filter(r => r.kind === "other");
-            return { groups: out, other: other.length, otherSoonAfterCast: other.filter(r => r.side === "m" && r.sinceCast != null && r.sinceCast <= 400).length, rows: rows.length, dropped };
+            // Armor and resistances per player under each label, by the run of hits just before the reading.
+            const track = [], seen = new Map();
+            for (const a of armor) { const k = a.label + "\u0001" + a.name; (seen.get(k) || seen.set(k, []).get(k)).push(a); }
+            for (const list of seen.values()) {
+                const by = key => [0, 1, 2, 3, 4].map(n => stat(list.filter(a => (n < 4 ? a.chain === n : a.chain >= 4)).map(a => a[key])));
+                const last = list[list.length - 1];
+                track.push({ label: last.label, name: last.name, n: list.length, last: { armor: last.armor, water: last.water, nature: last.nature, fire: last.fire, chain: last.chain }, armor: stat(list.map(a => a.armor)), armorByChain: by("armor"), waterByChain: by("water"), natureByChain: by("nature"), fireByChain: by("fire"),
+                    fortifyBuffs: [...new Set(list.flatMap(a => a.buffs.filter(b => /fortif/i.test(b.u)).map(b => `${b.u} ${b.type} ratio ${b.ratio} flat ${b.flat} ${Math.round(b.ms)} ms`)))].slice(0, 12) });
+            }
+            return { track, groups: out, other: other.length, otherSoonAfterCast: other.filter(r => r.side === "m" && r.sinceCast != null && r.sinceCast <= 400).length, rows: rows.length, dropped };
         }
-        function clear() { rows = []; cards = []; labels = label ? [{ label, from: labels.length ? labels[labels.length - 1].from : 0, to: null }] : []; dropped = 0; lastKill = {}; hitsOn = {}; chain = {}; lastCast = null; }
-        const dump = () => ({ labels, rows, cards: cards.map(c => ({ at: c.at, label: c.label, source: c.source, name: c.name, details: c.details })), login, dropped });
+        function clear() { rows = []; cards = []; armor = []; labels = label ? [{ label, from: labels.length ? labels[labels.length - 1].from : 0, to: null }] : []; dropped = 0; lastKill = {}; hitsOn = {}; chain = {}; lastCast = null; }
+        const dump = () => ({ labels, rows, armor, cards: cards.map(c => ({ at: c.at, label: c.label, source: c.source, name: c.name, details: c.details })), login, dropped });
         return { newBattle, update, unitCard, mark, setLogin, summary, clear, dump, label: () => label, count: () => rows.length };
     }
     // </lab>
@@ -5352,12 +5374,16 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
         const boss = g => (g.hrid && ref.bosses && ref.bosses.has(g.hrid) ? " \u2605" : "");
         const hitRows = hits.map(g => `<tr><td>${esc(short(g.key))}</td><td>${esc(g.on)}${boss(g)}</td><td>${g.n}</td><td>${g.misses}</td><td>${st(g.plain)}</td><td>${st(g.crit)}</td><td>${g.multiSplat}</td><td>${st(g.afterKill)}</td><td>${st(g.notAfterKill)}</td></tr>`).join("");
         const takenRows = taken.map(g => `<tr><td>${esc(g.by)}${boss(g)}</td><td>${esc(short(g.key))}</td><td>${g.n}</td><td>${st(g.plain)}</td>${g.byChain.map(x => `<td>${x ? `${x.n}: ${Math.round(x.mean)}` : "\u2013"}</td>`).join("")}</tr>`).join("");
+        const r1 = v => Math.round(v * 10) / 10;
+        const trackRows = sum.track.filter(x => x.label === cur).map(x => `<tr><td>${esc(x.name)}</td><td>${x.n}</td><td>${r1(x.last.armor)} / ${r1(x.last.water)} / ${r1(x.last.nature)} / ${r1(x.last.fire)}</td><td>${x.armor ? `${r1(x.armor.min)}\u2013${r1(x.armor.max)}` : "\u2013"}</td>${x.armorByChain.map(v => `<td>${v ? `${v.n}: ${r1(v.mean)}` : "\u2013"}</td>`).join("")}</tr>`).join("");
+        const fb = sum.track.filter(x => x.label === cur).flatMap(x => x.fortifyBuffs);
         const c = labUi.lastCard && labUi.lastCard.d, cs = (c && c.combatStats) || {};
         const pick = (o, ks) => ks.filter(k => o && o[k] != null && o[k] !== 0).map(k => `${k} ${Math.round(Number(o[k]) * 10000) / 10000}`).join(" \u00b7 ");
         const cardLine = c ? `${pick(c, ["totalArmor", "totalWaterResistance", "totalNatureResistance", "totalFireResistance"])}${pick(cs, ["armor", "armorPenetration", "smite", "consistency", "shatter", "echo", "fortify", "overkill", "talismanPower"]) ? " \u00b7 " + pick(cs, ["armor", "armorPenetration", "smite", "consistency", "shatter", "echo", "fortify", "overkill", "talismanPower"]) : ""}` : "click a unit's card in battle to read its stats here";
         labUi.body.innerHTML = `<div class="mdl-line">${cur ? `recording <b>${esc(cur)}</b>` : "<b>not recording</b>: type a label and press Start"} \u00b7 ${sum.rows} rows${sum.dropped ? `, ${sum.dropped} dropped (limit reached: export and clear)` : ""} \u00b7 ${sum.other} unattributed${sum.otherSoonAfterCast ? ` (${sum.otherSoonAfterCast} within 0.4 s of a cast)` : ""}</div>
 <div class="mdl-line mdl-dim">last card: ${esc(cardLine)}</div>
 <table><thead><tr><th>Your hits</th><th>on (\u2605 boss)</th><th>n</th><th>miss</th><th title="Not crits, not kills. n: smallest\u2013largest (mean)">plain</th><th title="Critical hits that did not kill">crit</th><th title="Messages where the target was shown more than one damage number: a repeat (Echo) would show here">2+ numbers</th><th title="First target of the action after one of your kills, where stored Overkill damage would land">after a kill</th><th>not after a kill</th></tr></thead><tbody>${hitRows || `<tr><td colspan="9" class="mdl-dim">no hits under this label yet</td></tr>`}</tbody></table>
+<table><thead><tr><th title="Read from the game at every wave start and every clicked card">Armor track</th><th>readings</th><th title="armor / water / nature / fire resistance at the last reading">now: armor / W / N / F</th><th>armor seen</th><th title="Mean armor by how many hits had landed on this player in an unbroken run just before the reading (each within 5 s of the last). count: mean">after a run of 0</th><th>1</th><th>2</th><th>3</th><th>4+</th></tr></thead><tbody>${trackRows || `<tr><td colspan="9" class="mdl-dim">no reading yet: one comes with every wave start</td></tr>`}</tbody></table>${fb.length ? `<div class="mdl-line mdl-dim">buffs named fortify: ${esc(fb.join(" | "))}</div>` : ""}
 <table><thead><tr><th>Hits taken from</th><th>with</th><th>n</th><th>all</th><th title="Mean damage by how many hits came before this one in an unbroken run, each within 5 s of the last: the stacks Fortify would hold if every hit restarts its timer. count: mean">run of 0</th><th>1</th><th>2</th><th>3</th><th>4+</th></tr></thead><tbody>${takenRows || `<tr><td colspan="9" class="mdl-dim">none yet</td></tr>`}</tbody></table>`;
     }
     function labMount() {

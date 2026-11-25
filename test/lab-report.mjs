@@ -44,6 +44,15 @@ for (const l of labels.length ? labels : [{ label: "" }]) {
         }
     }
 }
+if ((summary.track || []).length) {
+    console.log("\n== armor track (read at every wave start and clicked card; by the run of hits just before the reading)");
+    const by = list => list.map((x, i) => `${i === 4 ? "4+" : i}: ${x ? x.mean.toFixed(2) + " (n " + x.n + ")" : "-"}`).join("   ");
+    for (const t of summary.track) {
+        console.log(`  [${t.label || "-"}] ${t.name}: ${t.n} readings, armor ${t.armor ? t.armor.min + ".." + t.armor.max : "-"}`);
+        for (const [k, name] of [["armorByChain", "armor "], ["waterByChain", "water "], ["natureByChain", "nature"], ["fireByChain", "fire  "]]) console.log(`      ${name}  ${by(t[k])}`);
+        for (const b of t.fortifyBuffs) console.log(`      buff: ${b}`);
+    }
+}
 const keys = ["totalArmor", "totalWaterResistance", "totalNatureResistance", "totalFireResistance"];
 const clicked = cards.filter(c => c.source === "clicked");
 if (clicked.length) {
