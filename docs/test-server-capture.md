@@ -24,8 +24,11 @@ A row of **Your hits** is one ability against one monster:
 | 2+ numbers | messages where the target was shown more than one damage number | Echo, if the repeat lands with the cast |
 | after a kill / not after a kill | the first target of the action right after one of your kills, against every other hit | Overkill |
 
-A row of **Hits taken** is one monster's attack on you: all hits, then the mean by how many hits landed on you in
-the 5 s before (0, 1, 2, 3, 4+), which is the stack count Fortify would hold.
+A row of **Hits taken** is one monster's attack on you: all hits, then the mean by how many hits came before it
+in an unbroken run, each within 5 s of the last (0, 1, 2, 3, 4+). That is the stack count Fortify holds if every
+hit restarts its 5 s. The export also has the other reading, hits in the 5 s before, so a lone monster swinging
+every 3 s tells the two apart: under the first the damage keeps falling for four hits, under the second it stops
+after one.
 
 The line under the status shows the last unit card you clicked: total armor and resistances, and any of the
 special stats the game lists on it. **Click your own card** whenever the armor matters.
@@ -37,40 +40,44 @@ cast instead of with it, it shows up there, counted separately as "within 0.4 s 
 What the lab cannot see: how much a killing hit dealt past the HP that was left, and a unit's armor unless its card
 is clicked.
 
-## A plan for the three talismans
+## The plan: all three talismans in, one monster
 
-The game's own tooltips say what each special does; the open questions are the details. Solo, same zone, same
-gear, **one talisman socketed at a time**, about 300 hits per label, and one label with the belt empty first
-(`none`) as the baseline for everything.
+The game's tooltips say what each special does, so the session only has to settle the details, and the six do not
+get in each other's way: each shows in a different column. A second copy of a special does not stack (two Overkill
+lines count once), so the three talismans together carry exactly one of each of the six.
 
-**Baseline.** Label `none`, belt on, no talisman. Then with any talisman: click your own card once and note the
-value its ordinary lines show in the game against the card. That is Talisman Power: whether a line is worth
-`value x (1 + power)`.
+The lab does not need a run without talismans to compare against. Every wave's `new_battle` carries your whole
+stat block and the monster's, and the lab keeps each one that changed, so what a hit SHOULD have been without the
+special is worked out from your own stats.
 
-**Talisman with Shatter, Critical Rate, Consistency, Attack Speed** (label `T2`), on a monster with a lot of armor
-that does not die in one hit, auto attacks only (unslot abilities):
-- Consistency: `plain` smallest / largest should be about 0.12 x (1 + power) if it is a floor on the roll, and
-  much lower in `none`.
-- Shatter: crit / largest plain in `T2`. Without Shatter that ratio is exactly 1 + your critical damage; anything
-  above it is the armor Shatter ignored. Click the monster's card so its armor is in the export.
+**Setup.** Large belt, all three talismans, solo. One damaging ability on a short cooldown slotted (for Echo),
+everything else unslotted so the rest are auto attacks. A single-monster zone where the monster:
+- survives one hit but dies in two to five (kills come often, and most hits are not kills);
+- has real armor (Shatter has something to ignore);
+- hits you often and for more than a scratch (Fortify has something to reduce).
 
-**Talisman with Overkill, Melee Accuracy, Physical Amplify, Echo** (label `T1`), on a planet with weak monsters
-you kill in one hit and one that takes several, with one damaging ability slotted:
-- Echo: `2+ numbers` against the number of casts (12% x (1 + power) expected), and the "within 0.4 s of a cast"
-  count if the repeat comes separately. The export has each repeat's size against the cast's.
-- Overkill: `after a kill` against `not after a kill` on the monster that survives.
+**Run.** Label `all3`, Start, and fight for 45 to 60 minutes: about 1,000 swings. Twice during it, right after the
+monster has hit you two or three times in a row, click your own card; and click the monster's card once.
 
-**Talisman with Smite, Fortify, Overkill, Elemental Penetration** (label `T3 boss` and `T3 normal`):
-- Smite: largest plain hit on a boss against the same on a non-boss in `none` and in `T3`. The game data's boss
-  flag is the star in the table.
-- Fortify: stand in front of something that hits fast. `Hits taken` by hits before: the means should fall from
-  0 to 4+ if stacks build. Click your own card right after 1, 2, 3 and 4 hits and again after 6 s without one:
-  the armor on the card says whether a stack is a share of your armor or points.
+**Smite needs a boss.** Then 10 to 15 minutes in a planet whose boss you can reach (label `all3 boss`), same gear.
+Only the hits on the boss matter there; the star in the table marks it.
 
-**Both Overkill talismans together** (label `T1+T3`): whether two Overkill lines add up (80%) or only one counts.
+**Send** the lab export. If the page reloaded during the session, send the raw frames export too.
 
-Send the lab export (and the raw frames export if the session was long or the page was reloaded) with a line
-saying which talisman each label had.
+What each special is read from:
+
+| Special | Read from | Settles |
+| --- | --- | --- |
+| Consistency | `plain` auto attacks: smallest / largest | Whether it is a floor on the roll at 12% x (1 + power) of the top roll, and whether abilities are left alone |
+| Shatter | `crit` against the largest `plain` on the same monster, with your critical damage and the monster's armor from the stat blocks | How much armor a crit ignores, and whether it adds to your penetration or multiplies |
+| Echo | `2+ numbers` on the ability's row against its casts, and the "within 0.4 s of a cast" count | The chance (12% x (1 + power)), whether the repeat lands with the cast or after, and its size against the cast's (half?) |
+| Overkill | `after a kill` against `not after a kill`: with one monster at a time, the first hit on each new one | Whether the stored damage is added to the next hit, about how much, and whether mitigation applies to it |
+| Fortify | `Hits taken` by run of hits, your card after two or three hits, and the buffs listed on you at each wave start | Whether a stack is a share of your armor or points, whether a hit restarts the timer, and the cap of 4 |
+| Smite | Largest `plain` hit on the boss against what your stats predict without it | Whether it is a plain 12% x (1 + power) multiplier |
+| Talisman Power | Your stat block against the talismans' printed values | Whether a line is worth `value x (1 + power)` |
+
+You and the lone monster acting in the same message is the one case the lab will not attribute. Those rows go to
+"unattributed" and are left out; with one monster it is a small share.
 
 ## What is kept as raw frames there
 

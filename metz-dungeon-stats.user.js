@@ -38,7 +38,7 @@
     const VERSION = "0.2.13";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-25.2";
+    const BUILD = "2026-11-25.3";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -414,7 +414,7 @@
     // message carries the HP, floored at 0), and a unit's armor between waves unless its card is clicked.
     function createLab(opts) {
         const LIMIT = (opts && opts.limit) || 300000, FORTIFY_MS = 5000, LAB_FLAGS = ["isBlinded", "isStunned", "isSilenced"];
-        let battle = null, label = "", labels = [], rows = [], cards = [], login = null, dropped = 0, lastKill = {}, hitsOn = {}, lastCast = null;
+        let battle = null, label = "", labels = [], rows = [], cards = [], login = null, dropped = 0, lastKill = {}, hitsOn = {}, chain = {}, lastCast = null;
         const num = v => Number(v) || 0;
         const nameOf = (u, isPlayer, i) => (isPlayer ? (u.character && u.character.name) || u.name : u.name || String(u.hrid || "").split("/").pop()) || `#${i}`;
         function unit(u, i, isPlayer) {
@@ -429,7 +429,7 @@
         function mark(next, at) {
             const open = labels[labels.length - 1]; if (open && open.to == null) open.to = at;
             label = String(next || "").trim(); if (label) labels.push({ label, from: at, to: null });
-            lastKill = {}; hitsOn = {}; lastCast = null;
+            lastKill = {}; hitsOn = {}; chain = {}; lastCast = null;
         }
         function newBattle(m, at) {
             const players = (m.players || []).map((u, i) => unit(u, i, true)), monsters = (m.monsters || []).map((u, i) => unit(u, i, false));
@@ -470,10 +470,14 @@
                 const a = ma[0];
                 for (const e of ch) {
                     if (e.side !== "p" || e.dhp >= 0) continue;
-                    // hitsBefore: landed hits on this player in the 5 s before this one, the stacks Fortify would hold.
+                    // Two readings of "stacking up to 4 times" for 5 s, both kept:
+                    //   hitsBefore: landed hits on this player in the 5 s before this one (each stack on its own timer)
+                    //   chain: hits before this one in an unbroken run, each within 5 s of the one before it (every hit
+                    //          restarts the timer for all stacks). A lone monster swinging every 3 s tells the two apart.
                     const list = (hitsOn[e.s.name] || (hitsOn[e.s.name] = [])).filter(t => at - t < FORTIFY_MS);
-                    push({ ...base, kind: "taken", by: a.s.name, hrid: a.s.hrid, key: a.used, on: e.s.name, dmg: -e.dhp, splats: e.splats, crits: e.crits, hpBefore: e.hpBefore, mhp: e.s.mhp, kill: e.s.hp <= 0, hitsBefore: list.length });
-                    list.push(at); hitsOn[e.s.name] = list;
+                    const c = chain[e.s.name], run = c && at - c.at < FORTIFY_MS ? c.n : 0;
+                    push({ ...base, kind: "taken", by: a.s.name, hrid: a.s.hrid, key: a.used, on: e.s.name, dmg: -e.dhp, splats: e.splats, crits: e.crits, hpBefore: e.hpBefore, mhp: e.s.mhp, kill: e.s.hp <= 0, hitsBefore: list.length, chain: run });
+                    list.push(at); hitsOn[e.s.name] = list; chain[e.s.name] = { at, n: run + 1 };
                 }
             }
             if (!oneHitter && !oneMonster) {
@@ -514,13 +518,16 @@
                 const row = { label: r0.label, kind: r0.kind, by: r0.by, key: r0.key, on: r0.on, hrid: r0.hrid || null, n: list.length, misses: list.filter(r => r.miss).length, kills: list.filter(r => r.kill).length,
                     plain: stat(plain.map(r => r.dmg)), crit: stat(crit.map(r => r.dmg)), multiSplat: list.filter(r => r.splats > 1).length };
                 if (r0.kind === "hit") { row.afterKill = stat(full.filter(r => r.afterKill).map(r => r.dmg)); row.notAfterKill = stat(full.filter(r => !r.afterKill).map(r => r.dmg)); }
-                else row.byHitsBefore = [0, 1, 2, 3, 4].map(n => stat(full.filter(r => (n < 4 ? r.hitsBefore === n : r.hitsBefore >= 4)).map(r => r.dmg)));
+                else {
+                    row.byHitsBefore = [0, 1, 2, 3, 4].map(n => stat(full.filter(r => (n < 4 ? r.hitsBefore === n : r.hitsBefore >= 4)).map(r => r.dmg)));
+                    row.byChain = [0, 1, 2, 3, 4].map(n => stat(full.filter(r => (n < 4 ? r.chain === n : r.chain >= 4)).map(r => r.dmg)));
+                }
                 out.push(row);
             }
             const other = rows.filter(r => r.kind === "other");
             return { groups: out, other: other.length, otherSoonAfterCast: other.filter(r => r.side === "m" && r.sinceCast != null && r.sinceCast <= 400).length, rows: rows.length, dropped };
         }
-        function clear() { rows = []; cards = []; labels = label ? [{ label, from: labels.length ? labels[labels.length - 1].from : 0, to: null }] : []; dropped = 0; lastKill = {}; hitsOn = {}; lastCast = null; }
+        function clear() { rows = []; cards = []; labels = label ? [{ label, from: labels.length ? labels[labels.length - 1].from : 0, to: null }] : []; dropped = 0; lastKill = {}; hitsOn = {}; chain = {}; lastCast = null; }
         const dump = () => ({ labels, rows, cards: cards.map(c => ({ at: c.at, label: c.label, source: c.source, name: c.name, details: c.details })), login, dropped });
         return { newBattle, update, unitCard, mark, setLogin, summary, clear, dump, label: () => label, count: () => rows.length };
     }
@@ -5344,14 +5351,14 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
         const hits = groups.filter(g => g.kind === "hit"), taken = groups.filter(g => g.kind === "taken");
         const boss = g => (g.hrid && ref.bosses && ref.bosses.has(g.hrid) ? " \u2605" : "");
         const hitRows = hits.map(g => `<tr><td>${esc(short(g.key))}</td><td>${esc(g.on)}${boss(g)}</td><td>${g.n}</td><td>${g.misses}</td><td>${st(g.plain)}</td><td>${st(g.crit)}</td><td>${g.multiSplat}</td><td>${st(g.afterKill)}</td><td>${st(g.notAfterKill)}</td></tr>`).join("");
-        const takenRows = taken.map(g => `<tr><td>${esc(g.by)}${boss(g)}</td><td>${esc(short(g.key))}</td><td>${g.n}</td><td>${st(g.plain)}</td>${g.byHitsBefore.map(x => `<td>${x ? `${x.n}: ${Math.round(x.mean)}` : "\u2013"}</td>`).join("")}</tr>`).join("");
+        const takenRows = taken.map(g => `<tr><td>${esc(g.by)}${boss(g)}</td><td>${esc(short(g.key))}</td><td>${g.n}</td><td>${st(g.plain)}</td>${g.byChain.map(x => `<td>${x ? `${x.n}: ${Math.round(x.mean)}` : "\u2013"}</td>`).join("")}</tr>`).join("");
         const c = labUi.lastCard && labUi.lastCard.d, cs = (c && c.combatStats) || {};
         const pick = (o, ks) => ks.filter(k => o && o[k] != null && o[k] !== 0).map(k => `${k} ${Math.round(Number(o[k]) * 10000) / 10000}`).join(" \u00b7 ");
         const cardLine = c ? `${pick(c, ["totalArmor", "totalWaterResistance", "totalNatureResistance", "totalFireResistance"])}${pick(cs, ["armor", "armorPenetration", "smite", "consistency", "shatter", "echo", "fortify", "overkill", "talismanPower"]) ? " \u00b7 " + pick(cs, ["armor", "armorPenetration", "smite", "consistency", "shatter", "echo", "fortify", "overkill", "talismanPower"]) : ""}` : "click a unit's card in battle to read its stats here";
         labUi.body.innerHTML = `<div class="mdl-line">${cur ? `recording <b>${esc(cur)}</b>` : "<b>not recording</b>: type a label and press Start"} \u00b7 ${sum.rows} rows${sum.dropped ? `, ${sum.dropped} dropped (limit reached: export and clear)` : ""} \u00b7 ${sum.other} unattributed${sum.otherSoonAfterCast ? ` (${sum.otherSoonAfterCast} within 0.4 s of a cast)` : ""}</div>
 <div class="mdl-line mdl-dim">last card: ${esc(cardLine)}</div>
 <table><thead><tr><th>Your hits</th><th>on (\u2605 boss)</th><th>n</th><th>miss</th><th title="Not crits, not kills. n: smallest\u2013largest (mean)">plain</th><th title="Critical hits that did not kill">crit</th><th title="Messages where the target was shown more than one damage number: a repeat (Echo) would show here">2+ numbers</th><th title="First target of the action after one of your kills, where stored Overkill damage would land">after a kill</th><th>not after a kill</th></tr></thead><tbody>${hitRows || `<tr><td colspan="9" class="mdl-dim">no hits under this label yet</td></tr>`}</tbody></table>
-<table><thead><tr><th>Hits taken from</th><th>with</th><th>n</th><th>all</th><th title="Mean damage by how many hits landed on you in the 5 s before: the stacks Fortify would hold">0 before</th><th>1</th><th>2</th><th>3</th><th>4+</th></tr></thead><tbody>${takenRows || `<tr><td colspan="9" class="mdl-dim">none yet</td></tr>`}</tbody></table>`;
+<table><thead><tr><th>Hits taken from</th><th>with</th><th>n</th><th>all</th><th title="Mean damage by how many hits came before this one in an unbroken run, each within 5 s of the last: the stacks Fortify would hold if every hit restarts its timer. count: mean">run of 0</th><th>1</th><th>2</th><th>3</th><th>4+</th></tr></thead><tbody>${takenRows || `<tr><td colspan="9" class="mdl-dim">none yet</td></tr>`}</tbody></table>`;
     }
     function labMount() {
         if (!lab || labUi.root || !document.body) return;

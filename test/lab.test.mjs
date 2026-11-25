@@ -49,6 +49,7 @@ assert.equal(rows[2].kill, true); assert.equal(rows[2].dmg, 40);
 assert.equal(rows[3].afterKill, true, "first hit after a kill"); assert.equal(rows[3].splats, 2);
 assert.equal(rows[4].afterKill, false, "the stored damage is spent by the hit before");
 assert.deepEqual(rows.slice(5, 9).map(r => [r.dmg, r.hitsBefore]), [[100, 0], [90, 1], [80, 2], [100, 0]], "hits in the 5 s before");
+assert.deepEqual(rows.slice(5, 9).map(r => r.chain), [0, 1, 2, 0], "an unbroken run, each hit within 5 s of the last; 6 s breaks it");
 assert.equal(rows[9].actors, 0); assert.equal(rows[10].actors, 2);
 // A stun landing on a monster moves its counter too: that is not the monster acting, so the hit still counts.
 lab.update(upd({ 0: { atkCounter: 7, isAutoAtk: true } }, { 1: { atkCounter: 6, cHP: 760, dmgCounter: 6, isStunned: true } }), tick(200));
@@ -63,6 +64,7 @@ const autoBear = g({ kind: "hit", key: "auto", on: "bear" });
 assert.equal(autoBear.multiSplat, 1); assert.deepEqual(autoBear.afterKill, { n: 1, min: 100, max: 100, mean: 100 }); assert.deepEqual(autoBear.notAfterKill, { n: 2, min: 40, max: 50, mean: 45 });
 const taken = s.groups.find(x => x.kind === "taken");
 assert.deepEqual(taken.byHitsBefore.map(x => x && x.mean), [100, 90, 80, null, null]);
+assert.deepEqual(taken.byChain.map(x => x && x.mean), [100, 90, 80, null, null]);
 assert.equal(s.other, 3);
 
 // A new label starts a new stretch; rows keep the label they were made under. Cards are kept when they change.

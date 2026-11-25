@@ -38,7 +38,9 @@ for (const l of labels.length ? labels : [{ label: "" }]) {
             console.log(`      first hit after a kill  ${st(g.afterKill)}    otherwise  ${st(g.notAfterKill)}`);
         } else {
             console.log(`  ${g.by}${bosses.has(g.hrid) ? " (boss)" : ""} ${short(g.key)} -> ${g.on}: ${g.n} hits  ${st(g.plain)}`);
-            console.log(`      mean by hits in the 5 s before: ${g.byHitsBefore.map((x, i) => `${i === 4 ? "4+" : i}: ${x ? x.mean.toFixed(1) + " (n " + x.n + ")" : "-"}`).join("   ")}`);
+            const by = list => (list || []).map((x, i) => `${i === 4 ? "4+" : i}: ${x ? x.mean.toFixed(1) + " (n " + x.n + ")" : "-"}`).join("   ");
+            console.log(`      mean by unbroken run of hits before (each within 5 s): ${by(g.byChain)}`);
+            console.log(`      mean by hits in the 5 s before:                        ${by(g.byHitsBefore)}`);
         }
     }
 }
