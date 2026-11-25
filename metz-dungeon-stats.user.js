@@ -13,6 +13,7 @@
 // @match        https://milkywayidle.com/*
 // @match        https://www.milkywayidlecn.com/*
 // @match        https://milkywayidlecn.com/*
+// @match        https://test.milkywayidle.com/*
 // @run-at       document-start
 // @grant        none
 // @noframes
@@ -37,7 +38,7 @@
     const VERSION = "0.2.13";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-24.14";
+    const BUILD = "2026-11-25.1";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -1103,7 +1104,37 @@
     // ---------------------------------------------------------------------------------------------------------------
     // Raw frame retention for the open questions. Bounded per rule.
     // ---------------------------------------------------------------------------------------------------------------
+    // The test server (operator, 2026-11-25): unreleased features are measured there before the simulator models
+    // them -- at this build, what the six special talisman modifiers (Smite, Consistency, Shatter, Echo, Fortify,
+    // Overkill) really do, which the client data does not say. So on test.milkywayidle.com, and only there, the
+    // combat stream is kept WHOLE rather than sampled: every battle message, every unit card that was clicked,
+    // every message whose type or top-level keys name a talisman, and the login's equipment and talismans.
+    // docs/test-server-capture.md says what to do in the game so the frames answer each question. The test server
+    // is its own origin, so this record and the live game's never share a database.
+    const ON_TEST_SERVER = /^test\./.test(location.hostname);
+    const namesTalisman = (t, m) => /talisman/i.test(t) || (isObj(m) && Object.keys(m).some(k => /talisman/i.test(k)));
+    const TEST_SERVER_RULES = !ON_TEST_SERVER ? [] : [
+        { name: "test-login", max: 50, test: t => t === "init_character_data", trim: trimTestLogin },
+        { name: "test-talisman", max: 5000, test: namesTalisman },
+        { name: "test-battle", max: 80000, test: t => t === "battle_updated" },
+        { name: "test-new-battle", max: 5000, test: t => t === "new_battle" },
+        { name: "test-unit", max: 2000, test: t => t === "battle_unit_fetched" || t === "profile_shared" },
+        { name: "test-cooldown", max: 20000, test: t => t === "battle_consumable_ability_updated" },
+        { name: "test-equipment", max: 2000, test: (t, m) => t === "items_updated" && Array.isArray(m.endCharacterItems) && m.endCharacterItems.some(r => r && r.itemLocationHrid && r.itemLocationHrid !== INV_LOCATION) },
+    ];
+    const INV_LOCATION = "/item_locations/inventory";
+    // The login without the bulk nobody needs for combat (chat, market, quests): who it is, what is equipped, every
+    // top-level key that names a talisman or a belt whole, and the names of all the keys so a missing one shows.
+    function trimTestLogin(type, m) {
+        const out = { type, keys: Object.keys(m), currentTimestamp: m.currentTimestamp, gameVersion: m.gameVersion, character: m.character && { id: m.character.id, name: m.character.name } };
+        for (const [k, v] of Object.entries(m)) if (/talisman|belt/i.test(k)) out[k] = v;
+        out.equipped = (Array.isArray(m.characterItems) ? m.characterItems : []).filter(r => r && r.itemLocationHrid && r.itemLocationHrid !== INV_LOCATION);
+        out.characterSkills = m.characterSkills; out.characterAbilities = m.characterAbilities; out.combatUnit = m.combatUnit; out.abilityCombatTriggersMap = m.abilityCombatTriggersMap;
+        out.characterLoadoutMap = m.characterLoadoutMap; out.noncombatStats = m.noncombatStats;
+        return out;
+    }
     const FRAME_RULES = [
+        ...TEST_SERVER_RULES,
         { name: "first-of-type", max: 3, test: () => true, trim: trimFrame },
         { name: "party-chat", max: 2000, test: (t, m) => t === "chat_message_received" && m.message && m.message.chan === "/chat_channel_types/party" && m.message.isSystemMessage },
         { name: "loot-opened", max: 300, test: t => t === "loot_opened" },
