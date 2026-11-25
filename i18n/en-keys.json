@@ -553,5 +553,11 @@
  "{result}, closing",
  "{time} in combat",
  "· click for details",
- "− Spent {a}"
+ "− Spent {a}",
+ "Smite (talisman)",
+ "Consistency (talisman)",
+ "Shatter (talisman)",
+ "Echo (talisman)",
+ "Fortify (talisman)",
+ "Overkill (talisman)"
 ]

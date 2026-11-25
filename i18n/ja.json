@@ -553,5 +553,11 @@
  "Nature": "自然",
  "Fire": "火",
  "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "クラスの順：突き、斬り、打撃、遠距離、続いて水・自然・火の魔法使い。各グループの先頭に人数付きのラベルが付きます。トライアルのプレイヤーのクラスは使ったアビリティから読み取るため、最初の数秒で埋まっていきます。",
- "Not seen yet": "未確認"
+ "Not seen yet": "未確認",
+ "Smite (talisman)": "スマイト（護石）",
+ "Consistency (talisman)": "安定（護石）",
+ "Shatter (talisman)": "粉砕（護石）",
+ "Echo (talisman)": "エコー（護石）",
+ "Fortify (talisman)": "フォーティファイ（護石）",
+ "Overkill (talisman)": "オーバーキル（護石）"
 }

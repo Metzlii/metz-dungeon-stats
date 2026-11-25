@@ -553,5 +553,11 @@
  "Nature": "Natureza",
  "Fire": "Fogo",
  "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "Ordem das classes: estocada, corte, esmagamento, à distância e depois magos de água, natureza e fogo, cada uma atrás de uma etiqueta com a contagem. A classe de um jogador da provação é lida das habilidades que ele usa, por isso preenche-se nos primeiros segundos.",
- "Not seen yet": "Ainda não visto"
+ "Not seen yet": "Ainda não visto",
+ "Smite (talisman)": "Castigo (talismã)",
+ "Consistency (talisman)": "Consistência (talismã)",
+ "Shatter (talisman)": "Estilhaçar (talismã)",
+ "Echo (talisman)": "Eco (talismã)",
+ "Fortify (talisman)": "Fortificar (talismã)",
+ "Overkill (talisman)": "Dano excedente (talismã)"
 }

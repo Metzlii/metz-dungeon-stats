@@ -553,5 +553,11 @@
  "Nature": "自然",
  "Fire": "火",
  "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "职业顺序：刺击、斩击、钝击、远程，然后是水、自然、火法师；每组前有带人数的标签。试炼玩家的职业根据其施放的技能判断，因此会在最初几秒内逐步填满。",
- "Not seen yet": "尚未识别"
+ "Not seen yet": "尚未识别",
+ "Smite (talisman)": "制裁（符石）",
+ "Consistency (talisman)": "稳定（符石）",
+ "Shatter (talisman)": "破甲（符石）",
+ "Echo (talisman)": "回响（符石）",
+ "Fortify (talisman)": "坚守（符石）",
+ "Overkill (talisman)": "过量伤害（符石）"
 }

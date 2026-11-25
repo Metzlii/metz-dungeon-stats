@@ -553,5 +553,11 @@
  "Nature": "자연",
  "Fire": "불",
  "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "직업 순서: 찌르기, 베기, 강타, 원거리, 그다음 물·자연·불 마법사. 각 그룹 앞에 인원수가 적힌 라벨이 붙습니다. 시련 플레이어의 직업은 사용한 어빌리티에서 읽으므로 처음 몇 초 동안 채워집니다.",
- "Not seen yet": "미확인"
+ "Not seen yet": "미확인",
+ "Smite (talisman)": "강타 (호석)",
+ "Consistency (talisman)": "안정 (호석)",
+ "Shatter (talisman)": "분쇄 (호석)",
+ "Echo (talisman)": "에코 (호석)",
+ "Fortify (talisman)": "견고 (호석)",
+ "Overkill (talisman)": "오버킬 (호석)"
 }

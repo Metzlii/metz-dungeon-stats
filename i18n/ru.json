@@ -553,5 +553,11 @@
  "Nature": "Природа",
  "Fire": "Огонь",
  "Class order: stab, slash, smash, ranged, then water, nature and fire mages, each behind a label with its count. A trial player's class is read from the abilities they cast, so it fills in over the first seconds.": "Порядок классов: укол, рубящий, дробящий, дальний бой, затем маги воды, природы и огня; перед каждой группой метка с числом игроков. Класс игрока в испытании определяется по применённым умениям, поэтому заполняется в первые секунды.",
- "Not seen yet": "Пока не видно"
+ "Not seen yet": "Пока не видно",
+ "Smite (talisman)": "Кара (талисман)",
+ "Consistency (talisman)": "Стабильность (талисман)",
+ "Shatter (talisman)": "Сокрушение (талисман)",
+ "Echo (talisman)": "Эхо (талисман)",
+ "Fortify (talisman)": "Укрепление (талисман)",
+ "Overkill (talisman)": "Избыточный урон (талисман)"
 }
