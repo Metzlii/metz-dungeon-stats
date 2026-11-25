@@ -38,7 +38,7 @@
     const VERSION = "0.2.13";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-25.4";
+    const BUILD = "2026-11-25.5";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -441,7 +441,8 @@
         function mark(next, at) {
             const open = labels[labels.length - 1]; if (open && open.to == null) open.to = at;
             label = String(next || "").trim(); if (label) labels.push({ label, from: at, to: null });
-            lastKill = {}; hitsOn = {}; chain = {}; lastCast = null;
+            // What happened just before a label began still happened: a kill then leaves its Overkill on the label's
+            // first hit, and hits then count toward a run (first capture, 2026-11-25: a 549 crit read as "not after a kill").
         }
         function newBattle(m, at) {
             const players = (m.players || []).map((u, i) => unit(u, i, true)), monsters = (m.monsters || []).map((u, i) => unit(u, i, false));
