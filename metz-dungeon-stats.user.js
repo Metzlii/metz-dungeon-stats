@@ -38,7 +38,7 @@
     const VERSION = "0.2.13";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-25.1";
+    const BUILD = "2026-11-25.2";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -154,6 +154,8 @@
 
     function buildRef(data) {
         if (!isObj(data) || !isObj(data.actionDetailMap) || !isObj(data.itemDetailMap)) return false;
+        // Test server data marks bosses (isBoss); absent on live, where the set stays empty.
+        ref.bosses = new Set(Object.entries(data.combatMonsterDetailMap || {}).filter(([, v]) => v && v.isBoss).map(([h]) => h));
         ref.dungeons = {}; ref.keyActions = {}; ref.keyItems = new Set(); ref.realKeys = new Set(); ref.dungeonLoot = new Set(); ref.chestItems = {}; ref.items = {}; ref.buffItems = {};
         for (const [hrid, item] of Object.entries(data.itemDetailMap)) {
             ref.items[hrid] = { name: item.name, category: item.categoryHrid, openable: !!item.isOpenable, openKey: item.openKeyItemHrid || null, tradable: item.isTradable === true, sellPrice: num(item.sellPrice), hp: num(item.consumableDetail && item.consumableDetail.hitpointRestore), hpOverMs: num(item.consumableDetail && item.consumableDetail.recoveryDuration) / 1e6 };
@@ -394,6 +396,135 @@
         damage: [], // saved damage sessions: the record's "damage" events
         streak: null, // the battle tab's running total: every session since the party went into combat, this page only
     };
+
+    // <lab>
+    // Talisman lab (operator, 2026-11-25). TEST SERVER ONLY. A plain log of every hit, read off the same battle
+    // messages the damage meter reads but kept apart from it, so that what an unreleased modifier does can be seen
+    // in the numbers: label a stretch ("smite on, boss"), fight, read the table, export.
+    //   new_battle: every unit whole (HP, counters, the ability in hand, combatDetails with its combatStats).
+    //   battle_updated (pMap/mMap by index): only what changed: cHP, atkCounter (attacks attempted), dmgCounter
+    //     (damage numbers shown on the unit), critCounter (critical ones), abilityHrid / isAutoAtk (what it prepares
+    //     NEXT, so the action just taken is the one named before this message).
+    // A row is one target in one message:
+    //   "hit"    exactly one player acted and a monster lost HP or was shown a damage number
+    //   "taken"  exactly one monster acted, no player did, and a player lost HP
+    //   "other"  anything else that moved HP (two actors in one message, damage with nobody acting): kept, never
+    //            counted in a summary, so nothing is hidden and nothing is guessed
+    // Nothing here is an estimate. What the lab cannot see: a killing hit's damage past the HP that was left (the
+    // message carries the HP, floored at 0), and a unit's armor between waves unless its card is clicked.
+    function createLab(opts) {
+        const LIMIT = (opts && opts.limit) || 300000, FORTIFY_MS = 5000, LAB_FLAGS = ["isBlinded", "isStunned", "isSilenced"];
+        let battle = null, label = "", labels = [], rows = [], cards = [], login = null, dropped = 0, lastKill = {}, hitsOn = {}, lastCast = null;
+        const num = v => Number(v) || 0;
+        const nameOf = (u, isPlayer, i) => (isPlayer ? (u.character && u.character.name) || u.name : u.name || String(u.hrid || "").split("/").pop()) || `#${i}`;
+        function unit(u, i, isPlayer) {
+            return { i, isPlayer, name: nameOf(u, isPlayer, i), hrid: isPlayer ? null : u.hrid || null, hp: num(u.currentHitpoints), mhp: num(u.maxHitpoints), atk: num(u.attackAttemptCounter), dmg: num(u.damageSplatCounter), crit: num(u.criticalDamageSplatCounter), prep: u.isPreparingAutoAttack ? "auto" : (u.preparingAbilityHrid || "auto"), flags: Object.fromEntries(LAB_FLAGS.map(f => [f, !!u[f]])) };
+        }
+        const push = r => { if (rows.length >= LIMIT) { dropped++; return; } r.label = label; rows.push(r); };
+        function card(source, at, name, details) {
+            const text = JSON.stringify(details); const prev = [...cards].reverse().find(c => c.name === name && c.source === source);
+            if (prev && prev.text === text && prev.label === label) return;
+            cards.push({ at, label, source, name, text, details });
+        }
+        function mark(next, at) {
+            const open = labels[labels.length - 1]; if (open && open.to == null) open.to = at;
+            label = String(next || "").trim(); if (label) labels.push({ label, from: at, to: null });
+            lastKill = {}; hitsOn = {}; lastCast = null;
+        }
+        function newBattle(m, at) {
+            const players = (m.players || []).map((u, i) => unit(u, i, true)), monsters = (m.monsters || []).map((u, i) => unit(u, i, false));
+            battle = { id: m.battleId, wave: num(m.wave), p: players, m: monsters };
+            (m.players || []).forEach((u, i) => { if (u && u.combatDetails) card("new_battle", at, players[i].name, u.combatDetails); });
+            (m.monsters || []).forEach((u, i) => { if (u && u.combatDetails) card("new_battle", at, monsters[i].name, u.combatDetails); });
+        }
+        function update(m, at) {
+            if (!battle) return;
+            const ch = [];
+            for (const [side, map] of [["p", m.pMap], ["m", m.mMap]]) for (const [k, u] of Object.entries(map || {})) {
+                const s = battle[side][Number(k)]; if (!s || !u) continue;
+                const hp = u.cHP != null ? num(u.cHP) : s.hp, atk = u.atkCounter != null ? num(u.atkCounter) : s.atk, dmg = u.dmgCounter != null ? num(u.dmgCounter) : s.dmg, crit = u.critCounter != null ? num(u.critCounter) : s.crit;
+                // A monster's counter also moves when a blind, stun or silence lands on it (the meter's finding): not an action.
+                const newly = LAB_FLAGS.some(f => u[f] === true && !s.flags[f]);
+                ch.push({ s, side, hpBefore: s.hp, dhp: hp - s.hp, datk: atk - s.atk, splats: dmg - s.dmg, crits: crit - s.crit, used: s.prep, newly });
+                s.hp = hp; s.atk = atk; s.dmg = dmg; s.crit = crit;
+                for (const f of LAB_FLAGS) if (f in u) s.flags[f] = !!u[f];
+                if ("isAutoAtk" in u || "abilityHrid" in u) s.prep = u.isAutoAtk ? "auto" : (u.abilityHrid || "auto");
+            }
+            const pa = ch.filter(e => e.side === "p" && e.datk > 0), ma = ch.filter(e => e.side === "m" && e.datk > 0 && !e.newly);
+            const base = { at, wave: battle.wave };
+            const oneHitter = pa.length === 1 && !ma.length, oneMonster = !pa.length && ma.length === 1;
+            if (oneHitter) {
+                const a = pa[0], who = a.s.name; let first = true;
+                for (const e of ch) {
+                    if (e.side !== "m" || (e.dhp >= 0 && e.splats <= 0)) continue;
+                    const dmg = e.dhp < 0 ? -e.dhp : 0, kill = e.hpBefore > 0 && e.s.hp <= 0;
+                    // afterKill: this player's previous hit killed its target, and this is the first target of this action
+                    // (where Overkill's stored damage would land).
+                    push({ ...base, kind: "hit", by: who, key: a.used, on: e.s.name, hrid: e.s.hrid, dmg, miss: dmg === 0, splats: e.splats, crits: e.crits, hpBefore: e.hpBefore, mhp: e.s.mhp, kill, afterKill: first && !!lastKill[who] });
+                    if (first && dmg > 0) lastKill[who] = false;
+                    if (kill) lastKill[who] = true;
+                    first = false;
+                }
+                lastCast = { at, by: who, key: a.used };
+            } else if (oneMonster) {
+                const a = ma[0];
+                for (const e of ch) {
+                    if (e.side !== "p" || e.dhp >= 0) continue;
+                    // hitsBefore: landed hits on this player in the 5 s before this one, the stacks Fortify would hold.
+                    const list = (hitsOn[e.s.name] || (hitsOn[e.s.name] = [])).filter(t => at - t < FORTIFY_MS);
+                    push({ ...base, kind: "taken", by: a.s.name, hrid: a.s.hrid, key: a.used, on: e.s.name, dmg: -e.dhp, splats: e.splats, crits: e.crits, hpBefore: e.hpBefore, mhp: e.s.mhp, kill: e.s.hp <= 0, hitsBefore: list.length });
+                    list.push(at); hitsOn[e.s.name] = list;
+                }
+            }
+            if (!oneHitter && !oneMonster) {
+                for (const e of ch) {
+                    if (e.dhp >= 0) continue;
+                    // sinceCast: ms since the last single-player action, and whose: damage arriving on its own right after
+                    // a cast is what a delayed repeat (Echo) would look like.
+                    push({ ...base, kind: "other", on: e.s.name, side: e.side, dmg: -e.dhp, splats: e.splats, crits: e.crits, hpBefore: e.hpBefore, actors: pa.length + ma.length, sinceCast: lastCast ? at - lastCast.at : null, castBy: lastCast ? lastCast.by : null, castKey: lastCast ? lastCast.key : null });
+                }
+            }
+        }
+        // The first object anywhere inside a message that has a combatDetails: a clicked unit's card, whatever wraps it.
+        function findDetails(v, depth) {
+            if (!v || typeof v !== "object" || depth > 5) return null;
+            if (v.combatDetails && typeof v.combatDetails === "object") return v;
+            for (const x of Object.values(v)) { const r = findDetails(x, depth + 1); if (r) return r; }
+            return null;
+        }
+        function unitCard(m, at) {
+            const u = findDetails(m, 0);
+            card("clicked", at, u ? nameOf(u, !!(u.character || u.isPlayer), 0) : "?", u ? u.combatDetails : m);
+            return u ? u.combatDetails : null;
+        }
+        function setLogin(body) { login = body; }
+        const stat = list => { if (!list.length) return null; let lo = Infinity, hi = -Infinity, sum = 0; for (const v of list) { if (v < lo) lo = v; if (v > hi) hi = v; sum += v; } return { n: list.length, min: lo, max: hi, mean: sum / list.length }; };
+        function summary() {
+            const out = [];
+            const groups = new Map();
+            for (const r of rows) {
+                if (r.kind === "other") continue;
+                const k = [r.label, r.kind, r.by, r.key, r.on].join("\u0001");
+                (groups.get(k) || groups.set(k, []).get(k)).push(r);
+            }
+            for (const list of groups.values()) {
+                const r0 = list[0], landed = list.filter(r => !r.miss && r.dmg > 0);
+                // A killing hit shows only the HP that was left, so it says nothing about the hit's size.
+                const full = landed.filter(r => !r.kill), plain = full.filter(r => !(r.crits > 0)), crit = full.filter(r => r.crits > 0);
+                const row = { label: r0.label, kind: r0.kind, by: r0.by, key: r0.key, on: r0.on, hrid: r0.hrid || null, n: list.length, misses: list.filter(r => r.miss).length, kills: list.filter(r => r.kill).length,
+                    plain: stat(plain.map(r => r.dmg)), crit: stat(crit.map(r => r.dmg)), multiSplat: list.filter(r => r.splats > 1).length };
+                if (r0.kind === "hit") { row.afterKill = stat(full.filter(r => r.afterKill).map(r => r.dmg)); row.notAfterKill = stat(full.filter(r => !r.afterKill).map(r => r.dmg)); }
+                else row.byHitsBefore = [0, 1, 2, 3, 4].map(n => stat(full.filter(r => (n < 4 ? r.hitsBefore === n : r.hitsBefore >= 4)).map(r => r.dmg)));
+                out.push(row);
+            }
+            const other = rows.filter(r => r.kind === "other");
+            return { groups: out, other: other.length, otherSoonAfterCast: other.filter(r => r.side === "m" && r.sinceCast != null && r.sinceCast <= 400).length, rows: rows.length, dropped };
+        }
+        function clear() { rows = []; cards = []; labels = label ? [{ label, from: labels.length ? labels[labels.length - 1].from : 0, to: null }] : []; dropped = 0; lastKill = {}; hitsOn = {}; lastCast = null; }
+        const dump = () => ({ labels, rows, cards: cards.map(c => ({ at: c.at, label: c.label, source: c.source, name: c.name, details: c.details })), login, dropped });
+        return { newBattle, update, unitCard, mark, setLogin, summary, clear, dump, label: () => label, count: () => rows.length };
+    }
+    // </lab>
 
     // <meter>
     // Damage meter (0.2.0). Built from the game's own battle messages and checked against them, never against another
@@ -2181,9 +2312,10 @@
             if (type === "init_client_data") { if (buildRef(m)) ref.source = "message"; return; }
             if (m.abilityCombatTriggersMap && typeof m.abilityCombatTriggersMap === "object") state.triggers.ability = m.abilityCombatTriggersMap;
             if (m.consumableCombatTriggersMap && typeof m.consumableCombatTriggersMap === "object") state.triggers.consumable = m.consumableCombatTriggersMap;
-            if (type === "init_character_data") { onInitCharacter(m); return; }
+            if (type === "init_character_data") { if (lab) { try { lab.setLogin(trimTestLogin(type, m)); } catch (error) { warn("lab login", error); } } onInitCharacter(m); return; }
             if (!state.characterId) return; // nothing before we know who we are
             retainFrame(type, m, "in");
+            if (lab) { try { labFeed(type, m); } catch (error) { warn("lab", error); } }
             if (Array.isArray(m.endCharacterAbilities) && m.endCharacterAbilities.length) applyAbilities(m.endCharacterAbilities);
             switch (type) {
                 case "new_battle": onNewBattle(m); try { noteClasses(m); } catch (error) { warn("classes", error); } try { trackPartyCons(m); trackPartyXp(m); } catch (error) { warn("party consumables", error); } try { trackLoadouts(m); } catch (error) { warn("change log", error); } meterOnNewBattle(m); break;
@@ -5178,13 +5310,82 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
     // </locales>
 
     // ---------------------------------------------------------------------------------------------------------------
+    // Talisman lab panel: test server only (see createLab). A small panel of its own, bottom right, so the record's
+    // panel and its translations are not touched by something that exists to be thrown away at release.
+    // ---------------------------------------------------------------------------------------------------------------
+    const lab = ON_TEST_SERVER ? createLab() : null;
+    const labUi = { root: null, body: null, open: true, timer: null, lastCard: null };
+    function labFeed(type, m) {
+        const at = serverNow();
+        if (type === "new_battle") lab.newBattle(m, at);
+        else if (type === "battle_updated") lab.update(m, at);
+        else if (type === "battle_unit_fetched" || type === "profile_shared") { const d = lab.unitCard(m, at); if (d) { labUi.lastCard = { at, d }; } }
+        else return;
+        labDraw();
+    }
+    function labMark(next) {
+        const at = serverNow(); lab.mark(next, at);
+        // Kept with the raw frames too, so a frames export alone can be split into the same stretches.
+        if (state.record) state.record.queue("frames", { id: newId(), type: "lab_mark", rule: "test-lab", direction: "in", at, body: { type: "lab_mark", label: lab.label() } });
+        labDraw(true);
+    }
+    function labExport() {
+        const d = lab.dump();
+        download(`metz-talisman-lab-${stamp()}.json`, JSON.stringify({ schema: "metz-dungeon-stats-lab/1", version: VERSION, build: BUILD, exportedAt: serverNow(), gameVersion: ref.version, bosses: [...(ref.bosses || [])], summary: lab.summary(), ...d }));
+    }
+    function labDraw(now) {
+        if (!labUi.root) return;
+        if (!now) { if (labUi.timer) return; labUi.timer = setTimeout(() => { labUi.timer = null; labDraw(true); }, 500); return; }
+        const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+        const short = k => k === "auto" ? "auto" : String(k || "").split("/").pop().replace(/_/g, " ");
+        const st = x => x ? `${x.n}: ${x.min}\u2013${x.max} (${Math.round(x.mean)})` : "\u2013";
+        const sum = lab.summary(), cur = lab.label();
+        const groups = sum.groups.filter(g => g.label === cur);
+        const hits = groups.filter(g => g.kind === "hit"), taken = groups.filter(g => g.kind === "taken");
+        const boss = g => (g.hrid && ref.bosses && ref.bosses.has(g.hrid) ? " \u2605" : "");
+        const hitRows = hits.map(g => `<tr><td>${esc(short(g.key))}</td><td>${esc(g.on)}${boss(g)}</td><td>${g.n}</td><td>${g.misses}</td><td>${st(g.plain)}</td><td>${st(g.crit)}</td><td>${g.multiSplat}</td><td>${st(g.afterKill)}</td><td>${st(g.notAfterKill)}</td></tr>`).join("");
+        const takenRows = taken.map(g => `<tr><td>${esc(g.by)}${boss(g)}</td><td>${esc(short(g.key))}</td><td>${g.n}</td><td>${st(g.plain)}</td>${g.byHitsBefore.map(x => `<td>${x ? `${x.n}: ${Math.round(x.mean)}` : "\u2013"}</td>`).join("")}</tr>`).join("");
+        const c = labUi.lastCard && labUi.lastCard.d, cs = (c && c.combatStats) || {};
+        const pick = (o, ks) => ks.filter(k => o && o[k] != null && o[k] !== 0).map(k => `${k} ${Math.round(Number(o[k]) * 10000) / 10000}`).join(" \u00b7 ");
+        const cardLine = c ? `${pick(c, ["totalArmor", "totalWaterResistance", "totalNatureResistance", "totalFireResistance"])}${pick(cs, ["armor", "armorPenetration", "smite", "consistency", "shatter", "echo", "fortify", "overkill", "talismanPower"]) ? " \u00b7 " + pick(cs, ["armor", "armorPenetration", "smite", "consistency", "shatter", "echo", "fortify", "overkill", "talismanPower"]) : ""}` : "click a unit's card in battle to read its stats here";
+        labUi.body.innerHTML = `<div class="mdl-line">${cur ? `recording <b>${esc(cur)}</b>` : "<b>not recording</b>: type a label and press Start"} \u00b7 ${sum.rows} rows${sum.dropped ? `, ${sum.dropped} dropped (limit reached: export and clear)` : ""} \u00b7 ${sum.other} unattributed${sum.otherSoonAfterCast ? ` (${sum.otherSoonAfterCast} within 0.4 s of a cast)` : ""}</div>
+<div class="mdl-line mdl-dim">last card: ${esc(cardLine)}</div>
+<table><thead><tr><th>Your hits</th><th>on (\u2605 boss)</th><th>n</th><th>miss</th><th title="Not crits, not kills. n: smallest\u2013largest (mean)">plain</th><th title="Critical hits that did not kill">crit</th><th title="Messages where the target was shown more than one damage number: a repeat (Echo) would show here">2+ numbers</th><th title="First target of the action after one of your kills, where stored Overkill damage would land">after a kill</th><th>not after a kill</th></tr></thead><tbody>${hitRows || `<tr><td colspan="9" class="mdl-dim">no hits under this label yet</td></tr>`}</tbody></table>
+<table><thead><tr><th>Hits taken from</th><th>with</th><th>n</th><th>all</th><th title="Mean damage by how many hits landed on you in the 5 s before: the stacks Fortify would hold">0 before</th><th>1</th><th>2</th><th>3</th><th>4+</th></tr></thead><tbody>${takenRows || `<tr><td colspan="9" class="mdl-dim">none yet</td></tr>`}</tbody></table>`;
+    }
+    function labMount() {
+        if (!lab || labUi.root || !document.body) return;
+        const root = document.createElement("div"); root.id = "mds-lab";
+        root.innerHTML = `<style>#mds-lab{position:fixed;right:8px;bottom:8px;z-index:99999;width:min(760px,96vw);max-height:60vh;display:flex;flex-direction:column;background:#10161dee;color:#dfe6ee;border:1px solid #3b82a0;border-radius:6px;font:12px/1.35 system-ui,sans-serif}
+#mds-lab.shut .mdl-main{display:none}#mds-lab.shut{width:auto}
+#mds-lab .mdl-head{display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #26323d}
+#mds-lab .mdl-head b{margin-right:auto}#mds-lab button{font:inherit;color:inherit;background:#22303b;border:1px solid #3b4a57;border-radius:4px;padding:2px 8px;cursor:pointer}
+#mds-lab input{font:inherit;color:inherit;background:#0b1015;border:1px solid #3b4a57;border-radius:4px;padding:2px 6px;width:220px}
+#mds-lab .mdl-main{overflow:auto;padding:6px}#mds-lab table{border-collapse:collapse;width:100%;margin-top:6px}#mds-lab th,#mds-lab td{border-bottom:1px solid #222c35;padding:2px 5px;text-align:left;white-space:nowrap}
+#mds-lab th{color:#9fb3c4;font-weight:600}#mds-lab .mdl-dim{color:#8a99a8}#mds-lab .mdl-line{margin-bottom:3px}</style>
+<div class="mdl-head"><b>Talisman lab \u00b7 test server</b><input id="mdl-label" placeholder="label, e.g. smite on, boss" maxlength="80"><button id="mdl-start">Start</button><button id="mdl-stop">Stop</button><button id="mdl-export">Export</button><button id="mdl-clear" title="Forget the lab's rows (the raw frames stay)">Clear</button><button id="mdl-fold">\u2013</button></div>
+<div class="mdl-main"><div id="mdl-body"></div></div>`;
+        document.body.appendChild(root); labUi.root = root; labUi.body = root.querySelector("#mdl-body");
+        const input = root.querySelector("#mdl-label");
+        // The game's own key handling must not see what is typed here.
+        for (const ev of ["keydown", "keyup", "keypress"]) input.addEventListener(ev, e => e.stopPropagation());
+        root.querySelector("#mdl-start").addEventListener("click", () => { const v = input.value.trim(); if (v) labMark(v); });
+        input.addEventListener("keydown", e => { if (e.key === "Enter") { const v = input.value.trim(); if (v) labMark(v); } });
+        root.querySelector("#mdl-stop").addEventListener("click", () => labMark(""));
+        root.querySelector("#mdl-export").addEventListener("click", labExport);
+        root.querySelector("#mdl-clear").addEventListener("click", () => { lab.clear(); labDraw(true); });
+        root.querySelector("#mdl-fold").addEventListener("click", () => { labUi.open = !labUi.open; root.classList.toggle("shut", !labUi.open); });
+        labDraw(true);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
     // Start
     // ---------------------------------------------------------------------------------------------------------------
     hookConstructor(); hookPrototype(); hookMessageData();
     if (!refFromCache()) setTimeout(refFromCache, 5000);
-    const boot = () => { panel.refresh(); };
+    const boot = () => { panel.refresh(); try { labMount(); } catch (error) { warn("lab panel", error); } };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { lab, state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();
