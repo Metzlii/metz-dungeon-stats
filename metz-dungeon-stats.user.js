@@ -38,7 +38,7 @@
     const VERSION = "0.2.13";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-25.5";
+    const BUILD = "2026-11-25.6";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -635,7 +635,7 @@
         const lifeStealOf = (u, at) => u.lifeSteal + (vamp[u.name] && at <= vamp[u.name].until ? vamp[u.name].amt : 0);
         // By player name, across the waves of a session: who is down and since when, the last hits each took, each
         // carried ability's mana cost, and since when each has been out of mana.
-        let down = {}, recent = {}, costs = {}, oomSince = {};
+        let down = {}, recent = {}, costs = {}, oomSince = {}, okState = {};
         // Buff amounts last seen on each player (name -> unique -> { flat, ratio }), for a cast between waves.
         const seenAmt = {};
         const camelType = h => String(h || "").split("/").pop().replace(/_(\w)/g, (_x, c) => c.toUpperCase());
@@ -660,6 +660,11 @@
             // Only what this hit's product reads takes one of the places (a buff of another kind changes nothing here).
             const readM = new Set([AMP[d], "damage", lvKey0, "attackLevel", "accuracy", "criticalRate", "criticalDamage"]), readT = new Set(["evasion", rk0[0], "damageTaken"]);
             const mine = [...src.fx.list.values()].filter(x => x.until > at && readM.has(x.type)), theirs = [...tgt.debuffs.values()].filter(x => x.until > at && readT.has(x.type));
+            // Talisman lines that are part of the hit itself (test server, 2026-11-25; the simulator's attack.rs):
+            // Smite multiplies a direct hit on a boss; Shatter is added to penetration on a crit; Consistency is a
+            // floor on an auto attack's roll, so an ordinary roll averages (1 + it) / 2 of the top one, not half.
+            const tal = (k, on) => { const v = on ? Number(src.cs[k]) || 0 : 0; if (v > 0) mine.push({ type: k, flat: v, ratio: 0, until: Infinity, src: k, by: src.name }); };
+            tal("smite", tgt.boss); tal("shatter", isCrit); tal("consistency", hk === "auto");
             const ids = [], seen = new Map();
             for (const x of mine.concat(theirs)) { x.bit = -1; if (!x.src || !x.by) continue; const k = x.src + "|" + x.by; if (!seen.has(k)) { if (ids.length >= 14) continue; seen.set(k, ids.length); ids.push(x); } x.bit = seen.get(k); }
             const n = ids.length; if (!n) return [];
@@ -672,12 +677,13 @@
                 const h = hitChance(acc, eva);
                 let pc = (src.fx.base.criticalRate || 0) + sum(mine, "criticalRate", "flat"); if (st === "ranged") pc += 0.3 * h;
                 const r = baseRes * (1 + sum(theirs, rk[0], "ratio")) + sum(theirs, rk[0], "flat");
-                return { v: (1 + (src.fx.base[AMP[d]] || 0) + sum(mine, AMP[d], "flat")) * (1 + sum(mine, "damage", "ratio")) * (10 + lv(lvKey)) * h * (1 + sum(theirs, "damageTaken", "flat")) * resistRatio(r, pen),
+                const v0 = (1 + (src.fx.base[AMP[d]] || 0) + sum(mine, AMP[d], "flat")) * (1 + sum(mine, "damage", "ratio")) * (10 + lv(lvKey)) * h * (1 + sum(theirs, "damageTaken", "flat")) * (1 + sum(mine, "smite", "flat"));
+                return { v: v0 * resistRatio(r, pen), vc: v0 * resistRatio(r, pen + sum(mine, "shatter", "flat")), roll: 1 + sum(mine, "consistency", "flat"),
                     pc: Math.max(0, Math.min(1, pc)), cd: (src.fx.base.criticalDamage || 0) + sum(mine, "criticalDamage", "flat") };
             };
             const all = (1 << n) - 1, top = prod(all);
             const M = new Array(1 << n);
-            for (let mask = 0; mask <= all; mask++) { const r = mask === all ? top : prod(mask), q = isCrit && top.pc > 0 ? Math.min(1, r.pc / top.pc) : 0; M[mask] = r.v * (isCrit ? q * (1 + r.cd) + (1 - q) * 0.5 : 1); }
+            for (let mask = 0; mask <= all; mask++) { const r = mask === all ? top : prod(mask), q = isCrit && top.pc > 0 ? Math.min(1, r.pc / top.pc) : 0; M[mask] = isCrit ? q * (1 + r.cd) * r.vc + (1 - q) * 0.5 * r.roll * r.v : r.v * r.roll; }
             const full = M[all]; if (!(full > 0)) return [];
             // Each one's Shapley value: its marginal gain averaged over every order they could be added in, so the
             // shares add up to exactly 1 - the product with none of them / the product with all.
@@ -770,6 +776,40 @@
             const had = u.fx.list.get("/buff_uniques/fury_damage"), st = had && had.until > at ? (had.stacks != null ? had.stacks : had.ratio / f) : 0, now = hit ? Math.min(5, st + 1) : st / 2;
             for (const [k, type] of [["/buff_uniques/fury_damage", "damage"], ["/buff_uniques/fury_accuracy", "accuracy"]]) { if (now > 0) u.fx.list.set(k, { type, flat: 0, ratio: f * now, stacks: now, until: at + 15000, src: "fury", by: u.name }); else u.fx.list.delete(k); }
         }
+        // Talisman lines with a state of their own (test server, 2026-11-25; kernel-zone/test-server/README.md). Rows
+        // of their own, like the gear passives: "smite", "shatter", "consistency", "echo", "overkill", "fortify".
+        //   Fortify: each hit a monster lands on the player adds a stack, up to 4, for 5 s from the last one; armor
+        //     and the three resistances + fortify x stacks of their own base. What it kept off is damage prevented.
+        const FORTIFY = [["/buff_uniques/fortify_armor", "armor"], ["/buff_uniques/fortify_water_resistance", "waterResistance"], ["/buff_uniques/fortify_nature_resistance", "natureResistance"], ["/buff_uniques/fortify_fire_resistance", "fireResistance"]];
+        function fortifyHit(u, at) {
+            const f = Number(u.cs.fortify) || 0; if (!(f > 0) || !u.fx) return;
+            const had = u.fx.list.get(FORTIFY[0][0]), st = had && had.until > at ? (had.stacks != null ? had.stacks : Math.round(had.ratio / f)) : 0, now = Math.min(4, st + 1);
+            for (const [k, type] of FORTIFY) u.fx.list.set(k, { type, flat: 0, ratio: f * now, stacks: now, until: at + 5000, src: "fortify", by: u.name });
+        }
+        //   Overkill: a kill by a direct hit banks  floor(overkill x min(the hit, the hit + what it carried - the HP
+        //     that was left))  for each kill of the action; the sum is added, after mitigation, to the first hit that
+        //     lands in a later action (a miss keeps it). The messages floor a dying monster's HP at 0, so the killing
+        //     hit's size is not seen: a crit is taken at the last plain crit of that attack on that monster (crits are
+        //     the top roll, the same each time), an ordinary hit at the middle of the plain hits seen that would have
+        //     killed. So the store, and the damage it added, is an estimate, exact after a crit kill.
+        //     Not counted: what the stored damage adds to a damage-over-time ability's ticks.
+        const okOf = name => okState[name] || (okState[name] = { store: 0, gained: 0, seen: {} });
+        function overkillHit(who, e, key, dmg, first) {
+            const ov = Number(who.s.cs.overkill) || 0; if (!(ov > 0)) return 0;
+            const o = okOf(who.s.name), sk = key + "|" + (e.s.hrid || e.s.name), st = o.seen[sk] || (o.seen[sk] = {}), crit = e.dcrit > 0, one = e.ddmg === 1;
+            const S = first ? o.store : 0; if (first) o.store = 0;
+            const hpBefore = e.s.hp + dmg;
+            if (e.s.hp > 0) {
+                if (!S && one) { if (crit) st.crit = dmg; else { st.lo = st.lo == null ? dmg : Math.min(st.lo, dmg); st.hi = st.hi == null ? dmg : Math.max(st.hi, dmg); } }
+                return Math.min(S, dmg);
+            }
+            const need = Math.max(0, hpBefore - S);
+            let h = need;
+            if (crit && st.crit > 0) h = Math.max(need, st.crit);
+            else if (!crit && st.hi > 0) h = need <= st.lo ? (st.lo + st.hi) / 2 : need <= st.hi ? (need + st.hi) / 2 : need;
+            o.gained += Math.floor(ov * Math.max(0, Math.min(h, h + S - hpBefore)));
+            return Math.max(0, Math.min(S, dmg - Math.min(h, hpBefore)));
+        }
         // A parry (operator, 2026-11-24): the monster's attack is turned back on it and hits nobody (the kernel checks
         // the parry before the attack is rolled). What it kept off the party is what that attack does on average:
         // the damage that monster's same attack has landed on the party, over its hits and misses together. Who it
@@ -824,7 +864,7 @@
             closeWave(!!complete);
             const s = cur; if (at) s.endAt = at; else s.endAt = s.lastAt;
             for (const name of Object.keys(down)) revive(name, s.endAt);
-            cur = null; down = {}; recent = {}; oomSince = {};
+            cur = null; down = {}; recent = {}; oomSince = {}; okState = {};
             return s;
         }
         function unit(u, i, isPlayer) {
@@ -832,7 +872,7 @@
             return { i, isPlayer, name: (isPlayer ? (u.character && u.character.name) || u.name : u.name || String(u.hrid || "").split("/").pop()) || `#${i}`, id: isPlayer && u.character ? u.character.id : null,
                 hp: Number(u.currentHitpoints) || 0, mhp: Number(u.maxHitpoints) || 0, mp: Number(u.currentManapoints) || 0, mmp: Number(u.maxManapoints) || 0, lifeSteal: Number(det.lifeSteal) || 0, levels: Object.fromEntries((u.combatAbilities || []).filter(a => a && a.abilityHrid).map(a => [a.abilityHrid, Number(a.level) || 0])), manaLeech: Number(det.manaLeech) || 0, bloom: Number(det.bloom) || 0, atk: Number(u.attackAttemptCounter) || 0, dmg: Number(u.damageSplatCounter) || 0,
                 prep: u.isPreparingAutoAttack ? "auto" : (u.preparingAbilityHrid || "auto"), flags: Object.fromEntries(FLAGS.map(f => [f, !!u[f]])),
-                counters: (Number(det.parry) || 0) + (Number(det.thorns) || 0) + (Number(det.retaliation) || 0) > 0, dotBy: {}, dotFrom: null, hrid: isPlayer ? null : u.hrid || null,
+                counters: (Number(det.parry) || 0) + (Number(det.thorns) || 0) + (Number(det.retaliation) || 0) > 0, dotBy: {}, dotFrom: null, hrid: isPlayer ? null : u.hrid || null, boss: !isPlayer && !!(cfg.isBoss && cfg.isBoss(u.hrid)),
                 cs: det, res: u.combatDetails || {}, debuffs: new Map(), fx: null, crit: Number(u.criticalDamageSplatCounter) || 0,
                 lv: Object.fromEntries(["attackLevel", "magicLevel", "meleeLevel", "rangedLevel"].map(k => [k, Number((u.combatDetails || {})[k]) || 0])), cons: (u.combatConsumables || []).filter(c => c && c.itemHrid).map(c => c.itemHrid),
                 acc: Object.fromEntries(["stab", "slash", "smash", "ranged", "magic"].map(k => [k, Number((u.combatDetails || {})[k + "AccuracyRating"]) || 0])), eva: Object.fromEntries(["stab", "slash", "smash", "ranged", "magic"].map(k => [k, Number((u.combatDetails || {})[k + "EvasionRating"]) || 0])) };
@@ -865,6 +905,7 @@
                     if (!src && ms > 0 && cfg.buffItem) { const item = cfg.buffItem(b.uniqueHrid, u.cons); if (item) { src = item; caster = u; } }
                     const rec = { type: camelType(b.typeHrid), flat: Number(b.flatBoost) || 0, ratio: Number(b.ratioBoost) || 0, until, src, by: caster ? caster.name : null };
                     if (/\/fury_(damage|accuracy)$/.test(b.uniqueHrid)) { rec.type = /damage$/.test(b.uniqueHrid) ? "damage" : "accuracy"; rec.src = "fury"; rec.by = u.name; }
+                    if (/\/buff_uniques\/fortify_/.test(b.uniqueHrid)) { rec.src = "fortify"; rec.by = u.name; }
                     list.set(b.uniqueHrid, rec); amt[b.uniqueHrid] = { flat: rec.flat, ratio: rec.ratio };
                 }
                 const base = {};
@@ -924,6 +965,9 @@
             const P = e => cur.players[e.s.name] || (cur.players[e.s.name] = blankPlayer(e.s.name, e.s.id));
             const actor = pa.length === 1 ? pa[0] : null;
             if (actor) { const row = abilityRow(P(actor), actor.used); row.casts++; P(actor).casts++; }
+            // Overkill banked by the kills of earlier actions is what this action's first landed hit carries.
+            if (actor && Number(actor.s.cs.overkill) > 0) { const o = okOf(actor.s.name); o.store += o.gained; o.gained = 0; }
+            let okFirst = true, echoed = false;
             if (actor) {
                 // The windows a cast opens: on the caster, on every living player, or (a hit) as a debuff applied.
                 const inf = abilityOf(actor.used), pl = P(actor);
@@ -973,6 +1017,13 @@
                     const cv = Number(who.s.cs.curse) || 0, name = who.s.name, tgt = e.s;
                     who.afterHit = () => { if (cv > 0) stackUp(tgt.debuffs, "curse", at, st => ({ type: "damageTaken", flat: cv * st, ratio: 0, src: "curse", by: name })); furyAttack(who.s, true, at); };
                 }
+                if (who === actor && (key === "auto" || /^\/abilities\//.test(key))) {
+                    const add = overkillHit(who, e, key, dmg, okFirst); okFirst = false;
+                    if (add > 0) { payShares([{ by: who.s.name, src: "overkill", frac: add / dmg }], dmg, who.s.name); abilityRow(p, "overkill").casts++; }
+                    // Echo: a second damage number on the target in the cast's own message is the repeat, a roll of
+                    // its own at half strength. The two are not sent apart, so a third of the damage is its share.
+                    if (key !== "auto" && Number(who.s.cs.echo) > 0 && e.ddmg >= 2) { payShares([{ by: who.s.name, src: "echo", frac: 1 / 3 }], dmg, who.s.name); if (!echoed) { echoed = true; abilityRow(p, "echo").casts++; } }
+                }
                 if (/^dot:/.test(key)) payShares((e.s.dotShares || {})[who.s.name] || [], dmg, who.s.name);
                 else { const shares = hitShares(who.s, e.s, key, at, e.dcrit > 0); payShares(shares, dmg, who.s.name); const inf2 = abilityOf(key); if (inf2 && inf2.dot) (e.s.dotShares || (e.s.dotShares = {}))[who.s.name] = shares; }
                 if (who.afterHit) { who.afterHit(); who.afterHit = null; }
@@ -1018,7 +1069,7 @@
                     p.takenBy[src] = (p.takenBy[src] || 0) + dmg; p.takenHits[src] = (p.takenHits[src] || 0) + 1;
                     const r = sub(p.takenSub || (p.takenSub = {}), src, how); r.amt += dmg; r.hits++;
                     parryPay();
-                    if (ma.length) { payGuard(guardShares(ma[0].s, e.s, how, at, true, dmg), e.s.name); if (ma[0].s.slowDone) payGuard(ma[0].s.slowDone.map(x => ({ by: x.by, src: x.src, amt: dmg * x.k })), e.s.name); weakenBy(ma[0].s, e.s); }
+                    if (ma.length) { payGuard(guardShares(ma[0].s, e.s, how, at, true, dmg), e.s.name); if (ma[0].s.slowDone) payGuard(ma[0].s.slowDone.map(x => ({ by: x.by, src: x.src, amt: dmg * x.k })), e.s.name); weakenBy(ma[0].s, e.s); fortifyHit(e.s, at); }
                     const rc = recent[e.s.name] || (recent[e.s.name] = []); rc.push({ at, src, how, dmg }); if (rc.length > 8) rc.shift();
                     if (e.s.hp <= 0 && !e.s.dead) {
                         e.s.dead = true; p.deaths++;
@@ -1126,7 +1177,7 @@
     // </meter>
 
     let buffSources = null;
-    state.meter = createMeter({ ability: h => (ref.abilities && ref.abilities[h] && ref.abilities[h].meter) || null,
+    state.meter = createMeter({ isBoss: h => !!(ref.bosses && ref.bosses.has(h)), ability: h => (ref.abilities && ref.abilities[h] && ref.abilities[h].meter) || null,
         // The ability a buff comes from, by the buff's own id.
         // The drink a buff comes from: the one of that buff's drinks the player carries.
         buffItem: (u, cons) => ((ref.buffItems && ref.buffItems[u]) || []).find(h => (cons || []).includes(h)) || null,
@@ -4314,7 +4365,8 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
         const pct1 = (a, b) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "–");
         const fmtN = v => (Math.abs(v) >= 1000 ? fmtCoins(v) : String(Math.round(v || 0)));
         // Our words through t() where a line is built from parts (localize() translates whole text nodes only).
-        const meterKeyName = k => k === "auto" ? t("Auto attack") : k === "bloom" ? t("Bloom") : k === "parry" ? t("Parry") : k === "thorns" ? t("Thorns and retaliation") : k === "dot:?" ? t("Damage over time") : /^dot:/.test(k) ? t("{ability} over time", { ability: abilityName(k.slice(4)) }) : /^\/abilities\//.test(k) ? abilityName(k) : /^\/items\//.test(k) ? itemName(k) : k === "curse" ? t("Curse (gear)") : k === "fury" ? t("Fury (gear)") : k === "weaken" ? t("Weaken (gear)") : k;
+        const meterKeyName = k => k === "auto" ? t("Auto attack") : k === "bloom" ? t("Bloom") : k === "parry" ? t("Parry") : k === "thorns" ? t("Thorns and retaliation") : k === "dot:?" ? t("Damage over time") : /^dot:/.test(k) ? t("{ability} over time", { ability: abilityName(k.slice(4)) }) : /^\/abilities\//.test(k) ? abilityName(k) : /^\/items\//.test(k) ? itemName(k) : k === "curse" ? t("Curse (gear)") : k === "fury" ? t("Fury (gear)") : k === "weaken" ? t("Weaken (gear)") : TALISMAN_ROWS[k] ? t(TALISMAN_ROWS[k]) : k;
+        const TALISMAN_ROWS = { smite: "Smite (talisman)", shatter: "Shatter (talisman)", consistency: "Consistency (talisman)", echo: "Echo (talisman)", overkill: "Overkill (talisman)", fortify: "Fortify (talisman)" };
         const meterKeyIcon = k => { const h = /^dot:/.test(k) ? k.slice(4) : k; return /^\/abilities\//.test(h) ? abilityIcon(h) : /^\/items\//.test(h) ? icon(h) : ""; };
         const sessTotal = s => Object.values((s && s.players) || {}).reduce((a, p) => a + (p.dealt || 0), 0);
         const sessSecs = s => Math.max(1, num(s && s.combatMs) / 1000);
@@ -4614,7 +4666,7 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
                 const main = `<tr${who.length ? ` class="mds-subhead${isOpen ? " open" : ""}" data-sub="${esc(id)}" title="${esc(t("Click for which players it was for"))}"` : ""}><td translate="no">${meterKeyIcon(k)}${esc(meterKeyName(k))}</td><td class="n">${fmtN(a.dmg)}</td><td class="n">${pct1(a.dmg, p.dealt)}</td><td class="n">${Math.round(a.dmg / secs).toLocaleString()}</td><td class="n">${a.casts || "–"}</td><td class="n">${a.hits || 0}</td><td class="n">${a.misses || 0}</td><td class="n">${(a.hits || 0) + (a.misses || 0) > 0 ? pct1(a.hits || 0, (a.hits || 0) + (a.misses || 0)) : "–"}</td><td class="n">${a.heal ? fmtN(a.heal) : "–"}</td><td class="n">${upOf(k)}</td><td class="n">${addTot > 0 ? `≈ ${fmtN(addTot)}` : "–"}</td><td class="n">${addTot > 0 ? `≈ ${Math.round(addTot / secs).toLocaleString()}` : "–"}</td><td class="n">${a.prevented > 0 ? `≈ ${fmtN(a.prevented)}` : "–"}</td></tr>`;
                 return isOpen ? main + who.map(([name, v, pv]) => `<tr class="mds-subrow"><td translate="no">${esc(name)}</td>${"<td></td>".repeat(9)}<td class="n">${v > 0 ? `≈ ${fmtN(v)}` : "–"}</td><td class="n">${v > 0 ? `≈ ${Math.round(v / secs).toLocaleString()}` : "–"}</td><td class="n">${pv > 0 ? `≈ ${fmtN(pv)}` : "–"}</td></tr>`).join("") : main;
             }).concat(drinkRow());
-            const totAb = abs.reduce((x, [, r]) => ({ uses: x.uses + num(r.casts), hits: x.hits + num(r.hits), misses: x.misses + num(r.misses), heal: x.heal + num(r.heal) }), { uses: 0, hits: 0, misses: 0, heal: 0 });
+            const totAb = abs.filter(([k]) => !TALISMAN_ROWS[k]).reduce((x, [, r]) => ({ uses: x.uses + num(r.casts), hits: x.hits + num(r.hits), misses: x.misses + num(r.misses), heal: x.heal + num(r.heal) }), { uses: 0, hits: 0, misses: 0, heal: 0 });
             const footAb = abs.length ? `<tr class="mds-total"><td>${esc(t("Total"))}</td><td class="n">${fmtN(p.dealt)}</td><td class="n">${p.dealt > 0 ? "100.0%" : "–"}</td><td class="n">${Math.round(p.dealt / secs).toLocaleString()}</td><td class="n">${totAb.uses || "–"}</td><td class="n">${totAb.hits}</td><td class="n">${totAb.misses}</td><td class="n">${totAb.hits + totAb.misses > 0 ? pct1(totAb.hits, totAb.hits + totAb.misses) : "–"}</td><td class="n">${totAb.heal ? fmtN(totAb.heal) : "–"}</td><td class="n">–</td>${tail({ add: sumAdd, prev: sumPrev })}</tr>` : "";
             const healName = k => k === "regen" ? t("Regeneration, food and passives") : k.includes(": ") ? t("{name}'s {ability}", { name: k.slice(0, k.indexOf(": ")), ability: meterKeyName(k.slice(k.indexOf(": ") + 2)) }) : meterKeyName(k);
             const cnt = (o, k) => (o && o[k] != null ? Number(o[k]).toLocaleString() : "–");

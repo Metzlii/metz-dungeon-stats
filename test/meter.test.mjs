@@ -228,6 +228,49 @@ console.log("meter: rules ok");
     console.log("a slow's prevented damage checks out");
 }
 
+// Talisman lines (test server, 2026-11-25): rows of their own on the player wearing them.
+{
+    const tm = createMeter({ ability: h => info[h] || null, isBoss: h => h === "/monsters/boss" });
+    const solo = (n, monsters, cs) => ({ type: "new_battle", battleId: 31, wave: n, players: [player("Tal", 1, 1000, "", cs)], monsters });
+    const cs = { overkill: 0.5, smite: 0.25, echo: 0.2, fortify: 0.05, consistency: 0.2 };
+    tm.newBattle(solo(1, [monster("Rat", 300), monster("Rat", 100)], cs), 0);
+    // A plain crit of 200 on the first rat teaches the crit; then a crit kills the second (100 HP): 200 - 100 over,
+    // half of it (50) banked.
+    tm.update(upd(31, { 0: { atkCounter: 1, isAutoAtk: true } }, { 0: { cHP: 100, dmgCounter: 1, critCounter: 1 } }), 1000);
+    tm.update(upd(31, { 0: { atkCounter: 2, isAutoAtk: true } }, { 1: { cHP: 0, dmgCounter: 1, critCounter: 1 } }), 2000);
+    // A miss keeps the store; the next hit that lands carries all 50.
+    tm.update(upd(31, { 0: { atkCounter: 3, isAutoAtk: true } }, { 0: { cHP: 100, dmgCounter: 2 } }), 3000);
+    tm.update(upd(31, { 0: { atkCounter: 4, abilityHrid: "/abilities/water_strike" } }, { 0: { cHP: 10, dmgCounter: 3 } }), 4000);
+    let me = tm.snapshot(4000).players.Tal;
+    assert.equal(Math.round(me.abilities.overkill.added), 50, "Overkill: half of the crit's excess, landed on the next hit");
+    assert.equal(me.abilities.overkill.casts, 1);
+    assert.ok(me.abilities.consistency.added > 0 && !me.abilities.smite, "Consistency on auto attacks; no Smite off a boss");
+    // Water Strike with two damage numbers on the target: Echo, a third of the damage.
+    tm.update(upd(31, { 0: { atkCounter: 5, isAutoAtk: true } }, { 0: { cHP: 0, dmgCounter: 5 } }), 5000);
+    me = tm.snapshot(5000).players.Tal;
+    assert.equal(me.abilities.echo.casts, 1); assert.ok(Math.abs(me.abilities.echo.added - 10 / 3) < 1e-9);
+    // A boss: Smite's share of a hit is 0.25 / 1.25 when nothing else is credited... with Consistency beside it the
+    // two shares add up to 1 - 1 / (1.25 x 1.2).
+    tm.newBattle(solo(2, [{ ...monster("Boss", 5000), combatDetails: {} }], cs), 6000);
+    tm.update(upd(31, { 0: { atkCounter: 1, isAutoAtk: true } }, { 0: { cHP: 4700, dmgCounter: 1 } }), 7000);
+    me = tm.snapshot(7000).players.Tal;
+    const before = me.abilities.consistency.added;
+    assert.ok(me.abilities.smite.added > 0);
+    // Fortify: the boss lands two hits; the second meets one stack (resistance + 5% of its base, here armor 100).
+    const tf = createMeter({ ability: h => info[h] || null });
+    const tank = { ...player("Tal", 1, 1000, "", { fortify: 0.5 }) }; tank.combatDetails.totalArmor = 100;
+    tf.newBattle({ type: "new_battle", battleId: 32, wave: 1, players: [tank], monsters: [monster("Rat", 300)] }, 0);
+    tf.update(upd(32, { 0: { cHP: 900, dmgCounter: 1 } }, { 0: { atkCounter: 1 } }), 1000);
+    assert.ok(!tf.snapshot(1000).players.Tal.abilities.fortify, "the first hit meets no stack");
+    tf.update(upd(32, { 0: { cHP: 800, dmgCounter: 2 } }, { 0: { atkCounter: 2 } }), 2000);
+    // armor 100 -> 150: the hit of 100 would have been 100 x (100/200) / (100/250) = 125 without it.
+    assert.ok(Math.abs(tf.snapshot(2000).players.Tal.abilities.fortify.prevented - 25) < 1e-6, "Fortify: one stack on the second hit");
+    tf.update(upd(32, { 0: { cHP: 700, dmgCounter: 3 } }, { 0: { atkCounter: 3 } }), 9000);
+    assert.ok(Math.abs(tf.snapshot(9000).players.Tal.abilities.fortify.prevented - 25) < 1e-6, "the stacks ran out after 5 s");
+    void before;
+    console.log("talisman rows: ok");
+}
+
 const capture = arg("--capture");
 if (capture) {
     const gd = JSON.parse(fs.readFileSync(arg("--game-data") || path.join(here, "..", "..", "rust_combat_Metz", "dist", "zone-site", "init_client_data.json"), "utf8")).abilityDetailMap;
