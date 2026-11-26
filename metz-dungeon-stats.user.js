@@ -44,7 +44,7 @@
     const VERSION = "0.2.17";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.48";
+    const BUILD = "2026-11-26.49";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2439,7 +2439,7 @@
         const n = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
         /** The value model: a line's worth, the best talisman, a talisman's share. Lines are `{ hrid, grade, locked }`. */
-        function valueModel(weights, context = [], { slots = null } = {}) {
+        function valueModel(weights, context = [], { slots = null, keep = null } = {}) {
             const special = new Set(TALISMAN_MODIFIERS.filter(m => m.group === "special").map(m => m.hrid));
             const w = (h, g) => n(weights?.[h]?.[g - 1]);
             // A special already on another talisman of the belt is worth nothing here: only the best copy counts in game, and a
@@ -2450,6 +2450,9 @@
             const line = (h, g) => table.get(h)?.[g] || 0;
             const top = TALISMAN_MODIFIERS.map(m => ({ hrid: m.hrid, v: line(m.hrid, TALISMAN_INFO.maxGrade) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
             let bestTop = top.slice(0, TALISMAN_INFO.maxModifierCount), beltSpecials = bestTop.filter(x => special.has(x.hrid)).map(x => x.hrid);
+            // How many specials this talisman counts: as many as its target holds (a belt with room spreads them, so a second
+            // special here is worth nothing: it belongs on another talisman). Without a slot count: every one.
+            let cap = TALISMAN_INFO.maxModifierCount;
             // THE BEST TALISMAN ON A BELT (operator, 2026-11-26: "if only 3 uniques land in the top mods you could roll 3
             // talismans with 1 unique each, so there is never a reason to make the 3-unique talisman"). A special counts once on
             // the belt, an ordinary modifier on every talisman. With the belt's free slots known, the specials are shared out the
@@ -2459,28 +2462,38 @@
             if (free) {
                 const ordinary = top.filter(x => !special.has(x.hrid)).slice(0, TALISMAN_INFO.maxModifierCount);
                 const belt = Array.from({ length: free }, () => []);
-                for (const sp of top.filter(x => special.has(x.hrid))) {
+                // "Keep the ones it has" (operator, 2026-11-26: keeping a second special saves finding it for another talisman):
+                // the specials already on the talisman being crafted stay on it, the first talisman of the belt; the rest share out.
+                const kept = new Set((keep || []).filter(h => special.has(h) && line(h, TALISMAN_INFO.maxGrade) > 0));
+                for (const sp of top.filter(x => kept.has(x.hrid)).slice(0, TALISMAN_INFO.maxModifierCount)) belt[0].push(sp);
+                for (const sp of top.filter(x => special.has(x.hrid) && !kept.has(x.hrid))) {
                     const t = belt.reduce((a, b) => (b.length < a.length ? b : a)), j = t.length;
                     if (j >= TALISMAN_INFO.maxModifierCount) break;
                     const displaced = ordinary[TALISMAN_INFO.maxModifierCount - 1 - j]?.v || 0;
                     if (sp.v > displaced) t.push(sp); else break;
                 }
                 const lay = specials => [...specials, ...ordinary.slice(0, TALISMAN_INFO.maxModifierCount - specials.length)];
-                bestTop = belt.map(lay).reduce((a, b) => (b.reduce((s, x) => s + x.v, 0) > a.reduce((s, x) => s + x.v, 0) ? b : a));
+                // The talisman measured against: with kept specials, the one holding them; else the best of the belt.
+                bestTop = kept.size ? lay(belt[0]) : belt.map(lay).reduce((a, b) => (b.reduce((s, x) => s + x.v, 0) > a.reduce((s, x) => s + x.v, 0) ? b : a));
                 beltSpecials = belt.flat().sort((a, b) => b.v - a.v).map(x => x.hrid);
+                cap = bestTop.filter(x => special.has(x.hrid)).length;
             }
             const best = bestTop.reduce((s, x) => s + x.v, 0);
-            const value = lines => { let v = 0; for (const l of lines) v += line(l.hrid, l.grade); return v; };
+            // Its worth: the ordinary lines, and its `cap` most valuable specials.
+            const value = lines => { let v = 0; const sp = [];
+                for (const l of lines) { const x = line(l.hrid, l.grade); if (special.has(l.hrid)) sp.push(x); else v += x; }
+                if (sp.length) { sp.sort((a, b) => b - a); for (let i = 0; i < Math.min(cap, sp.length); i++) v += sp[i]; }
+                return v; };
             // What the talisman could be worth with its grades as they are and the best types on its unlocked lines: a Focus Orb
             // rerolls the types and keeps the grades (operator, 2026-11-25: "spam Reforging Orbs after the lock for a combo of
             // higher tier mods, then Focus for the right mods"). Specials cannot be focused, so only the others count here.
             const focusable = TALISMAN_MODIFIERS.filter(m => !special.has(m.hrid)).map(m => m.hrid);
             const potential = lines => { let v = 0; const taken = new Set(), free = [];
-                for (const l of lines) { if (l.locked) { v += line(l.hrid, l.grade); taken.add(l.hrid); } else free.push(l.grade); }
+                for (const l of lines) { if (l.locked) { v += special.has(l.hrid) && cap < 1 ? 0 : line(l.hrid, l.grade); taken.add(l.hrid); } else free.push(l.grade); }
                 free.sort((a, b) => b - a);
                 for (const g of free) { let bh = null, bv = 0; for (const h of focusable) if (!taken.has(h)) { const x = line(h, g); if (x > bv) { bv = x; bh = h; } } if (bh) { taken.add(bh); v += bv; } }
                 return v; };
-            return { line, best, bestSingle: top[0]?.v || 0, bestLines: bestTop.map(x => x.hrid), beltSpecials, value,
+            return { line, best, bestSingle: top[0]?.v || 0, bestLines: bestTop.map(x => x.hrid), beltSpecials, specialCap: cap, value,
                 share: lines => (best > 0 ? value(lines) / best : 0), potential, special };
         }
 
@@ -2520,7 +2533,7 @@
             // Attunement as soon as the lines it has, raised to G6, can reach the target (operator, 2026-11-26: Echo G6 locked
             // with Magic and Combat Experience at G2 was sent on to Focus for the fourth line, when grades alone made 80% for
             // certain); before, only once every line was a type worth having.
-            const gradesReach = lines => lines.reduce((v, l) => v + model.line(l.hrid, l.locked ? l.grade : TALISMAN_INFO.maxGrade), 0) >= target * model.best - 1e-12;
+            const gradesReach = lines => model.value(lines.map(l => (l.locked ? l : { ...l, grade: TALISMAN_INFO.maxGrade }))) >= target * model.best - 1e-12;
             const finishOrb = lines => (finish === "grades+focus" ? (model.potential(lines) >= target * model.best - 1e-12 ? "focus" : "reforging")
                 : !/\+grades$/.test(finish) ? finish : lines.every(l => l.locked || wanted.has(l.hrid)) || gradesReach(lines) ? "attunement" : typesOrb);
             // Reforging for the grades keeps a roll when its grades could be worth more once focused, whatever its types.
@@ -2611,7 +2624,7 @@
         function keepNext(model, orb, target = 1) {
             const wanted = new Set(TALISMAN_MODIFIERS.map(m => ({ h: m.hrid, v: model.line(m.hrid, TALISMAN_INFO.maxGrade) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 8).map(x => x.h));
             const better = (c, cur) => model.value(c) > model.value(cur) + 1e-12;
-            const allSix = lines => lines.reduce((v, l) => v + model.line(l.hrid, TALISMAN_INFO.maxGrade), 0) >= target * model.best - 1e-12;
+            const allSix = lines => model.value(lines.map(l => ({ ...l, grade: TALISMAN_INFO.maxGrade }))) >= target * model.best - 1e-12;
             return lines => {
                 const lock = lines.findIndex(l => l.locked);
                 if (!lines.every(l => wanted.has(l.hrid)) && !allSix(lines)) {
@@ -2725,7 +2738,9 @@
             if (!built) built = { planner: talismanPlanner({ info: pkg.info || { maxGrade: 6, maxModifierCount: 4 }, modifiers: pkg.modifiers || [] }) };
             const context = [...talismans.values()].filter(tl => isCombat(tl) && Number(tl.slotIndex) > 0 && String(tl.id) !== String(exceptId)).map(tl => ({ modifiers: linesOf(tl) }));
             // The belt's slots (the package's belt): the best talisman shares the specials out across them, as on the site.
-            return { planner: built.planner, m: built.planner.valueModel(weights || pkg.weights, context, { slots: Number(pkg.belt && pkg.belt.slots) || null }) };
+            // With the plan's "keep the ones it has", this talisman's own specials stay in its target, as on the site.
+            const own = pkg.plan && pkg.plan.keepSpecials && exceptId != null && talismans.get(String(exceptId));
+            return { planner: built.planner, m: built.planner.valueModel(weights || pkg.weights, context, { slots: Number(pkg.belt && pkg.belt.slots) || null, keep: own ? linesOf(own).map(l => l.hrid) : null }) };
         }
         // The talisman in the units it was not ranked by (operator, 2026-11-26: always show XP / h and the pace, run time for
         // a dungeon). The simulator measures every line in all of them (weightsBy, site 1.0.55 on); the run time is worked
