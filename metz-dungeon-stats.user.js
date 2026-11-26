@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.16";
+    const BUILD = "2026-11-26.17";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2729,7 +2729,9 @@
             if (act.lock != null) return { kind: "lock", text: t("Lock {mod} with a Binding Orb.", { mod: nameOf(lines[act.lock] && lines[act.lock].hrid) }), why, lock: act.lock };
             // A Focus Orb asks which modifiers to favour: the 10 worth most at G6 (not specials), the set the crafting odds
             // assume (zoneTalismanRolls focusSet).
-            const focus = act.orb === "focus" ? (pkg.modifiers || []).filter(m => m.group !== "special").map(m => ({ name: m.name, v: mm.m.line(m.hrid, 6) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 10).map(x => t(x.name)) : null;
+            // The plan's own set when the simulator sent one (site 1.0.56 on: the count that did best, 1 to 10).
+            const sent = act.orb === "focus" && Array.isArray(p.focus) && p.focus.length ? p.focus.map(h => t(nameOf(h))) : null;
+            const focus = sent || (act.orb === "focus" ? (pkg.modifiers || []).filter(m => m.group !== "special").map(m => ({ name: m.name, v: mm.m.line(m.hrid, 6) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 10).map(x => t(x.name)) : null);
             return { kind: "orb", orb: act.orb, focus, text: t(/^[AEIOU]/.test(ORB_NAMES[act.orb] || "") ? "Use an {orb}." : "Use a {orb}.", { orb: t(ORB_NAMES[act.orb] || act.orb) }), why, act, lines };
         }
 
@@ -3059,7 +3061,7 @@
             if (m.abilityCombatTriggersMap && typeof m.abilityCombatTriggersMap === "object") state.triggers.ability = m.abilityCombatTriggersMap;
             if (m.consumableCombatTriggersMap && typeof m.consumableCombatTriggersMap === "object") state.triggers.consumable = m.consumableCombatTriggersMap;
             if (type === "init_character_data" && Array.isArray(m.characterTalismans)) talismans.setAll(m.characterTalismans);
-            if (type === "init_character_data") { if (lab) { try { lab.setLogin(trimTestLogin(type, m)); } catch (error) { warn("lab login", error); } } onInitCharacter(m); return; }
+            if (type === "init_character_data") { if (ON_TEST_SERVER) { try { labLogin = trimTestLogin(type, m); if (lab) lab.setLogin(labLogin); } catch (error) { warn("lab login", error); } } onInitCharacter(m); return; }
             if (!state.characterId) return; // nothing before we know who we are
             retainFrame(type, m, "in");
             if (lab) { try { labFeed(type, m); } catch (error) { warn("lab", error); } }
@@ -4225,6 +4227,9 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
   <div id="mds-subcols"></div>
   <div class="mds-bar"><label>Key and consumable times: amber under <input type="number" id="mds-key-amber" min="0" step="1" style="width:5em"> hours</label><label>red under <input type="number" id="mds-key-red" min="0" step="1" style="width:5em"> hours</label><span class="mds-note">Colours of the key and consumable times and warnings in the battle window.</span></div>
  </div>
+ <div class="mds-set"><span class="mds-set-title">Talisman lab</span>
+  <div class="mds-bar"><label><input type="checkbox" id="mds-lab-on"> Show the talisman lab panel (test server)</label><span class="mds-note">Off by default. On the test server it records labelled talisman experiments from the battle messages in a small panel at the bottom right; elsewhere it does nothing.</span></div>
+ </div>
  <div class="mds-set"><span class="mds-set-title">Column and card order</span>
   <div class="mds-bar"><button id="mds-order-reset">Reset column order</button><button id="mds-cards-reset">Reset card order</button><span class="mds-note">Drag a tab onto another to move it.</span><span class="mds-note">Drag a column header onto another, or a card onto another, to move it. Every table and the card grids remember their own order.</span><span class="mds-note">Click a column header to sort by it; click again to reverse, a third time for the table's own order.</span></div>
  </div>
@@ -4343,6 +4348,7 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
             { const box = root.querySelector("#mds-metercols"); for (const c of METER_COLS) { const lab = document.createElement("label"), inp = document.createElement("input"); inp.type = "checkbox"; inp.id = "mds-mcol-" + c.k; inp.checked = !meterCols.hidden.includes(c.k); inp.addEventListener("change", () => { meterCols.hidden = meterCols.hidden.filter(k => k !== c.k); if (!inp.checked) meterCols.hidden.push(c.k); meterColsChanged(); }); lab.appendChild(inp); lab.appendChild(document.createTextNode(" " + c.label)); box.appendChild(lab); } }
             for (const which of ["amber", "red"]) { const inp = root.querySelector("#mds-key-" + which); inp.value = String(keyHours(which)); inp.addEventListener("change", () => { const v = Number(inp.value); try { if (inp.value !== "" && v >= 0) localStorage.setItem(KEYH_KEY + which, String(v)); else localStorage.removeItem(KEYH_KEY + which); } catch (_e) { /* fine */ } inp.value = String(keyHours(which)); bkHtml = ""; bmHtml = ""; battleKeys(); renderBattleMeter(); }); }
             for (const [id, key, get] of [["#mds-tg-on", TG_KEY, tgOn], ["#mds-tg-sort", TG_SORT_KEY, tgSort]]) { const cb = root.querySelector(id); cb.checked = get(); cb.addEventListener("change", () => { try { localStorage.setItem(key, cb.checked ? "on" : "off"); } catch (_e) { /* fine */ } trialGrid(); }); }
+            { const lb = root.querySelector("#mds-lab-on"); lb.checked = labOn(); lb.addEventListener("change", () => labSet(lb.checked)); }
             { const bm = root.querySelector("#mds-bm-on"); bm.checked = bmOn(); bm.addEventListener("change", () => { try { localStorage.setItem(BM_KEY, bm.checked ? "on" : "off"); } catch (_e) { /* fine */ } renderBattleMeter(); }); }
             setInterval(() => { try { if (!document.hidden) { battleSplit(); battleKeys(); consTips(); trialGrid(); renderBattleMeter(); if (tipFor) tipPlace(); if (open && tab === "damage") renderDamage(); if (open && tab === "party") renderParty(); } } catch (error) { warn("damage meter view", error); } }, 1000);
             setInterval(() => { if (open && tab === "xp") touch(); }, 5000);
@@ -6111,8 +6117,23 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
     // Talisman lab panel: test server only (see createLab). A small panel of its own, bottom right, so the record's
     // panel and its translations are not touched by something that exists to be thrown away at release.
     // ---------------------------------------------------------------------------------------------------------------
-    const lab = ON_TEST_SERVER ? createLab() : null;
+    // Off by default (operator, 2026-11-26: "we are mostly done with it"); Settings → Talisman lab turns it back on, at
+    // once and with the login it would have recorded (kept on the test server either way).
+    let labLogin = null;
+    function labOn() { try { return localStorage.getItem("mds-lab-panel") === "on"; } catch (_e) { return false; } }
+    let lab = ON_TEST_SERVER && labOn() ? createLab() : null;
     const labUi = { root: null, body: null, open: true, timer: null, lastCard: null };
+    function labSet(on) {
+        try { localStorage.setItem("mds-lab-panel", on ? "on" : "off"); } catch (_e) { /* fine */ }
+        if (on) {
+            if (!ON_TEST_SERVER) return;
+            if (!lab) { lab = createLab(); if (labLogin) lab.setLogin(labLogin); }
+            try { labMount(); } catch (error) { warn("lab panel", error); }
+        } else {
+            if (labUi.root) { labUi.root.remove(); labUi.root = null; labUi.body = null; }
+            lab = null;
+        }
+    }
     function labFeed(type, m) {
         const at = serverNow();
         if (type === "new_battle") lab.newBattle(m, at);
@@ -6188,6 +6209,6 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
     const boot = () => { panel.refresh(); try { labMount(); } catch (error) { warn("lab panel", error); } };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { talismans, talismanStatus: () => JSON.stringify(talismanStatus()), talismanClear: kind => talismanClear(kind === "plan" ? "plan" : "all"), talismanRolls: () => { try { return JSON.parse(localStorage.getItem(TALISMAN_ROLLS_KEY) || "[]"); } catch (_e) { return []; } }, lab, state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { talismans, talismanStatus: () => JSON.stringify(talismanStatus()), talismanClear: kind => talismanClear(kind === "plan" ? "plan" : "all"), talismanRolls: () => { try { return JSON.parse(localStorage.getItem(TALISMAN_ROLLS_KEY) || "[]"); } catch (_e) { return []; } }, get lab() { return lab; }, state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();
