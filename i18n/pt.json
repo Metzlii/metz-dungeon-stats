@@ -583,5 +583,9 @@
  "encounters / h": "encontros / h",
  "coins / h": "moedas / h",
  "{t} faster a run": "{t} mais rápido por run",
- "{t} slower a run": "{t} mais lento por run"
+ "{t} slower a run": "{t} mais lento por run",
+ "Clear plan": "Limpar plano",
+ "Clear weights": "Limpar pesos",
+ "Stop showing this crafting plan in the game; the weights stay": "Parar de mostrar este plano de criação no jogo; os pesos ficam",
+ "Stop showing the simulator's talisman advice in the game until the next Send to game": "Parar de mostrar no jogo os conselhos de talismã do simulador até o próximo Enviar ao jogo"
 }

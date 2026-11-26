@@ -583,5 +583,9 @@
  "encounters / h": "遭遇 / 小時",
  "coins / h": "金幣 / 小時",
  "{t} faster a run": "每次快 {t}",
- "{t} slower a run": "每次慢 {t}"
+ "{t} slower a run": "每次慢 {t}",
+ "Clear plan": "清除方案",
+ "Clear weights": "清除權重",
+ "Stop showing this crafting plan in the game; the weights stay": "不再在遊戲中顯示此製作方案；權重保留",
+ "Stop showing the simulator's talisman advice in the game until the next Send to game": "在下次「傳送到遊戲」之前，不再在遊戲中顯示模擬器的護符建議"
 }

@@ -583,5 +583,9 @@
  "encounters / h": "전투 / 시간",
  "coins / h": "코인 / 시간",
  "{t} faster a run": "회당 {t} 빠름",
- "{t} slower a run": "회당 {t} 느림"
+ "{t} slower a run": "회당 {t} 느림",
+ "Clear plan": "플랜 지우기",
+ "Clear weights": "가중치 지우기",
+ "Stop showing this crafting plan in the game; the weights stay": "이 제작 플랜을 게임에서 더 이상 표시하지 않습니다. 가중치는 유지됩니다",
+ "Stop showing the simulator's talisman advice in the game until the next Send to game": "다음 '게임으로 보내기' 전까지 시뮬레이터의 탈리스만 조언을 게임에 표시하지 않습니다"
 }
