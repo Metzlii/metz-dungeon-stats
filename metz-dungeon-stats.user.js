@@ -44,7 +44,7 @@
     const VERSION = "0.2.17";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.43";
+    const BUILD = "2026-11-26.44";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2833,10 +2833,20 @@
         const modalTalisman = new WeakMap(), sentAt = new WeakMap();
         // The docked advice panels, one per talisman window, kept beside it every frame while it is open (it can be dragged).
         const docks = new Map(), DOCK_W = 360;
+        // The window's visible frame: the outermost box around the talisman content that is not the full-width layer the
+        // game puts windows in (operator, 2026-11-26: Modal_modalContainer is that layer, so the panel found no room).
+        function frameOf(modal) {
+            let f = modal;
+            for (let p = modal.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+                if (p.getBoundingClientRect().width >= window.innerWidth * 0.9) break;
+                f = p;
+            }
+            return f;
+        }
         function placeDock(modal, dock) {
             // Lined up with the window's visible frame (the game's Modal_modalContainer around the talisman content, which
             // has padding of its own: the content's edges left the panel 24 px high, operator 2026-11-26).
-            const frame = modal.closest('[class*="Modal_modalContainer"]') || modal;
+            const frame = frameOf(modal);
             // The left side, or the right when the window sits too close to the screen's left edge (operator, 2026-11-26).
             const r = frame.getBoundingClientRect(), onLeft = r.left >= DOCK_W + 16;
             const left = Math.round(onLeft ? r.left - DOCK_W - 10 : r.right + 10), top = Math.max(8, Math.round(r.bottom - dock.offsetHeight));
@@ -3042,7 +3052,7 @@
             // when the screen has no room beside it.
             let dock = docks.get(modal);
             if (!html) { if (panel) panel.remove(); if (dock) { dock.remove(); docks.delete(modal); } return; }
-            const fr = (modal.closest('[class*="Modal_modalContainer"]') || modal).getBoundingClientRect();
+            const fr = frameOf(modal).getBoundingClientRect();
             const roomLeft = fr.left >= DOCK_W + 16 || window.innerWidth - fr.right >= DOCK_W + 16; // a side with room for the panel
             if (roomLeft) {
                 if (panel) panel.remove();
