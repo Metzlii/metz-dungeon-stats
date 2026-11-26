@@ -38,7 +38,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.2";
+    const BUILD = "2026-11-26.3";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     const DEVICE_KEY = "mds-device-v1";
@@ -1840,7 +1840,6 @@
     }
     function onOutgoing(text) {
         let m; try { m = JSON.parse(text); } catch (_e) { return; }
-        if (isObj(m) && /talisman|_orb\b/i.test(text) && text.length < 4000) lastTalismanRequest = { at: Date.now(), m };
         if (!isObj(m) || m.type !== "post_market_order") return;
         state.counts.frames++;
         retainFrame("post_market_order", m, "out");
@@ -2657,8 +2656,8 @@
             const why = (p.phases || {})[act.phase] || "";
             if (act.done) return { done: true, text: t("Done: this talisman reaches the plan's target ({p} of the best).", { p: pct(Number(p.target) || 1) }) };
             if (act.addLine) return { text: t("Upgrade: add a line with talisman cores."), why };
-            if (act.unlock) return { text: t("Unlock the locked line (free)."), why };
-            if (act.lock != null) return { text: t("Lock {mod} with a Binding Orb.", { mod: nameOf(lines[act.lock] && lines[act.lock].hrid) }), why };
+            if (act.unlock) return { text: t("Unlock the locked line (free)."), why, unlock: true };
+            if (act.lock != null) return { text: t("Lock {mod} with a Binding Orb.", { mod: nameOf(lines[act.lock] && lines[act.lock].hrid) }), why, lock: act.lock };
             return { text: t("Use a {orb}.", { orb: t(ORB_NAMES[act.orb] || act.orb) }), why, act, lines };
         }
 
@@ -2688,6 +2687,12 @@
                     const buttons = [...pendingBox.querySelectorAll('[class*="TalismanModal_decisionActions"] button')];
                     buttons.forEach((b, i) => b.classList.toggle("mtal-pick", (i === buttons.length - 1) === take));
                 }
+                // A lock step: the Lock (or Unlock) button on that line, in the list the game shows once the Binding Orb is
+                // picked (the locked line moves to the top there and in the game's messages alike, so the order matches).
+                const lockRows = [...modal.querySelectorAll(':scope > [class*="TalismanModal_modifiers"] [class*="TalismanModal_modifierRow"]')];
+                for (const b of modal.querySelectorAll(':scope > [class*="TalismanModal_modifiers"] .mtal-pick')) b.classList.remove("mtal-pick");
+                if (step && step.lock != null && lockRows[step.lock]) { const b = lockRows[step.lock].querySelector('[title] button, button'); if (b) b.classList.add("mtal-pick"); }
+                if (step && step.unlock) { const r = lockRows.find(x => /TalismanModal_locked/.test(String(x.className))); const b = r && r.querySelector("button"); if (b) b.classList.add("mtal-pick"); }
                 html = `<div><b>${esc(t("Worth"))}</b> ${esc(fmt(value))} ${esc(t(unit()))} · ${esc(t("{p} of the best talisman", { p: pct(share) }))}</div>`
                     + (verdict ? `<div class="mtal-verdict">${esc(verdict)}</div>` : "")
                     + (step ? `<div><b>${esc(t("Next"))}</b> ${esc(step.text)}${step.why ? ` <span class="mtal-muted">— ${esc(step.why)}</span>` : ""}</div>` : "")
@@ -2770,21 +2775,37 @@
         return advisor;
     })();
     // Real rolls (the script records real game data): every new roll the game offers, with the talisman as it was, the
-    // request this browser sent for it (which orb), and the lock. Kept in this browser only, newest 5,000, for checking
-    // the simulator's crafting odds against the game: __mds.talismanRolls().
-    let lastTalismanRequest = null;
+    // orb that made it, the lock, and whether it was kept. Kept in this browser only, newest 5,000, for checking the
+    // simulator's crafting odds against the game: __mds.talismanRolls(). The orb is read off the game's own answer (the
+    // capture of 2026-11-26): using an orb comes back as items_updated for that orb, just before the talismans_updated
+    // that carries the new roll; the request this browser sends is not seen.
+    let lastOrb = null;
+    function noteOrbUse(m) {
+        for (const it of Array.isArray(m.endCharacterItems) ? m.endCharacterItems : []) if (it && /^\/items\/\w+_orb$/.test(String(it.itemHrid)) && it.itemLocationHrid === INV_LOCATION) lastOrb = { hrid: it.itemHrid, at: Date.now() };
+    }
     function noteTalismanRolls(m) {
         const end = Array.isArray(m.endCharacterTalismans) ? m.endCharacterTalismans : [];
-        const fresh = end.filter(tl => tl && Array.isArray(tl.pendingModifiers) && tl.pendingModifiers.length);
-        if (!fresh.length) return;
+        if (!end.length) return;
         let list = [];
         try { list = JSON.parse(localStorage.getItem(TALISMAN_ROLLS_KEY) || "[]") || []; } catch (_e) { list = []; }
-        for (const tl of fresh) {
-            const before = talismans.get(tl.id);
-            list.push({ at: Date.now(), id: tl.id, before: before ? before.modifiers : null, lock: tl.lockedModifierHrid || null, roll: tl.pendingModifiers,
-                request: lastTalismanRequest && Date.now() - lastTalismanRequest.at < 10000 ? lastTalismanRequest.m : null });
+        const same = (x, y) => Array.isArray(x) && Array.isArray(y) && x.length === y.length && x.every((q, i) => q.hrid === y[i].hrid && Number(q.grade) === Number(y[i].grade));
+        const key = mods => (mods || []).map(q => `${q.hrid}:${q.grade}`).sort().join("|");
+        let changed = false;
+        for (const tl of end) {
+            if (!tl) continue;
+            const before = talismans.get(tl.id), pending = Array.isArray(tl.pendingModifiers) && tl.pendingModifiers.length ? tl.pendingModifiers : null;
+            if (pending && !(before && same(before.pendingModifiers, pending))) {
+                const orb = lastOrb && Date.now() - lastOrb.at < 3000 ? lastOrb.hrid : null;
+                lastOrb = null;
+                list.push({ at: Date.now(), id: tl.id, orb, before: before ? before.modifiers : null, lock: tl.lockedModifierHrid || null, roll: pending });
+                changed = true;
+            } else if (!pending && before && Array.isArray(before.pendingModifiers) && before.pendingModifiers.length) {
+                // The roll was decided: kept when the lines are now the roll (the locked line may have moved to the top).
+                const open = [...list].reverse().find(r => r.id === tl.id && r.kept == null);
+                if (open) { open.kept = key(tl.modifiers) === key(before.pendingModifiers) && key(tl.modifiers) !== key(before.modifiers); changed = true; }
+            }
         }
-        try { localStorage.setItem(TALISMAN_ROLLS_KEY, JSON.stringify(list.slice(-5000))); } catch (_e) { /* storage full */ }
+        if (changed) try { localStorage.setItem(TALISMAN_ROLLS_KEY, JSON.stringify(list.slice(-5000))); } catch (_e) { /* storage full */ }
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -2805,6 +2826,7 @@
             retainFrame(type, m, "in");
             if (lab) { try { labFeed(type, m); } catch (error) { warn("lab", error); } }
             if (Array.isArray(m.endCharacterAbilities) && m.endCharacterAbilities.length) applyAbilities(m.endCharacterAbilities);
+            if (type === "items_updated") { try { noteOrbUse(m); } catch (error) { warn("orb use", error); } }
             switch (type) {
                 case "new_battle": onNewBattle(m); try { noteClasses(m); } catch (error) { warn("classes", error); } try { trackPartyCons(m); trackPartyXp(m); } catch (error) { warn("party consumables", error); } try { trackLoadouts(m); } catch (error) { warn("change log", error); } meterOnNewBattle(m); break;
                 case "battle_updated": meterOnUpdate(m); break;
