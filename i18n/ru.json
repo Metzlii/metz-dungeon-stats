@@ -578,5 +578,10 @@
  "Worth of this line against the best line there is, on the weights from the simulator": "Ценность этой строки относительно лучшей возможной строки по весам из симулятора",
  "No combat talisman is equipped.": "Боевые талисманы не надеты.",
  "Equipped combat talismans: {v} {u}": "Надетые боевые талисманы: {v} {u}",
- "weakest: slot {n}, {p} of the best": "самый слабый: слот {n}, {p} от лучшего"
+ "weakest: slot {n}, {p} of the best": "самый слабый: слот {n}, {p} от лучшего",
+ "clears / h": "прохождений / ч",
+ "encounters / h": "встреч / ч",
+ "coins / h": "монет / ч",
+ "{t} faster a run": "на {t} быстрее за забег",
+ "{t} slower a run": "на {t} медленнее за забег"
 }

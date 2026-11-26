@@ -448,6 +448,8 @@
  "cancelled",
  "checked {a} of {b} finished waves",
  "cleared",
+ "clears / h",
+ "coins / h",
  "consumables used {n} ({cost} at purchase price, recent events)",
  "craft price",
  "crafting saves {n}",
@@ -455,6 +457,7 @@
  "down for {time}",
  "eDPS",
  "empty",
+ "encounters / h",
  "ended",
  "ended early",
  "enough owned",
@@ -577,6 +580,8 @@
  "{p} of the best talisman",
  "{result}, closing",
  "{time} in combat",
+ "{t} faster a run",
+ "{t} slower a run",
  "· click for details",
  "− Spent {a}"
 ]

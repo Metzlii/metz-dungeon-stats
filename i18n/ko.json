@@ -578,5 +578,10 @@
  "Worth of this line against the best line there is, on the weights from the simulator": "시뮬레이터 가중치 기준, 가장 좋은 줄 대비 이 줄의 가치",
  "No combat talisman is equipped.": "장착된 전투 탈리스만이 없습니다.",
  "Equipped combat talismans: {v} {u}": "장착한 전투 탈리스만: {v} {u}",
- "weakest: slot {n}, {p} of the best": "가장 약함: 슬롯 {n}, 최고의 {p}"
+ "weakest: slot {n}, {p} of the best": "가장 약함: 슬롯 {n}, 최고의 {p}",
+ "clears / h": "클리어 / 시간",
+ "encounters / h": "전투 / 시간",
+ "coins / h": "코인 / 시간",
+ "{t} faster a run": "회당 {t} 빠름",
+ "{t} slower a run": "회당 {t} 느림"
 }

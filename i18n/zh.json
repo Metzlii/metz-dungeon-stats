@@ -578,5 +578,10 @@
  "Worth of this line against the best line there is, on the weights from the simulator": "按模拟器权重，此词条相对最佳词条的价值",
  "No combat talisman is equipped.": "没有装备战斗护符。",
  "Equipped combat talismans: {v} {u}": "已装备的战斗护符：{v} {u}",
- "weakest: slot {n}, {p} of the best": "最弱：栏位 {n}，最佳的 {p}"
+ "weakest: slot {n}, {p} of the best": "最弱：栏位 {n}，最佳的 {p}",
+ "clears / h": "通关 / 小时",
+ "encounters / h": "遭遇 / 小时",
+ "coins / h": "金币 / 小时",
+ "{t} faster a run": "每次快 {t}",
+ "{t} slower a run": "每次慢 {t}"
 }

@@ -578,5 +578,10 @@
  "Worth of this line against the best line there is, on the weights from the simulator": "シミュレーターの重みで見た、最良の行に対するこの行の価値",
  "No combat talisman is equipped.": "戦闘タリスマンを装備していません。",
  "Equipped combat talismans: {v} {u}": "装備中の戦闘タリスマン：{v} {u}",
- "weakest: slot {n}, {p} of the best": "最弱：スロット {n}、最良の {p}"
+ "weakest: slot {n}, {p} of the best": "最弱：スロット {n}、最良の {p}",
+ "clears / h": "クリア / 時",
+ "encounters / h": "遭遇 / 時",
+ "coins / h": "コイン / 時",
+ "{t} faster a run": "1回あたり {t} 速い",
+ "{t} slower a run": "1回あたり {t} 遅い"
 }

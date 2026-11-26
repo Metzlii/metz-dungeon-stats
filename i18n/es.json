@@ -578,5 +578,10 @@
  "Worth of this line against the best line there is, on the weights from the simulator": "Valor de esta línea frente a la mejor línea posible, con los pesos del simulador",
  "No combat talisman is equipped.": "No hay ningún talismán de combate equipado.",
  "Equipped combat talismans: {v} {u}": "Talismanes de combate equipados: {v} {u}",
- "weakest: slot {n}, {p} of the best": "el más débil: ranura {n}, {p} del mejor"
+ "weakest: slot {n}, {p} of the best": "el más débil: ranura {n}, {p} del mejor",
+ "clears / h": "completados / h",
+ "encounters / h": "encuentros / h",
+ "coins / h": "monedas / h",
+ "{t} faster a run": "{t} más rápido por run",
+ "{t} slower a run": "{t} más lento por run"
 }
