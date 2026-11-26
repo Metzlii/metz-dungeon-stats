@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.30";
+    const BUILD = "2026-11-26.31";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -3093,7 +3093,10 @@
             }
             if (badge.textContent !== text) { badge.textContent = text; badge.title = t("{p} of the best talisman", { p: text }); }
         }
-        const CSS = ".mtal-wrap{flex-wrap:wrap!important}.mtal-wrap>.mtal-meta{flex:1 0 100%;justify-content:flex-start;margin:8px 0 0!important;gap:8px}.mtal-wrap>.mtal-meta button{margin-left:0}"
+        // The game's reroll box keeps empty space below the orb picker (121 px for a 60 px picker, operator's capture
+        // 2026-11-26); it shrinks to what it holds.
+        const CSS = "[class*='TalismanModal_rerollBody']{min-height:0!important;height:auto!important;flex:0 0 auto!important}"
+            + ".mtal-wrap{flex-wrap:wrap!important}.mtal-wrap>.mtal-meta{flex:1 0 100%;justify-content:flex-start;margin:8px 0 0!important;gap:8px}.mtal-wrap>.mtal-meta button{margin-left:0}"
             + ".mtal-head{font-size:11px!important;letter-spacing:.06em;text-transform:uppercase;opacity:.6;padding-top:0!important;padding-bottom:2px!important;min-height:0!important;border:0!important;background:none!important}"
             + ".mtal-head>span{font-size:inherit!important;font-weight:500!important;color:inherit!important}.mtal-legend{margin-top:4px;font-size:11px;opacity:.75}"
             + "#mtal-ask{position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);padding:16px}"
