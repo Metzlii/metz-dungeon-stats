@@ -14,8 +14,13 @@
 // @match        https://www.milkywayidlecn.com/*
 // @match        https://milkywayidlecn.com/*
 // @match        https://test.milkywayidle.com/*
+// @match        https://metzlii.github.io/metz-combat-simulator/*
 // @run-at       document-start
-// @grant        none
+// @grant        unsafeWindow
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM.getValue
+// @grant        GM.setValue
 // @noframes
 // @require      https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js
 // ==/UserScript==
@@ -38,9 +43,33 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.3";
+    const BUILD = "2026-11-26.4";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+    // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
+    // 2026-11-26: Stats leads and works without the Metz Combat Sim Helper). GM_* where it exists, GM.* otherwise.
+    const gmGet = async key => {
+        try { if (typeof GM_getValue === "function") return GM_getValue(key, null); if (typeof GM !== "undefined" && GM && typeof GM.getValue === "function") return await GM.getValue(key, null); } catch (_e) { /* no storage */ }
+        return null;
+    };
+    const gmSet = (key, value) => {
+        try { if (typeof GM_setValue === "function") return GM_setValue(key, value); if (typeof GM !== "undefined" && GM && typeof GM.setValue === "function") return GM.setValue(key, value); } catch (_e) { /* no storage */ }
+        return undefined;
+    };
+    const TALISMAN_GM_KEY = "mds.talismanAdvice";
+    // The simulator's Send to game: the page writes the package into #zone-talisman-to-game and fires the event; the
+    // answer is an attribute on that node. Nothing else of this script runs on the simulator's page.
+    if (location.hostname === "metzlii.github.io") {
+        try { document.documentElement.dataset.mdsTalisman = VERSION; } catch (_e) { /* fine */ }
+        document.addEventListener("zone-talisman-to-game", () => {
+            const node = document.getElementById("zone-talisman-to-game");
+            let pkg = null;
+            try { pkg = JSON.parse((node && node.textContent) || "null"); } catch (_e) { pkg = null; }
+            if (!pkg || typeof pkg !== "object" || pkg.schema !== "metz-talisman-advice/1" || !pkg.weights) { if (node && !node.dataset.stored) node.dataset.stored = "error"; return; }
+            Promise.resolve(gmSet(TALISMAN_GM_KEY, pkg)).then(() => { if (node) node.dataset.stored = "ok"; console.log(LOG, `stored talisman advice for ${pkg.player || "?"}`); }, () => { if (node && !node.dataset.stored) node.dataset.stored = "error"; });
+        });
+        return;
+    }
     const DEVICE_KEY = "mds-device-v1";
     const PANEL_KEY = "mds-panel-v1";
 
@@ -2760,17 +2789,27 @@
     const talismans = (() => {
         const advisor = talismanAdvisor({ t, full: true, yield: () => false, log: warn });
         try { document.documentElement.dataset.mdsTalisman = VERSION; } catch (_e) { /* fine */ }
-        const take = text => {
-            let pkg = null;
-            try { pkg = JSON.parse(text || "null"); } catch (_e) { return; }
+        // A package from the simulator reaches this page two ways: this script's own storage (it takes Send to game on
+        // the simulator's page itself), and the Metz Combat Sim Helper's page node when the Helper is installed too.
+        // The newer one wins (each carries the moment it was sent); an empty package from the Helper is its Clear.
+        let current = null;
+        const stamp = pkg => (pkg && pkg.at) || "";
+        const use = (pkg, from) => {
             if (pkg !== null && !(isObj(pkg) && pkg.schema === "metz-talisman-advice/1")) return;
+            if (pkg && current && stamp(pkg) <= stamp(current)) return;
+            if (!pkg && from !== "helper") return;
+            current = pkg;
             advisor.setPackage(pkg);
             try { if (pkg) localStorage.setItem(TALISMAN_ADVICE_KEY, JSON.stringify(pkg)); else localStorage.removeItem(TALISMAN_ADVICE_KEY); } catch (_e) { /* storage full or blocked */ }
         };
-        try { const saved = localStorage.getItem(TALISMAN_ADVICE_KEY); if (saved) advisor.setPackage(JSON.parse(saved)); } catch (_e) { /* none */ }
-        const read = () => { const node = document.getElementById("metz-talisman-advice"); if (node) take(node.textContent); };
+        try { const saved = localStorage.getItem(TALISMAN_ADVICE_KEY); if (saved) use(JSON.parse(saved), "saved"); } catch (_e) { /* none */ }
+        const read = () => { const node = document.getElementById("metz-talisman-advice"); if (!node) return; try { use(JSON.parse(node.textContent || "null"), "helper"); } catch (_e) { /* not JSON */ } };
+        const readOwn = () => gmGet(TALISMAN_GM_KEY).then(pkg => { if (pkg) use(pkg, "own"); }, () => {});
         document.addEventListener("metz-talisman-advice", read);
         if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", read); else read();
+        readOwn();
+        // Every few seconds: a game tab already open when the simulator sends picks it up without a reload.
+        setInterval(() => { if (!document.hidden) readOwn(); }, 3000);
         setInterval(() => { try { if (!document.hidden) advisor.scan(); } catch (error) { warn("talisman advice", error); } }, 500);
         return advisor;
     })();
