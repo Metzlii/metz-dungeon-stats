@@ -599,5 +599,15 @@
  "The plan's next step is: {step} Do this anyway?": "方案的下一步是：{step} 仍要这样做吗？",
  "Against the plan": "与方案不符",
  "Do it anyway": "仍然执行",
- "Follow the plan": "按方案来"
+ "Follow the plan": "按方案来",
+ "Modifier": "词条",
+ "Roll": "数值",
+ "The line and its grade": "词条及其等级",
+ "What the line adds, as the game shows it": "游戏显示的该词条数值",
+ "Names by rank on these weights:": "名称颜色（按这些权重的排名）：",
+ "top 4": "前 4",
+ "5th to 10th": "第 5 至 10",
+ "worth something": "有价值",
+ "worth nothing": "无价值",
+ "Grades:": "等级："
 }

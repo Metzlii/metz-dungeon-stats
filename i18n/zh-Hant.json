@@ -599,5 +599,15 @@
  "The plan's next step is: {step} Do this anyway?": "方案的下一步是：{step} 仍要這樣做嗎？",
  "Against the plan": "與方案不符",
  "Do it anyway": "仍然執行",
- "Follow the plan": "按方案來"
+ "Follow the plan": "按方案來",
+ "Modifier": "詞條",
+ "Roll": "數值",
+ "The line and its grade": "詞條及其等級",
+ "What the line adds, as the game shows it": "遊戲顯示的該詞條數值",
+ "Names by rank on these weights:": "名稱顏色（按這些權重的排名）：",
+ "top 4": "前 4",
+ "5th to 10th": "第 5 至 10",
+ "worth something": "有價值",
+ "worth nothing": "無價值",
+ "Grades:": "等級："
 }

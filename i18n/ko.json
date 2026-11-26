@@ -599,5 +599,15 @@
  "The plan's next step is: {step} Do this anyway?": "플랜의 다음 단계: {step} 그래도 진행할까요?",
  "Against the plan": "플랜과 다릅니다",
  "Do it anyway": "그래도 진행",
- "Follow the plan": "플랜 따르기"
+ "Follow the plan": "플랜 따르기",
+ "Modifier": "수식어",
+ "Roll": "롤 값",
+ "The line and its grade": "줄과 등급",
+ "What the line adds, as the game shows it": "게임에 표시되는 이 줄의 수치",
+ "Names by rank on these weights:": "이름 색(이 가중치 순위):",
+ "top 4": "상위 4",
+ "5th to 10th": "5~10위",
+ "worth something": "가치 있음",
+ "worth nothing": "가치 없음",
+ "Grades:": "등급:"
 }

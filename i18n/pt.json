@@ -599,5 +599,15 @@
  "The plan's next step is: {step} Do this anyway?": "O próximo passo do plano é: {step} Fazer isto mesmo assim?",
  "Against the plan": "Contra o plano",
  "Do it anyway": "Fazer mesmo assim",
- "Follow the plan": "Seguir o plano"
+ "Follow the plan": "Seguir o plano",
+ "Modifier": "Modificador",
+ "Roll": "Rolagem",
+ "The line and its grade": "A linha e seu grau",
+ "What the line adds, as the game shows it": "O que a linha adiciona, como o jogo mostra",
+ "Names by rank on these weights:": "Nomes pela posição com estes pesos:",
+ "top 4": "top 4",
+ "5th to 10th": "5.º ao 10.º",
+ "worth something": "vale algo",
+ "worth nothing": "não vale nada",
+ "Grades:": "Graus:"
 }

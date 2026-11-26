@@ -599,5 +599,15 @@
  "The plan's next step is: {step} Do this anyway?": "プランの次の手順：{step} それでも実行しますか？",
  "Against the plan": "プランに反しています",
  "Do it anyway": "それでも実行",
- "Follow the plan": "プランに従う"
+ "Follow the plan": "プランに従う",
+ "Modifier": "モディファイア",
+ "Roll": "ロール値",
+ "The line and its grade": "行とそのグレード",
+ "What the line adds, as the game shows it": "ゲームが表示する、この行の効果量",
+ "Names by rank on these weights:": "名前の色（この重みでの順位）：",
+ "top 4": "上位4",
+ "5th to 10th": "5〜10位",
+ "worth something": "価値あり",
+ "worth nothing": "価値なし",
+ "Grades:": "グレード："
 }

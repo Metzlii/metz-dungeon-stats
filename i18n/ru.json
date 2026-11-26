@@ -599,5 +599,15 @@
  "The plan's next step is: {step} Do this anyway?": "Следующий шаг плана: {step} Всё равно выполнить?",
  "Against the plan": "Против плана",
  "Do it anyway": "Всё равно сделать",
- "Follow the plan": "Следовать плану"
+ "Follow the plan": "Следовать плану",
+ "Modifier": "Модификатор",
+ "Roll": "Значение",
+ "The line and its grade": "Строка и её грейд",
+ "What the line adds, as the game shows it": "Что даёт строка, как показывает игра",
+ "Names by rank on these weights:": "Названия по месту в этих весах:",
+ "top 4": "топ-4",
+ "5th to 10th": "с 5-го по 10-е",
+ "worth something": "чего-то стоит",
+ "worth nothing": "ничего не стоит",
+ "Grades:": "Грейды:"
 }
