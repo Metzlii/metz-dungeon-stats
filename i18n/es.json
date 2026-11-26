@@ -612,5 +612,6 @@
  "Grades:": "Grados:",
  "Send to simulator": "Enviar al simulador",
  "Sent": "Enviado",
- "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "Envía este talismán a Fabricación de talismanes del simulador para encontrar la mejor forma de mejorarlo"
+ "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "Envía este talismán a Fabricación de talismanes del simulador para encontrar la mejor forma de mejorarlo",
+ "{a} or {b}": "{a} o {b}"
 }

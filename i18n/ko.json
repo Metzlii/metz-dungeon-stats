@@ -612,5 +612,6 @@
  "Grades:": "등급:",
  "Send to simulator": "시뮬레이터로 보내기",
  "Sent": "보냄",
- "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "이 탈리스만을 시뮬레이터의 탈리스만 제작으로 보내 여기서부터의 최선의 방법을 찾습니다"
+ "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "이 탈리스만을 시뮬레이터의 탈리스만 제작으로 보내 여기서부터의 최선의 방법을 찾습니다",
+ "{a} or {b}": "{a} 또는 {b}"
 }

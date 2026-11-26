@@ -612,5 +612,6 @@
  "Grades:": "グレード：",
  "Send to simulator": "シミュレーターへ送る",
  "Sent": "送信済み",
- "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "このタリスマンをシミュレーターのタリスマンクラフトに送り、ここからの最善の進め方を探します"
+ "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "このタリスマンをシミュレーターのタリスマンクラフトに送り、ここからの最善の進め方を探します",
+ "{a} or {b}": "{a} または {b}"
 }
