@@ -2452,7 +2452,7 @@
             let bestTop = top.slice(0, TALISMAN_INFO.maxModifierCount), beltSpecials = bestTop.filter(x => special.has(x.hrid)).map(x => x.hrid);
             // How many specials this talisman counts: as many as its target holds (a belt with room spreads them, so a second
             // special here is worth nothing: it belongs on another talisman). Without a slot count: every one.
-            let cap = TALISMAN_INFO.maxModifierCount;
+            let cap = TALISMAN_INFO.maxModifierCount, keptOn = [];
             // THE BEST TALISMAN ON A BELT (operator, 2026-11-26: "if only 3 uniques land in the top mods you could roll 3
             // talismans with 1 unique each, so there is never a reason to make the 3-unique talisman"). A special counts once on
             // the belt, an ordinary modifier on every talisman. With the belt's free slots known, the specials are shared out the
@@ -2465,6 +2465,7 @@
                 // "Keep the ones it has" (operator, 2026-11-26: keeping a second special saves finding it for another talisman):
                 // the specials already on the talisman being crafted stay on it, the first talisman of the belt; the rest share out.
                 const kept = new Set((keep || []).filter(h => special.has(h) && line(h, TALISMAN_INFO.maxGrade) > 0));
+                keptOn = [...kept];
                 for (const sp of top.filter(x => kept.has(x.hrid)).slice(0, TALISMAN_INFO.maxModifierCount)) belt[0].push(sp);
                 for (const sp of top.filter(x => special.has(x.hrid) && !kept.has(x.hrid))) {
                     const t = belt.reduce((a, b) => (b.length < a.length ? b : a)), j = t.length;
@@ -2493,7 +2494,7 @@
                 free.sort((a, b) => b - a);
                 for (const g of free) { let bh = null, bv = 0; for (const h of focusable) if (!taken.has(h)) { const x = line(h, g); if (x > bv) { bv = x; bh = h; } } if (bh) { taken.add(bh); v += bv; } }
                 return v; };
-            return { line, best, bestSingle: top[0]?.v || 0, bestLines: bestTop.map(x => x.hrid), beltSpecials, specialCap: cap, value,
+            return { line, best, bestSingle: top[0]?.v || 0, bestLines: bestTop.map(x => x.hrid), beltSpecials, specialCap: cap, value, kept: keptOn,
                 share: lines => (best > 0 ? value(lines) / best : 0), potential, special };
         }
 
@@ -2710,10 +2711,20 @@
             // adds them before the first step, so there this never fires). Operator, 2026-11-26: a one-line talisman was told to
             // use orbs.
             if (lines.length < (plan.build || TALISMAN_INFO.maxModifierCount)) return { addLine: true, phase: "build" };
-            if (plan.next) return plan.next(lines);
-            if (plan.lock) { const li = plan.lock(lines); if (li >= 0) return { lock: li, phase: "plainLock" }; }
-            const orb = plan.orb(lines);
-            return { orb, phase: plan.phaseOf ? plan.phaseOf(orb) : "plainOrb", accept: plan.accept ? plan.accept(orb) : null };
+            const act = (() => {
+                if (plan.next) return plan.next(lines);
+                if (plan.lock) { const li = plan.lock(lines); if (li >= 0) return { lock: li, phase: "plainLock" }; }
+                const orb = plan.orb(lines);
+                return { orb, phase: plan.phaseOf ? plan.phaseOf(orb) : "plainOrb", accept: plan.accept ? plan.accept(orb) : null };
+            })();
+            // Keep the ones it has: a roll that loses a kept special is never taken (operator, 2026-11-26: "the first result is
+            // to keep the new roll and immediately roll it away" -- Focus rolled Overkill off and the plan still counted the
+            // saving of keeping it). Every plan, every orb.
+            if (act && act.orb && model.kept && model.kept.length) {
+                const inner = act.accept || ((c, cur) => model.value(c) > model.value(cur) + 1e-12);
+                return { ...act, accept: (c, cur) => model.kept.every(h => !cur.some(l => l.hrid === h) || c.some(l => l.hrid === h)) && inner(c, cur) };
+            }
+            return act;
         }
 
         /** The lock-and-Exchange route's hunt for one modifier on its own (find it, lock it, a G6 elsewhere, Exchange the G6
