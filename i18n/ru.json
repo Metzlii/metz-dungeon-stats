@@ -613,5 +613,8 @@
  "Send to simulator": "В симулятор",
  "Sent": "Отправлено",
  "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "Отправить этот талисман в «Создание талисманов» симулятора, чтобы найти лучший путь от него",
- "{a} or {b}": "{a} или {b}"
+ "{a} or {b}": "{a} или {b}",
+ "Worth in:": "Ценность в:",
+ "{p} with every line at G6": "{p} со всеми строками на G6",
+ "New roll: {a} of the best now, {b} with every line at G6": "Новый бросок: сейчас {a} от лучшего, {b} со всеми строками на G6"
 }

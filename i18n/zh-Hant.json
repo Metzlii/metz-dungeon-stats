@@ -613,5 +613,8 @@
  "Send to simulator": "傳送到模擬器",
  "Sent": "已傳送",
  "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "把這個護符傳送到模擬器的護符製作，找出從它出發的最佳方案",
- "{a} or {b}": "{a}或{b}"
+ "{a} or {b}": "{a}或{b}",
+ "Worth in:": "價值單位：",
+ "{p} with every line at G6": "全部詞條 G6 時為 {p}",
+ "New roll: {a} of the best now, {b} with every line at G6": "新詞條：目前為最佳的 {a}，全部 G6 時為 {b}"
 }

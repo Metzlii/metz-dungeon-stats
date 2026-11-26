@@ -613,5 +613,8 @@
  "Send to simulator": "시뮬레이터로 보내기",
  "Sent": "보냄",
  "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "이 탈리스만을 시뮬레이터의 탈리스만 제작으로 보내 여기서부터의 최선의 방법을 찾습니다",
- "{a} or {b}": "{a} 또는 {b}"
+ "{a} or {b}": "{a} 또는 {b}",
+ "Worth in:": "가치 단위:",
+ "{p} with every line at G6": "모든 줄이 G6일 때 {p}",
+ "New roll: {a} of the best now, {b} with every line at G6": "새 롤: 지금 최고의 {a}, 모든 줄이 G6일 때 {b}"
 }

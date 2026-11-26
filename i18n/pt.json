@@ -613,5 +613,8 @@
  "Send to simulator": "Enviar ao simulador",
  "Sent": "Enviado",
  "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "Envia este talismã para a Criação de talismãs do simulador, para achar o melhor caminho a partir dele",
- "{a} or {b}": "{a} ou {b}"
+ "{a} or {b}": "{a} ou {b}",
+ "Worth in:": "Valor em:",
+ "{p} with every line at G6": "{p} com todas as linhas em G6",
+ "New roll: {a} of the best now, {b} with every line at G6": "Nova rolagem: {a} do melhor agora, {b} com todas as linhas em G6"
 }
