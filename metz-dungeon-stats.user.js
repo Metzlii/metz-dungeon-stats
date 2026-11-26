@@ -44,7 +44,7 @@
     const VERSION = "0.2.17";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.50";
+    const BUILD = "2026-11-26.51";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2632,7 +2632,9 @@
                         if (bi >= 0) return { lock: bi, phase: "keepLock" }; }
                     return { orb, phase: "keepRoll", accept: better };
                 }
-                if (lock >= 0) return { unlock: true, phase: "unlock" };
+                // Unlocked only when the locked line's own grade still has to rise: a G6 stays locked, out of Attunement's reach
+                // (operator, 2026-11-26: "unlock it here makes no sense" with Echo G6 locked; each Attunement drops a line 65%).
+                if (lock >= 0 && lines[lock].grade < TALISMAN_INFO.maxGrade) return { unlock: true, phase: "unlock" };
                 return { orb: "attunement", phase: "grades", accept: better };
             };
         }
