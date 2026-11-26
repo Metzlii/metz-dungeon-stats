@@ -616,5 +616,6 @@
  "{a} or {b}": "{a}或{b}",
  "Worth in:": "價值單位：",
  "{p} with every line at G6": "全部詞條 G6 時為 {p}",
- "New roll: {a} of the best now, {b} with every line at G6": "新詞條：目前為最佳的 {a}，全部 G6 時為 {b}"
+ "New roll: {a} of the best now, {b} with every line at G6": "新詞條：目前為最佳的 {a}，全部 G6 時為 {b}",
+ "Spent on this talisman: {items}": "已用於此護符：{items}"
 }

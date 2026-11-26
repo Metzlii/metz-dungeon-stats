@@ -616,5 +616,6 @@
  "{a} or {b}": "{a} または {b}",
  "Worth in:": "価値の単位：",
  "{p} with every line at G6": "全行 G6 で {p}",
- "New roll: {a} of the best now, {b} with every line at G6": "新しいロール：現在は最良の {a}、全行 G6 で {b}"
+ "New roll: {a} of the best now, {b} with every line at G6": "新しいロール：現在は最良の {a}、全行 G6 で {b}",
+ "Spent on this talisman: {items}": "このタリスマンに使用：{items}"
 }

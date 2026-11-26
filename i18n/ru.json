@@ -616,5 +616,6 @@
  "{a} or {b}": "{a} или {b}",
  "Worth in:": "Ценность в:",
  "{p} with every line at G6": "{p} со всеми строками на G6",
- "New roll: {a} of the best now, {b} with every line at G6": "Новый бросок: сейчас {a} от лучшего, {b} со всеми строками на G6"
+ "New roll: {a} of the best now, {b} with every line at G6": "Новый бросок: сейчас {a} от лучшего, {b} со всеми строками на G6",
+ "Spent on this talisman: {items}": "Потрачено на этот талисман: {items}"
 }

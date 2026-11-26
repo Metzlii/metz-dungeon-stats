@@ -616,5 +616,6 @@
  "{a} or {b}": "{a} o {b}",
  "Worth in:": "Valor en:",
  "{p} with every line at G6": "{p} con todas las líneas en G6",
- "New roll: {a} of the best now, {b} with every line at G6": "Nueva tirada: {a} del mejor ahora, {b} con todas las líneas en G6"
+ "New roll: {a} of the best now, {b} with every line at G6": "Nueva tirada: {a} del mejor ahora, {b} con todas las líneas en G6",
+ "Spent on this talisman: {items}": "Gastado en este talismán: {items}"
 }

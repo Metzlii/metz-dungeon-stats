@@ -616,5 +616,6 @@
  "{a} or {b}": "{a} 또는 {b}",
  "Worth in:": "가치 단위:",
  "{p} with every line at G6": "모든 줄이 G6일 때 {p}",
- "New roll: {a} of the best now, {b} with every line at G6": "새 롤: 지금 최고의 {a}, 모든 줄이 G6일 때 {b}"
+ "New roll: {a} of the best now, {b} with every line at G6": "새 롤: 지금 최고의 {a}, 모든 줄이 G6일 때 {b}",
+ "Spent on this talisman: {items}": "이 탈리스만에 사용: {items}"
 }
