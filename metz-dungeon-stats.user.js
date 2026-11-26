@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.13";
+    const BUILD = "2026-11-26.14";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2737,6 +2737,9 @@
             const pendingBox = sections.find(s => s.querySelector('[class*="TalismanModal_decisionActions"]'));
             const pending = pendingBox ? readRows(pendingBox, '[class*="TalismanModal_modifierRow"]', '[class*="TalismanModal_modifierLabel"]', '[class*="TalismanModal_grade"]') : null;
             let panel = modal.querySelector(":scope > .mtal-panel");
+            const head = modal.querySelector(":scope > header");
+            const meta = pkg && typeof host.clear === "function" && head ? [...head.querySelectorAll("button")].find(b => !b.closest(".mtal-meta") && b.textContent.trim()) || null : null;
+            if (!meta || !pkg) for (const r of modal.querySelectorAll(".mtal-meta")) r.remove();
             const tl = current.length ? findTalisman(current, pending) : null;
             const mm = tl ? model(tl.id) : null;
             let html;
@@ -2765,9 +2768,17 @@
                 html = `<div><b>${esc(t("Worth"))}</b> ${[`${fmt(value)} ${t(unit())}`, ...others(tl)].map(esc).join(" · ")} · ${esc(t("{p} of the best talisman", { p: pct(share) }))}</div>`
                     + (verdict ? `<div class="mtal-verdict">${esc(verdict)}</div>` : "")
                     + (step ? `<div><b>${esc(t("Next"))}</b> ${esc(step.text)}${step.why ? ` <span class="mtal-muted">— ${esc(step.why)}</span>` : ""}</div>` : "")
-                    + `<div class="mtal-muted">${esc(pkg.plan ? t("Plan: {plan} · weights for {who}", { plan: pkg.plan.title || pkg.plan.key, who: pkg.player || "" }) : t("Weights for {who}, {zone}", { who: pkg.player || "", zone: pkg.zone || "" }))}${clearButtons(true)}</div>`;
+                    + `<div class="mtal-muted">${esc(pkg.plan ? t("Plan: {plan} · weights for {who}", { plan: pkg.plan.title || pkg.plan.key, who: pkg.player || "" }) : t("Weights for {who}, {zone}", { who: pkg.player || "", zone: pkg.zone || "" }))}${meta ? "" : clearButtons(true)}</div>`;
             }
             if (!html) { if (panel) panel.remove(); return; }
+            // The Clear buttons are meta controls, not part of the plan (operator, 2026-11-26): one row in the window's
+            // header, right after the game's Appearance button. Without that button they stay in the box above.
+            if (meta) {
+                let row = head.querySelector(".mtal-meta");
+                if (!row || row.previousElementSibling !== meta) { if (row) row.remove(); row = document.createElement("span"); row.className = "mtal-meta"; meta.insertAdjacentElement("afterend", row); }
+                const bh = clearButtons(true);
+                if (lastHtml.get(row) !== bh) { row.innerHTML = bh; lastHtml.set(row, bh); }
+            }
             if (!panel) { panel = document.createElement("div"); panel.className = "mtal-panel"; const head = modal.querySelector(":scope > header"); if (head) head.insertAdjacentElement("afterend", panel); else modal.prepend(panel); }
             if (lastHtml.get(panel) !== html) { panel.innerHTML = html; lastHtml.set(panel, html); }
         }
@@ -2860,7 +2871,7 @@
             }
             if (badge.textContent !== text) { badge.textContent = text; badge.title = t("{p} of the best talisman", { p: text }); }
         }
-        const CSS = ".mtal-btn{margin-left:8px;padding:1px 7px;font-size:11px;line-height:1.5;border-radius:4px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:inherit;cursor:pointer;opacity:1}.mtal-btn:hover{background:rgba(255,255,255,.18)}"
+        const CSS = ".mtal-btn{margin-left:8px;padding:1px 7px;font-size:11px;line-height:1.5;border-radius:4px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:inherit;cursor:pointer;opacity:1}.mtal-btn:hover{background:rgba(255,255,255,.18)}.mtal-meta{display:inline-flex;align-items:center;gap:0;white-space:nowrap;margin-left:4px}"
             + ".mtal-icon{position:absolute;left:2px;bottom:1px;font-size:10px;line-height:1;padding:1px 2px;border-radius:3px;background:rgba(0,0,0,.55);color:#fff;pointer-events:none;font-variant-numeric:tabular-nums}"
             + ".mtal-panel{margin:6px 0 8px;padding:6px 9px;border:1px solid rgba(120,200,160,.45);border-radius:6px;background:rgba(40,90,70,.18);font-size:12.5px;line-height:1.45}"
             + ".mtal-panel b{font-weight:600;margin-right:4px}.mtal-muted{opacity:.7;font-size:11.5px}.mtal-verdict{font-weight:600;color:#8fe3b5}"
