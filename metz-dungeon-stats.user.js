@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.25";
+    const BUILD = "2026-11-26.26";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2780,12 +2780,13 @@
             const tl = current.length ? findTalisman(current, pending) : null;
             const mm = tl ? model(tl.id) : null;
             let html;
+            if (!pkg || !tl || !mm) keepHeads(modal, []);
             if (!pkg) html = "";
             else if (!tl || !mm) html = `<div class="mtal-muted">${esc(t("Talisman advice: this talisman was not found in the game's messages yet. Reload the game page once."))}</div>`;
             else {
                 const lines = linesOf(tl), value = mm.m.value(lines), share = mm.m.share(lines);
                 current.forEach((r, i) => mark(r.row, lines[i] ? mm.m.line(lines[i].hrid, lines[i].grade) : 0, mm.m.bestSingle, lines[i], mm));
-                heading(current, '[class*="TalismanModal_modifierLabel"]', '[class*="TalismanModal_value"]');
+                const heads = [heading(current, '[class*="TalismanModal_modifierLabel"]', '[class*="TalismanModal_value"]')];
                 const step = nextStep(tl, mm);
                 let verdict = "";
                 // What the next step presses, outlined (operator, 2026-11-26: "upgrade should be highlighted"): the roll
@@ -2797,7 +2798,7 @@
                 if (pending && tl.pendingModifiers) {
                     const cand = linesOf(tl, tl.pendingModifiers);
                     pending.forEach((r, i) => mark(r.row, cand[i] ? mm.m.line(cand[i].hrid, cand[i].grade) : 0, mm.m.bestSingle, cand[i], mm));
-                    heading(pending, '[class*="TalismanModal_modifierLabel"]', '[class*="TalismanModal_value"]');
+                    heads.push(heading(pending, '[class*="TalismanModal_modifierLabel"]', '[class*="TalismanModal_value"]'));
                     // The plan's own rule decides when its step is the orb that made the roll; otherwise the worth does, and a
                     // tie (within 0.05% of the best talisman) picks neither button (operator, 2026-11-26: a 0 → 0 roll had Keep
                     // Current outlined as if the plan wanted it).
@@ -2812,6 +2813,7 @@
                         ? t("The plan says Use New Roll: this roll moves it on. Keep the current lines anyway?")
                         : t("The plan says Keep Current: this roll does not move it on. Use the new roll anyway?"));
                 }
+                keepHeads(modal, heads);
                 // A lock step: the Lock (or Unlock) button on that line, in the list the game shows once the Binding Orb is
                 // picked (the locked line moves to the top there and in the game's messages alike, so the order matches).
                 const lockRows = [...modal.querySelectorAll(':scope > [class*="TalismanModal_modifiers"] [class*="TalismanModal_modifierRow"]:not(.mtal-head)')];
@@ -2890,9 +2892,9 @@
         // game's own row and cell classes, so it lines up with them; the readers skip it (.mtal-head).
         function heading(rows, labelSel, valueSel) {
             const first = rows[0] && rows[0].row, list = first && first.parentElement;
-            if (!list) return;
+            if (!list) return null;
             let head = list.querySelector(":scope > .mtal-head");
-            if (head && head.nextElementSibling === first) return;
+            if (head && head.nextElementSibling === first) return head;
             if (head) head.remove();
             const cls = el => (el ? String(el.className).split(/\s+/).filter(c => c && !/^mtal-|locked|withLockAction/i.test(c)).join(" ") : "");
             head = document.createElement(first.tagName); head.className = `${cls(first)} mtal-head`;
@@ -2900,7 +2902,11 @@
                 + `<span class="${cls(first.querySelector(valueSel))}" title="${esc(t("What the line adds, as the game shows it"))}">${esc(t("Roll"))}</span>`
                 + `<span class="mtal-line" title="${esc(t("Worth of this line against the best line there is, on the weights from the simulator"))}">${esc(t("Worth"))}</span>`;
             list.insertBefore(head, first);
+            return head;
         }
+        // Headings whose lines are gone go too: the game reuses its boxes (operator, 2026-11-26: the New Roll heading stayed
+        // in the Modify box after the roll was decided).
+        const keepHeads = (box, keep) => { for (const h of box.querySelectorAll(".mtal-head")) if (!keep.includes(h)) h.remove(); };
         // The key to the colours, under the advice.
         const legend = () => `<div class="mtal-legend">${esc(t("Names by rank on these weights:"))} <span class="mtal-q-top">${esc(t("top 4"))}</span> · <span class="mtal-q-good">${esc(t("5th to 10th"))}</span> · ${esc(t("worth something"))} · <span class="mtal-q-none">${esc(t("worth nothing"))}</span>`
             + ` &nbsp; ${esc(t("Grades:"))} <span class="mtal-g3">G3</span> <span class="mtal-g4">G4</span> <span class="mtal-g5">G5</span> <span class="mtal-g6">G6</span></div>`;
@@ -2937,10 +2943,10 @@
             const rows = readRows(tip, '[class*="Talisman_modifierLine"]', '[class*="Talisman_label"]', '[class*="Talisman_grade"]');
             const tl = rows.length ? findTalisman(rows, null) : null, mm = tl ? model(tl.id) : null;
             let box = tip.querySelector(":scope > .mtal-tip");
-            if (!tl || !mm) { if (box) box.remove(); return; }
+            if (!tl || !mm) { if (box) box.remove(); keepHeads(tip, []); return; }
             const lines = linesOf(tl);
             rows.forEach((r, i) => mark(r.row, lines[i] ? mm.m.line(lines[i].hrid, lines[i].grade) : 0, mm.m.bestSingle, lines[i], mm));
-            heading(rows, '[class*="Talisman_label"]', '[class*="Talisman_value"]');
+            keepHeads(tip, [heading(rows, '[class*="Talisman_label"]', '[class*="Talisman_value"]')]);
             const html = `<div>${esc(t("Worth"))} ${[`${fmt(mm.m.value(lines))} ${t(unit())}`, ...others(tl)].map(esc).join(" · ")}</div><div>${esc(t("{p} of the best talisman", { p: pct(mm.m.share(lines)) }))}</div>`;
             if (!box) { box = document.createElement("div"); box.className = "mtal-tip"; tip.appendChild(box); }
             if (lastHtml.get(box) !== html) { box.innerHTML = html; lastHtml.set(box, html); }
