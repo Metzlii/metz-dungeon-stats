@@ -43,7 +43,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.5";
+    const BUILD = "2026-11-26.6";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2781,7 +2781,10 @@
         };
         function scan() { watch(); draw(); }
         function draw() {
-            const on = pkg && !host.yield();
+            // Stepping aside for the other script leaves the page alone: the boxes on it are the other script's (operator,
+            // 2026-11-26: the Helper took Stats' tooltip lines out every half second, the "jumping").
+            if (host.yield()) return;
+            const on = !!pkg;
             if (!document.getElementById("mtal-css")) { const st = document.createElement("style"); st.id = "mtal-css"; st.textContent = CSS; (document.head || document.documentElement).appendChild(st); }
             if (!on) { for (const el of document.querySelectorAll(".mtal-panel,.mtal-line,.mtal-tip,.mtal-tab")) el.remove(); for (const el of document.querySelectorAll(".mtal-pick")) el.classList.remove("mtal-pick"); return; }
             try {
