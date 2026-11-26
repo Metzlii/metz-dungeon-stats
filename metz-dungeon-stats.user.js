@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.35";
+    const BUILD = "2026-11-26.36";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2887,9 +2887,14 @@
                     // The plan's own rule decides when its step is the orb that made the roll; otherwise the worth does, and a
                     // tie (within 0.05% of the best talisman) picks neither button (operator, 2026-11-26: a 0 → 0 roll had Keep
                     // Current outlined as if the plan wanted it).
+                    // The game lists a new roll in its own order (operator, 2026-11-26: after an Exchange, Echo G6 came back
+                    // third while it is second on the talisman), and the plan's rules read lines by position: the roll is put
+                    // in the talisman's order, line by line by modifier, before a rule judges it.
+                    const aligned = (() => { const rest = cand.slice(), out = lines.map(l => { const i = rest.findIndex(c => c.hrid === l.hrid); return i >= 0 ? rest.splice(i, 1)[0] : null; });
+                        return out.map(x => x || rest.shift()); })();
                     const cv = mm.m.value(cand), planRule = step && step.act && step.act.accept;
                     const tie = !planRule && Math.abs(mm.m.share(cand) - share) < 0.0005;
-                    const take = tie ? null : planRule ? planRule(cand, lines) : cv > value;
+                    const take = tie ? null : planRule ? planRule(aligned, lines) : cv > value;
                     verdict = tie ? t("Either: the new roll is worth the same ({a} → {b}).", { a: fmt(value), b: fmt(cv) })
                         : take ? t("Use New Roll: it moves the plan on ({a} → {b}).", { a: fmt(value), b: fmt(cv) }) : t("Keep Current: the new roll does not move the plan on ({a} → {b}).", { a: fmt(value), b: fmt(cv) });
                     const buttons = [...pendingBox.querySelectorAll('[class*="TalismanModal_decisionActions"] button')];
