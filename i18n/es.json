@@ -589,5 +589,7 @@
  "Stop showing this crafting plan in the game; the weights stay": "Dejar de mostrar este plan de fabricación en el juego; los pesos se mantienen",
  "Stop showing the simulator's talisman advice in the game until the next Send to game": "Dejar de mostrar en el juego los consejos de talismán del simulador hasta el próximo Enviar al juego",
  "Either: the new roll is worth the same ({a} → {b}).": "Cualquiera: la nueva tirada vale lo mismo ({a} → {b}).",
- "Decide the new roll first, then: {step}": "Decide primero la nueva tirada y después: {step}"
+ "Decide the new roll first, then: {step}": "Decide primero la nueva tirada y después: {step}",
+ "Use an {orb}.": "Usa un {orb}.",
+ "Focus on: {mods}": "Enfocar en: {mods}"
 }

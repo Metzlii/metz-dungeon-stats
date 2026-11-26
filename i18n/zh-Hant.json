@@ -589,5 +589,7 @@
  "Stop showing this crafting plan in the game; the weights stay": "不再在遊戲中顯示此製作方案；權重保留",
  "Stop showing the simulator's talisman advice in the game until the next Send to game": "在下次「傳送到遊戲」之前，不再在遊戲中顯示模擬器的護符建議",
  "Either: the new roll is worth the same ({a} → {b}).": "都可以：新詞條價值相同（{a} → {b}）。",
- "Decide the new roll first, then: {step}": "先決定新詞條，然後：{step}"
+ "Decide the new roll first, then: {step}": "先決定新詞條，然後：{step}",
+ "Use an {orb}.": "使用{orb}。",
+ "Focus on: {mods}": "專注於：{mods}"
 }

@@ -589,5 +589,7 @@
  "Stop showing this crafting plan in the game; the weights stay": "このクラフトプランをゲームに表示しないようにします。重みは残ります",
  "Stop showing the simulator's talisman advice in the game until the next Send to game": "次に「ゲームに送る」を使うまで、シミュレーターのタリスマン助言をゲームに表示しません",
  "Either: the new roll is worth the same ({a} → {b}).": "どちらでも：新しいロールの価値は同じです（{a} → {b}）。",
- "Decide the new roll first, then: {step}": "まず新しいロールを決めてから：{step}"
+ "Decide the new roll first, then: {step}": "まず新しいロールを決めてから：{step}",
+ "Use an {orb}.": "{orb} を使います。",
+ "Focus on: {mods}": "フォーカス対象：{mods}"
 }

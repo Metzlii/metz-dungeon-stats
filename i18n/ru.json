@@ -589,5 +589,7 @@
  "Stop showing this crafting plan in the game; the weights stay": "Больше не показывать этот план создания в игре; веса остаются",
  "Stop showing the simulator's talisman advice in the game until the next Send to game": "Не показывать в игре советы симулятора по талисманам до следующей отправки в игру",
  "Either: the new roll is worth the same ({a} → {b}).": "Без разницы: новый бросок стоит столько же ({a} → {b}).",
- "Decide the new roll first, then: {step}": "Сначала решите, что делать с новым броском, затем: {step}"
+ "Decide the new roll first, then: {step}": "Сначала решите, что делать с новым броском, затем: {step}",
+ "Use an {orb}.": "Используйте: {orb}.",
+ "Focus on: {mods}": "Фокус на: {mods}"
 }
