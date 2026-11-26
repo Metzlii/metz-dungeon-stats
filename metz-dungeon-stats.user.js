@@ -44,7 +44,7 @@
     const VERSION = "0.2.17";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.49";
+    const BUILD = "2026-11-26.50";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2714,7 +2714,11 @@
             return { orb, phase: plan.phaseOf ? plan.phaseOf(orb) : "plainOrb", accept: plan.accept ? plan.accept(orb) : null };
         }
 
-        return { valueModel, plans, step, PHASE_ORDER, phaseRank };
+        /** The lock-and-Exchange route's hunt for one modifier on its own (find it, lock it, a G6 elsewhere, Exchange the G6
+          *  onto it): what landing a special at G6 on another talisman takes, the saving when a talisman keeps it instead. */
+        function routeFor(model, price, key, exchange = "derangement") { return routeNext(model, price, "attunement", { key, keys: [key], target: 1, exchange }); }
+
+        return { valueModel, plans, step, routeFor, PHASE_ORDER, phaseRank };
     }
     // END talismanPlanner
     // BEGIN talismanAdvisor (synced into the userscripts; edit userscripts/shared/talisman-advisor.js only)
