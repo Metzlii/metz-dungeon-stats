@@ -593,5 +593,8 @@
  "Use an {orb}.": "{orb}을(를) 사용하세요.",
  "Focus on: {mods}": "집중 대상: {mods}",
  "Rank {r} of {n} modifiers on these weights": "이 가중치에서 {n}개 중 {r}위",
- "Worth nothing on these weights": "이 가중치에서는 가치가 없습니다"
+ "Worth nothing on these weights": "이 가중치에서는 가치가 없습니다",
+ "The plan says Use New Roll: this roll moves it on. Keep the current lines anyway?": "플랜은 '새 롤 사용'입니다: 이 롤로 플랜이 진행됩니다. 그래도 현재 줄을 유지할까요?",
+ "The plan says Keep Current: this roll does not move it on. Use the new roll anyway?": "플랜은 '현재 유지'입니다: 이 롤로는 플랜이 진행되지 않습니다. 그래도 새 롤을 사용할까요?",
+ "The plan's next step is: {step} Do this anyway?": "플랜의 다음 단계: {step} 그래도 진행할까요?"
 }

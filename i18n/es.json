@@ -593,5 +593,8 @@
  "Use an {orb}.": "Usa un {orb}.",
  "Focus on: {mods}": "Enfocar en: {mods}",
  "Rank {r} of {n} modifiers on these weights": "Puesto {r} de {n} modificadores con estos pesos",
- "Worth nothing on these weights": "No vale nada con estos pesos"
+ "Worth nothing on these weights": "No vale nada con estos pesos",
+ "The plan says Use New Roll: this roll moves it on. Keep the current lines anyway?": "El plan dice Usar nueva tirada: esta tirada lo hace avanzar. ¿Mantener las líneas actuales de todos modos?",
+ "The plan says Keep Current: this roll does not move it on. Use the new roll anyway?": "El plan dice Mantener la actual: esta tirada no lo hace avanzar. ¿Usar la nueva tirada de todos modos?",
+ "The plan's next step is: {step} Do this anyway?": "El siguiente paso del plan es: {step} ¿Hacer esto de todos modos?"
 }

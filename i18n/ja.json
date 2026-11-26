@@ -593,5 +593,8 @@
  "Use an {orb}.": "{orb} を使います。",
  "Focus on: {mods}": "フォーカス対象：{mods}",
  "Rank {r} of {n} modifiers on these weights": "この重みでの順位：{n} 個中 {r} 位",
- "Worth nothing on these weights": "この重みでは価値がありません"
+ "Worth nothing on these weights": "この重みでは価値がありません",
+ "The plan says Use New Roll: this roll moves it on. Keep the current lines anyway?": "プランは「新しいロールを使う」です：このロールでプランが進みます。それでも現在の行を維持しますか？",
+ "The plan says Keep Current: this roll does not move it on. Use the new roll anyway?": "プランは「現在のものを維持」です：このロールではプランが進みません。それでも新しいロールを使いますか？",
+ "The plan's next step is: {step} Do this anyway?": "プランの次の手順：{step} それでも実行しますか？"
 }

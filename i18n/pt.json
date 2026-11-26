@@ -593,5 +593,8 @@
  "Use an {orb}.": "Use um {orb}.",
  "Focus on: {mods}": "Focar em: {mods}",
  "Rank {r} of {n} modifiers on these weights": "Posição {r} de {n} modificadores com estes pesos",
- "Worth nothing on these weights": "Não vale nada com estes pesos"
+ "Worth nothing on these weights": "Não vale nada com estes pesos",
+ "The plan says Use New Roll: this roll moves it on. Keep the current lines anyway?": "O plano diz Usar nova rolagem: esta rolagem o faz avançar. Manter as linhas atuais mesmo assim?",
+ "The plan says Keep Current: this roll does not move it on. Use the new roll anyway?": "O plano diz Manter a atual: esta rolagem não o faz avançar. Usar a nova rolagem mesmo assim?",
+ "The plan's next step is: {step} Do this anyway?": "O próximo passo do plano é: {step} Fazer isto mesmo assim?"
 }
