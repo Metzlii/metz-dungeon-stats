@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.37";
+    const BUILD = "2026-11-26.38";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2497,8 +2497,12 @@
             const specialsBesides = key => new Set([...model.special].filter(h => h !== key && model.line(h, TALISMAN_INFO.maxGrade) > 0));
             const ordinary = new Set([...wanted].filter(h => !model.special.has(h)));
             const score = (lines, key) => { const specials = specialsBesides(key); let sp = 0, ok = 0; for (const l of lines) if (!l.locked) { if (specials.has(l.hrid)) sp++; else if (ordinary.has(l.hrid)) ok = 1; } return Math.min(sp, 3) * 10 + (sp >= 3 ? 1 : ok); };
+            // Attunement as soon as the lines it has, raised to G6, can reach the target (operator, 2026-11-26: Echo G6 locked
+            // with Magic and Combat Experience at G2 was sent on to Focus for the fourth line, when grades alone made 80% for
+            // certain); before, only once every line was a type worth having.
+            const gradesReach = lines => lines.reduce((v, l) => v + model.line(l.hrid, l.locked ? l.grade : TALISMAN_INFO.maxGrade), 0) >= target * model.best - 1e-12;
             const finishOrb = lines => (finish === "grades+focus" ? (model.potential(lines) >= target * model.best - 1e-12 ? "focus" : "reforging")
-                : !/\+grades$/.test(finish) ? finish : lines.every(l => l.locked || wanted.has(l.hrid)) ? "attunement" : typesOrb);
+                : !/\+grades$/.test(finish) ? finish : lines.every(l => l.locked || wanted.has(l.hrid)) || gradesReach(lines) ? "attunement" : typesOrb);
             // Reforging for the grades keeps a roll when its grades could be worth more once focused, whatever its types.
             const finishAccept = lines => (finish === "grades+focus" && finishOrb(lines) === "reforging" ? c => model.potential(c) > model.potential(lines) + 1e-12 : better);
             if (finish === "specials+grades") {
@@ -2584,12 +2588,13 @@
           * talisman is worth more, and once every line is a type worth having, unlock it and Attunement Orbs for the grades.
           * No hunt for one modifier first: what the talisman already carries is kept.
           */
-        function keepNext(model, orb) {
+        function keepNext(model, orb, target = 1) {
             const wanted = new Set(TALISMAN_MODIFIERS.map(m => ({ h: m.hrid, v: model.line(m.hrid, TALISMAN_INFO.maxGrade) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 8).map(x => x.h));
             const better = (c, cur) => model.value(c) > model.value(cur) + 1e-12;
+            const allSix = lines => lines.reduce((v, l) => v + model.line(l.hrid, TALISMAN_INFO.maxGrade), 0) >= target * model.best - 1e-12;
             return lines => {
                 const lock = lines.findIndex(l => l.locked);
-                if (!lines.every(l => wanted.has(l.hrid))) {
+                if (!lines.every(l => wanted.has(l.hrid)) && !allSix(lines)) {
                     if (lock < 0) { let bi = -1, bv = 0; lines.forEach((l, i) => { const v = wanted.has(l.hrid) ? model.line(l.hrid, l.grade) : 0; if (v > bv) { bv = v; bi = i; } });
                         if (bi >= 0) return { lock: bi, phase: "keepLock" }; }
                     return { orb, phase: "keepRoll", accept: better };
@@ -2636,7 +2641,7 @@
                 ...[["mutation", "Mutation Orbs"], ["reforging", "Reforging Orbs"], ["reshaping", "Reshaping Orbs"], ["focus", "Focus Orbs (types only, grades kept)"]].map(([o, label]) => ({ key: `keep-${o}`,
                     name: `Lock the best line it has, ${label} for the others, then Attunement Orbs for the grades`,
                     template: "Lock the best line it has, {orb} for the others, then Attunement Orbs for the grades", vars: { orb: label },
-                    route: true, next: keepNext(model, o), uses: ["binding", o, "attunement"] })),
+                    route: true, next: keepNext(model, o, target), uses: ["binding", o, "attunement"] })),
                 ...[["reshaping", "Reshaping Orb"], ["reforging", "Reforging Orb"], ["mutation", "Mutation Orb"], ["focus", "Focus Orb"], ["attunement", "Attunement Orb"],
                     ["types+grades", "Reshaping Orbs for the types, then Attunement Orbs for the grades,"], ["mutation+grades", "Mutation Orbs for the types, then Attunement Orbs for the grades,"],
                     ["grades+focus", "Reforging Orbs for the grades, then Focus Orbs for the types,"], ["focus+grades", "Focus Orbs for the types, then Attunement Orbs for the grades,"],
