@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.34";
+    const BUILD = "2026-11-26.35";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2903,9 +2903,15 @@
                 // picked (the locked line moves to the top there and in the game's messages alike, so the order matches).
                 // The rows with a Lock / Unlock button, wherever the game draws them (inside the Modify section, operator's
                 // screenshot 2026-11-26), in the talisman's line order.
-                const lockRows = [...modal.querySelectorAll('[class*="TalismanModal_withLockAction"]')].filter(r => !r.classList.contains("mtal-head"));
                 const actions = [...modal.querySelectorAll('[class*="TalismanModal_actionSection"]')];
                 const modify = actions.find(x => x.querySelector('[class*="TalismanModal_orbPicker"]')), picker = modify && modify.querySelector('[class*="TalismanModal_orbPicker"]');
+                // The Binding Orb's list: the rows with a lock button inside Modify (one per line, in the talisman's order). A
+                // locked line also carries its own unlock button in the Modifiers list (operator's screenshot, 2026-11-26), which
+                // is not that list: taking it for one hid the next lock step.
+                const lockButtons = [...modal.querySelectorAll('[class*="TalismanModal_withLockAction"]')].filter(r => !r.classList.contains("mtal-head"));
+                const lockRows = lockButtons.filter(r => (modify ? modify.contains(r) : true)).length === lines.length ? lockButtons.filter(r => (modify ? modify.contains(r) : true)) : [];
+                const unlockButton = (lockRows.find(r => /TalismanModal_locked/.test(String(r.className))) || lockButtons.find(r => /TalismanModal_locked/.test(String(r.className)) || r.querySelector('[class*="TalismanModal_locked"]'))
+                    || lockButtons.find(r => !lockRows.includes(r)));
                 // The slot to click, not the whole picker row (operator, 2026-11-26: the outline ran far right of the box).
                 // The smallest of the picker's boxes that is drawn: the slot itself, whatever the game calls it there.
                 const slot = picker && ([...picker.querySelectorAll('[class*="ItemSelector_itemContainer"], [class*="ItemSelector_emptySlot"], [class*="ItemSelector_itemSelector"]')]
@@ -2919,11 +2925,10 @@
                     || [...picker.querySelectorAll('[class*="Item_item"]')].some(x => named(x, orb))));
                 if (step && !step.done && !picks.size) {
                     if (step.kind === "orb") picks.add(chosen(step.orb) ? footBtn(modify) : slot);
+                    else if (step.kind === "unlock" && unlockButton) picks.add(unlockButton.querySelector("button")); // free, no orb
                     else if (step.kind === "lock" || step.kind === "unlock") {
-                        if (lockRows.length) {
-                            if (step.lock != null && lockRows[step.lock]) picks.add(lockRows[step.lock].querySelector('[title] button, button'));
-                            if (step.unlock) { const r = lockRows.find(x => /TalismanModal_locked/.test(String(x.className))); picks.add(r && r.querySelector("button")); }
-                        } else picks.add(slot);
+                        if (lockRows.length) { if (step.lock != null && lockRows[step.lock]) picks.add(lockRows[step.lock].querySelector('[title] button, button')); }
+                        else picks.add(slot);
                     } else if (step.kind === "addLine") picks.add(footBtn(upgrade));
                 }
                 // The orb list the picker opens (a popup outside the window: ItemSelector_menu, one tile per orb, each with its
@@ -2941,10 +2946,10 @@
                     const reroll = footBtn(modify), up = footBtn(upgrade);
                     if (reroll && !(step.kind === "orb" && chosen(step.orb))) against.set(reroll, ask);
                     if (up && step.kind !== "addLine") against.set(up, ask);
-                    lockRows.forEach((r, i) => {
+                    lockButtons.forEach(r => {
                         const b = r.querySelector('[title] button, button'); if (!b) return;
-                        const isLocked = /TalismanModal_locked/.test(String(r.className));
-                        const ok = (step.kind === "lock" && i === step.lock && !isLocked) || (step.kind === "unlock" && isLocked);
+                        const i = lockRows.indexOf(r), isLocked = /TalismanModal_locked/.test(String(r.className)) || !!r.querySelector('[class*="TalismanModal_locked"]') || i < 0;
+                        const ok = (step.kind === "lock" && i >= 0 && i === step.lock && !isLocked) || (step.kind === "unlock" && isLocked);
                         if (!ok) against.set(b, ask);
                     });
                 }
