@@ -591,5 +591,7 @@
  "Either: the new roll is worth the same ({a} → {b}).": "아무거나: 새 롤의 가치가 같습니다({a} → {b}).",
  "Decide the new roll first, then: {step}": "먼저 새 롤을 결정한 뒤: {step}",
  "Use an {orb}.": "{orb}을(를) 사용하세요.",
- "Focus on: {mods}": "집중 대상: {mods}"
+ "Focus on: {mods}": "집중 대상: {mods}",
+ "Rank {r} of {n} modifiers on these weights": "이 가중치에서 {n}개 중 {r}위",
+ "Worth nothing on these weights": "이 가중치에서는 가치가 없습니다"
 }

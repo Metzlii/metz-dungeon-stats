@@ -591,5 +591,7 @@
  "Either: the new roll is worth the same ({a} → {b}).": "Au choix : le nouveau tirage vaut autant ({a} → {b}).",
  "Decide the new roll first, then: {step}": "Décidez d'abord du nouveau tirage, puis : {step}",
  "Use an {orb}.": "Utilisez un {orb}.",
- "Focus on: {mods}": "Cibler : {mods}"
+ "Focus on: {mods}": "Cibler : {mods}",
+ "Rank {r} of {n} modifiers on these weights": "Rang {r} sur {n} modificateurs avec ces poids",
+ "Worth nothing on these weights": "Ne vaut rien avec ces poids"
 }

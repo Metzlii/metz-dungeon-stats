@@ -591,5 +591,7 @@
  "Either: the new roll is worth the same ({a} → {b}).": "どちらでも：新しいロールの価値は同じです（{a} → {b}）。",
  "Decide the new roll first, then: {step}": "まず新しいロールを決めてから：{step}",
  "Use an {orb}.": "{orb} を使います。",
- "Focus on: {mods}": "フォーカス対象：{mods}"
+ "Focus on: {mods}": "フォーカス対象：{mods}",
+ "Rank {r} of {n} modifiers on these weights": "この重みでの順位：{n} 個中 {r} 位",
+ "Worth nothing on these weights": "この重みでは価値がありません"
 }

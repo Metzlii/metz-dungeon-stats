@@ -591,5 +591,7 @@
  "Either: the new roll is worth the same ({a} → {b}).": "都可以：新词条价值相同（{a} → {b}）。",
  "Decide the new roll first, then: {step}": "先决定新词条，然后：{step}",
  "Use an {orb}.": "使用{orb}。",
- "Focus on: {mods}": "专注于：{mods}"
+ "Focus on: {mods}": "专注于：{mods}",
+ "Rank {r} of {n} modifiers on these weights": "按这些权重，{n} 个词条中排第 {r}",
+ "Worth nothing on these weights": "按这些权重毫无价值"
 }

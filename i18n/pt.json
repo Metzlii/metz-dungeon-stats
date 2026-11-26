@@ -591,5 +591,7 @@
  "Either: the new roll is worth the same ({a} → {b}).": "Tanto faz: a nova rolagem vale o mesmo ({a} → {b}).",
  "Decide the new roll first, then: {step}": "Decida primeiro a nova rolagem e depois: {step}",
  "Use an {orb}.": "Use um {orb}.",
- "Focus on: {mods}": "Focar em: {mods}"
+ "Focus on: {mods}": "Focar em: {mods}",
+ "Rank {r} of {n} modifiers on these weights": "Posição {r} de {n} modificadores com estes pesos",
+ "Worth nothing on these weights": "Não vale nada com estes pesos"
 }
