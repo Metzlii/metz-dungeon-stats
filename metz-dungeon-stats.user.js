@@ -44,7 +44,7 @@
     const VERSION = "0.2.17";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.46";
+    const BUILD = "2026-11-26.47";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -3266,7 +3266,8 @@
         const advisor = talismanAdvisor({ t, full: true, yield: () => false, log: warn, clear: kind => clear(kind),
             // Send to simulator: the talisman as the game's messages have it, for the simulator's Talisman Crafting.
             spent: tl => talismanSpendText(tl),
-            toSite: tl => { gmSet(GAME_TALISMAN_KEY, { ...{ schema: "metz-game-talisman/1", from: "metz-dungeon-stats", at: new Date().toISOString(), talisman: { id: tl.id, talismanTypeHrid: tl.talismanTypeHrid || null, lockedModifierHrid: tl.lockedModifierHrid || "", modifiers: (tl.modifiers || []).map(m => ({ hrid: String(m.hrid || m.modifierHrid), grade: Number(m.grade) })) } }, player: state.characterName || null }); } });
+            toSite: tl => { gmSet(GAME_TALISMAN_KEY, { ...{ schema: "metz-game-talisman/1", from: "metz-dungeon-stats", at: new Date().toISOString(), talisman: { id: tl.id, talismanTypeHrid: tl.talismanTypeHrid || null, lockedModifierHrid: tl.lockedModifierHrid || "", modifiers: (tl.modifiers || []).map(m => ({ hrid: String(m.hrid || m.modifierHrid), grade: Number(m.grade) })),
+                pendingModifiers: Array.isArray(tl.pendingModifiers) && tl.pendingModifiers.length ? tl.pendingModifiers.map(m => ({ hrid: String(m.hrid || m.modifierHrid), grade: Number(m.grade) })) : null } }, player: state.characterName || null }); } });
         try { document.documentElement.dataset.mdsTalisman = VERSION; } catch (_e) { /* fine */ }
         // A package from the simulator reaches this page two ways: this script's own storage (it takes Send to game on
         // the simulator's page itself), and the Metz Combat Sim Helper's page node when the Helper is installed too.
