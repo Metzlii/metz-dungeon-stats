@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.20";
+    const BUILD = "2026-11-26.21";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2778,6 +2778,10 @@
                 const lockRows = [...modal.querySelectorAll(':scope > [class*="TalismanModal_modifiers"] [class*="TalismanModal_modifierRow"]')];
                 const actions = [...modal.querySelectorAll('[class*="TalismanModal_actionSection"]')];
                 const modify = actions.find(x => x.querySelector('[class*="TalismanModal_orbPicker"]')), picker = modify && modify.querySelector('[class*="TalismanModal_orbPicker"]');
+                // The slot to click, not the whole picker row (operator, 2026-11-26: the outline ran far right of the box).
+                // The smallest of the picker's boxes that is drawn: the slot itself, whatever the game calls it there.
+                const slot = picker && ([...picker.querySelectorAll('[class*="ItemSelector_itemContainer"], [class*="ItemSelector_emptySlot"], [class*="ItemSelector_itemSelector"]')]
+                    .map(el => ({ el, w: el.getBoundingClientRect().width })).filter(x => x.w > 0).sort((x, y) => x.w - y.w).map(x => x.el)[0] || picker);
                 const upgrade = actions.find(x => x !== modify && x.querySelector('[class*="TalismanModal_cost"]'));
                 const footBtn = sec => sec && sec.querySelector('[class*="TalismanModal_actionFooter"] > button, [class*="TalismanModal_actionFooter"] button');
                 // The orb in the picker, by its icon (the same in every language): href ...#reshaping_orb.
@@ -2786,12 +2790,12 @@
                 const chosen = orb => !!(picker && (picker.querySelector(`use[href$="#${orb}_orb"], use[*|href$="#${orb}_orb"]`)
                     || [...picker.querySelectorAll('[class*="Item_item"]')].some(x => named(x, orb))));
                 if (step && !step.done && !picks.size) {
-                    if (step.kind === "orb") picks.add(chosen(step.orb) ? footBtn(modify) : picker);
+                    if (step.kind === "orb") picks.add(chosen(step.orb) ? footBtn(modify) : slot);
                     else if (step.kind === "lock" || step.kind === "unlock") {
                         if (lockRows.length) {
                             if (step.lock != null && lockRows[step.lock]) picks.add(lockRows[step.lock].querySelector('[title] button, button'));
                             if (step.unlock) { const r = lockRows.find(x => /TalismanModal_locked/.test(String(x.className))); picks.add(r && r.querySelector("button")); }
-                        } else picks.add(picker);
+                        } else picks.add(slot);
                     } else if (step.kind === "addLine") picks.add(footBtn(upgrade));
                 }
                 // The orb list the picker opens (a popup outside the window: ItemSelector_menu, one tile per orb, each with its
