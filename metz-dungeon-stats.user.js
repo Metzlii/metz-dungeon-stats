@@ -44,7 +44,7 @@
     const VERSION = "0.2.17";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.42";
+    const BUILD = "2026-11-26.43";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2837,7 +2837,9 @@
             // Lined up with the window's visible frame (the game's Modal_modalContainer around the talisman content, which
             // has padding of its own: the content's edges left the panel 24 px high, operator 2026-11-26).
             const frame = modal.closest('[class*="Modal_modalContainer"]') || modal;
-            const r = frame.getBoundingClientRect(), left = Math.round(r.left - DOCK_W - 10), top = Math.max(8, Math.round(r.bottom - dock.offsetHeight));
+            // The left side, or the right when the window sits too close to the screen's left edge (operator, 2026-11-26).
+            const r = frame.getBoundingClientRect(), onLeft = r.left >= DOCK_W + 16;
+            const left = Math.round(onLeft ? r.left - DOCK_W - 10 : r.right + 10), top = Math.max(8, Math.round(r.bottom - dock.offsetHeight));
             if (dock.style.left !== `${left}px`) dock.style.left = `${left}px`;
             if (dock.style.top !== `${top}px`) dock.style.top = `${top}px`;
         }
@@ -3040,7 +3042,8 @@
             // when the screen has no room beside it.
             let dock = docks.get(modal);
             if (!html) { if (panel) panel.remove(); if (dock) { dock.remove(); docks.delete(modal); } return; }
-            const roomLeft = (modal.closest('[class*="Modal_modalContainer"]') || modal).getBoundingClientRect().left >= DOCK_W + 16;
+            const fr = (modal.closest('[class*="Modal_modalContainer"]') || modal).getBoundingClientRect();
+            const roomLeft = fr.left >= DOCK_W + 16 || window.innerWidth - fr.right >= DOCK_W + 16; // a side with room for the panel
             if (roomLeft) {
                 if (panel) panel.remove();
                 if (!dock || !dock.isConnected) { dock = document.createElement("div"); dock.className = "mtal-panel mtal-dock"; document.body.appendChild(dock); docks.set(modal, dock); }
