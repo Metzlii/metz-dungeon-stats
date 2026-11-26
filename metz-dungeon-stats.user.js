@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.17";
+    const BUILD = "2026-11-26.18";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2792,8 +2792,13 @@
                         } else picks.add(picker);
                     } else if (step.kind === "addLine") picks.add(footBtn(upgrade));
                 }
+                // The orb list the picker opens (a popup outside the window: ItemSelector_menu, one tile per orb, each with its
+                // icon ...#reshaping_orb): the orb the step wants is outlined there too.
+                const want = step && !step.done && !picks.has(footBtn(modify)) ? (step.kind === "orb" ? step.orb : (step.kind === "lock" || step.kind === "unlock") && !lockRows.length ? "binding" : null) : null;
+                const menuTiles = [...document.querySelectorAll('[class*="ItemSelector_menu"] [class*="ItemSelector_itemContainer"]')];
+                if (want) for (const tile of menuTiles) if (tile.querySelector(`use[href$="#${want}_orb"], use[*|href$="#${want}_orb"]`)) picks.add(tile);
                 picks.delete(null); picks.delete(undefined);
-                for (const el of modal.querySelectorAll(".mtal-pick")) if (!picks.has(el)) el.classList.remove("mtal-pick");
+                for (const el of [...modal.querySelectorAll(".mtal-pick"), ...menuTiles.filter(x => x.classList.contains("mtal-pick"))]) if (!picks.has(el)) el.classList.remove("mtal-pick");
                 for (const el of picks) if (!el.classList.contains("mtal-pick")) el.classList.add("mtal-pick");
                 html = `<div><b>${esc(t("Worth"))}</b> ${[`${fmt(value)} ${t(unit())}`, ...others(tl)].map(esc).join(" · ")} · ${esc(t("{p} of the best talisman", { p: pct(share) }))}</div>`
                     + (verdict ? `<div class="mtal-verdict">${esc(verdict)}</div>` : "")
