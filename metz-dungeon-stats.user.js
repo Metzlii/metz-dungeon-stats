@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.12";
+    const BUILD = "2026-11-26.13";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2897,7 +2897,7 @@
     // END talismanAdvisor
     // END talisman shared
     const TALISMAN_ADVICE_KEY = "mds-talisman-advice", TALISMAN_ROLLS_KEY = "mds-talisman-rolls";
-    let talismanStatus = () => null;
+    let talismanStatus = () => null, talismanClear = () => null;
     const talismans = (() => {
         const advisor = talismanAdvisor({ t, full: true, yield: () => false, log: warn, clear: kind => clear(kind) });
         try { document.documentElement.dataset.mdsTalisman = VERSION; } catch (_e) { /* fine */ }
@@ -2908,32 +2908,37 @@
         const stamp = pkg => (pkg && pkg.at) || "";
         // What arrived, from where and when: __mds.talismanStatus() (operator, 2026-11-26: an open crafting window
         // did not take a package sent while it was open).
-        // Cleared in the game (the talisman window's buttons): a package sent at or before this moment is not taken again,
-        // whoever offers it (the Helper hands its stored copy over after every reload).
-        const CLEARED_KEY = "mds-talisman-cleared-at";
-        let clearedAt = ""; try { clearedAt = localStorage.getItem(CLEARED_KEY) || ""; } catch (_e) { /* none */ }
-        const clear = kind => {
-            if (!current) return;
+        // Clear (the talisman window's buttons, in either script): the plan alone or everything, in this script's stores
+        // AND the Metz Combat Sim Helper's (operator, 2026-11-26: Clear works for both scripts). The script that is
+        // clicked tells the other through the page (data-mtal-clear on <html> and the metz-talisman-clear event); each
+        // clears its own storage.
+        const tellOther = kind => { try { document.documentElement.setAttribute("data-mtal-clear", JSON.stringify({ kind, by: "stats", ms: Date.now() })); document.dispatchEvent(new CustomEvent("metz-talisman-clear")); } catch (_e) { /* fine */ } };
+        const clear = (kind, fromOther) => {
             if (kind === "plan") {
-                if (!current.plan) return;
-                const kept = { ...current, plan: null };
-                current = kept; advisor.setPackage(kept);
-                try { localStorage.setItem(TALISMAN_ADVICE_KEY, JSON.stringify(kept)); } catch (_e) { /* storage full or blocked */ }
-                gmSet(TALISMAN_GM_KEY, kept);
+                if (current && current.plan) {
+                    const kept = { ...current, plan: null };
+                    current = kept; advisor.setPackage(kept);
+                    try { localStorage.setItem(TALISMAN_ADVICE_KEY, JSON.stringify(kept)); } catch (_e) { /* storage full or blocked */ }
+                    gmSet(TALISMAN_GM_KEY, kept);
+                }
             } else {
-                clearedAt = stamp(current) || new Date().toISOString();
-                try { localStorage.setItem(CLEARED_KEY, clearedAt); localStorage.removeItem(TALISMAN_ADVICE_KEY); } catch (_e) { /* storage blocked */ }
                 current = null; advisor.setPackage(null);
+                try { localStorage.removeItem(TALISMAN_ADVICE_KEY); } catch (_e) { /* storage blocked */ }
                 gmSet(TALISMAN_GM_KEY, null);
             }
-            status.lastUse = { from: "cleared " + kind, at: stamp(current), ms: Date.now() };
+            if (!fromOther) tellOther(kind);
+            status.lastUse = { from: (fromOther ? "helper cleared " : "cleared ") + kind, at: stamp(current), ms: Date.now() };
             try { advisor.scan(); } catch (error) { warn("talisman advice", error); }
         };
+        document.addEventListener("metz-talisman-clear", () => {
+            let msg = null; try { msg = JSON.parse(document.documentElement.getAttribute("data-mtal-clear") || "null"); } catch (_e) { msg = null; }
+            if (msg && msg.by === "helper") clear(msg.kind === "plan" ? "plan" : "all", true);
+        });
         const status = { reads: 0, lastReadMs: 0, lastReadAt: null, lastUse: null, refused: null, listener: false };
         const use = (pkg, from) => {
             if (pkg !== null && !(isObj(pkg) && pkg.schema === "metz-talisman-advice/1")) { status.refused = { from, why: "not a package", ms: Date.now() }; return; }
-            if (pkg && current && stamp(pkg) <= stamp(current)) return;
-            if (pkg && clearedAt && stamp(pkg) <= clearedAt) return;
+            // Older is refused; the same send is taken again only when it has lost its plan (Clear plan elsewhere).
+            if (pkg && current && (stamp(pkg) < stamp(current) || (stamp(pkg) === stamp(current) && !(current.plan && !pkg.plan)))) return;
             if (!pkg && from !== "helper") return;
             current = pkg;
             status.lastUse = { from, at: stamp(pkg), plan: pkg && pkg.plan ? pkg.plan.key : null, ms: Date.now() };
@@ -2943,10 +2948,19 @@
         };
         try { const saved = localStorage.getItem(TALISMAN_ADVICE_KEY); if (saved) use(JSON.parse(saved), "saved"); } catch (_e) { /* none */ }
         const read = () => { const node = document.getElementById("metz-talisman-advice"); if (!node) return; try { use(JSON.parse(node.textContent || "null"), "helper"); } catch (_e) { /* not JSON */ } };
-        const readOwn = () => gmGet(TALISMAN_GM_KEY).then(pkg => { status.reads++; status.lastReadMs = Date.now(); status.lastReadAt = stamp(pkg) || null; if (pkg) use(pkg, "own"); }, () => {});
+        // The shared store emptied while it held what is shown here: Clear was pressed in another tab (the test and live
+        // games share this script's storage), so it is cleared here too.
+        let ownSeen = "";
+        const readOwn = () => gmGet(TALISMAN_GM_KEY).then(pkg => {
+            status.reads++; status.lastReadMs = Date.now(); status.lastReadAt = stamp(pkg) || null;
+            if (pkg) { ownSeen = stamp(pkg); use(pkg, "own"); return; }
+            if (ownSeen && current && ownSeen === stamp(current)) clear("all", true);
+            ownSeen = "";
+        }, () => {});
         // Told at once when the simulator's page stores a package (the script manager's change listener), the 3 s read
         // below stays as the fallback.
-        try { if (typeof GM_addValueChangeListener === "function") { GM_addValueChangeListener(TALISMAN_GM_KEY, (_k, _old, pkg) => { if (pkg) use(pkg, "own"); }); status.listener = true; } } catch (_e) { /* not offered */ }
+        try { if (typeof GM_addValueChangeListener === "function") { GM_addValueChangeListener(TALISMAN_GM_KEY, () => { readOwn(); }); status.listener = true; } } catch (_e) { /* not offered */ }
+        talismanClear = kind => { clear(kind); return kind === "plan" ? "crafting plan cleared" : "talisman advice cleared"; };
         talismanStatus = () => ({ ...status, current: current ? { at: stamp(current), plan: current.plan ? current.plan.key : null, player: current.player } : null, hidden: document.hidden, now: Date.now(),
             modals: document.querySelectorAll('[class*="TalismanModal_talismanModal"]').length, panels: document.querySelectorAll(".mtal-panel").length, panelText: (document.querySelector(".mtal-panel") || {}).textContent || null });
         document.addEventListener("metz-talisman-advice", read);
@@ -6133,6 +6147,6 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
     const boot = () => { panel.refresh(); try { labMount(); } catch (error) { warn("lab panel", error); } };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { talismans, talismanStatus: () => JSON.stringify(talismanStatus()), talismanRolls: () => { try { return JSON.parse(localStorage.getItem(TALISMAN_ROLLS_KEY) || "[]"); } catch (_e) { return []; } }, lab, state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { talismans, talismanStatus: () => JSON.stringify(talismanStatus()), talismanClear: kind => talismanClear(kind === "plan" ? "plan" : "all"), talismanRolls: () => { try { return JSON.parse(localStorage.getItem(TALISMAN_ROLLS_KEY) || "[]"); } catch (_e) { return []; } }, lab, state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();
