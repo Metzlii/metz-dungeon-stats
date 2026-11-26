@@ -44,7 +44,7 @@
     const VERSION = "0.2.19";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.63";
+    const BUILD = "2026-11-26.64";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -3273,12 +3273,14 @@
             + ".mtal-ask-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.mtal-ask-btns button{font:500 13px/1.2 Inter,system-ui,sans-serif;padding:7px 12px;border-radius:6px;cursor:pointer}"
             + ".mtal-ask-go{background:transparent;color:#e6eff3;border:1px solid rgba(230,239,243,.3)}.mtal-ask-go:hover{border-color:#ffcf5a;color:#ffcf5a}"
             + ".mtal-ask-keep{background:#2f8f68;color:#fff;border:1px solid #8fe3b5}.mtal-ask-keep:hover{background:#38a679}.mtal-ask-btns button:focus-visible{outline:2px solid #8fe3b5;outline-offset:2px}"
-            + ".mtal-q-top{color:#0b7285!important;font-weight:600}.mtal-q-good{color:#18794e!important}.mtal-q-none{opacity:.55}"
+            + ".mtal-q-top{color:#0b7285!important;font-weight:600}.mtal-q-good{color:#18794e!important}.mtal-q-none{color:#7d8494!important}"
             + ".mtal-g1{color:#c9d1d9!important;font-weight:400}.mtal-g3{color:#18794e!important}.mtal-g4{color:#2459c9!important;font-weight:600}.mtal-g5{color:#7a35c4!important;font-weight:600}.mtal-g6{color:#b8400b!important;font-weight:700}"
             // One palette for the window and the game's pale lavender tooltips (operator, 2026-11-26: "we need a palette that
             // works on the white tooltip background; any palette will be fine on the dark background"): each colour about 3.3-4.1
             // to 1 on the tooltip. In the tooltip the lines keep the game's weight.
-            + "[class*='Talisman_talismanTooltip'] :is(.mtal-q-top,.mtal-q-good,.mtal-g3,.mtal-g4,.mtal-g5,.mtal-g6){font-weight:inherit!important}[class*='Talisman_talismanTooltip'] .mtal-g1{color:inherit!important}"
+            // A modifier worth nothing is greyed by its name's colour, not by opacity, so a G6 grade on it stays bright
+            // (operator, 2026-11-26: "keep the Grade bright on G6 affixes, since those are useful when crafting").
+            + "[class*='Talisman_talismanTooltip'] :is(.mtal-q-top,.mtal-q-good,.mtal-g3,.mtal-g4,.mtal-g5,.mtal-g6){font-weight:inherit!important}[class*='Talisman_talismanTooltip'] .mtal-g1{color:inherit!important}[class*='Talisman_talismanTooltip'] .mtal-q-none{color:#6d6f93!important}"
             + "[class*='Talisman_talismanTooltip'] .mtal-tip{border-top-color:rgba(0,0,0,.2)}"
             + ".mtal-btn{margin-left:8px;padding:1px 7px;font-size:11px;line-height:1.5;border-radius:4px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:inherit;cursor:pointer;opacity:1}.mtal-btn:hover{background:rgba(255,255,255,.18)}.mtal-meta{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}.mtal-hgrid{display:grid!important;grid-template-columns:auto auto 1fr;grid-template-rows:auto auto;column-gap:12px;row-gap:6px;align-items:start}.mtal-hgrid>.mtal-h-icon{grid-row:1/3;grid-column:1;align-self:center}.mtal-hgrid>.mtal-h-title{grid-row:1;grid-column:2;align-self:start}.mtal-hgrid>.mtal-h-app{grid-row:1;grid-column:3;justify-self:start;align-self:start}.mtal-hgrid>.mtal-meta{grid-row:2;grid-column:2/4;align-self:end;justify-self:start}.mtal-meta button{margin:0!important}"
             + ".mtal-icon{position:absolute;left:2px;bottom:1px;font-size:10px;line-height:1;padding:1px 2px;border-radius:3px;background:rgba(0,0,0,.55);color:#fff;pointer-events:none;font-variant-numeric:tabular-nums}"
