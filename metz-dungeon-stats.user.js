@@ -44,7 +44,7 @@
     const VERSION = "0.2.17";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.40";
+    const BUILD = "2026-11-26.41";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2831,6 +2831,18 @@
             }, true);
         };
         const modalTalisman = new WeakMap(), sentAt = new WeakMap();
+        // The docked advice panels, one per talisman window, kept beside it every frame while it is open (it can be dragged).
+        const docks = new Map(), DOCK_W = 360;
+        function placeDock(modal, dock) {
+            const r = modal.getBoundingClientRect(), left = Math.round(r.left - DOCK_W - 10), top = Math.max(8, Math.round(r.bottom - dock.offsetHeight));
+            if (dock.style.left !== `${left}px`) dock.style.left = `${left}px`;
+            if (dock.style.top !== `${top}px`) dock.style.top = `${top}px`;
+        }
+        let docking = false;
+        const followDocks = () => {
+            for (const [modal, dock] of docks) { if (!modal.isConnected || !dock.isConnected) { dock.remove(); docks.delete(modal); } else placeDock(modal, dock); }
+            if (docks.size) requestAnimationFrame(followDocks); else docking = false;
+        };
         // A tick changes no element, so the page is drawn again on every checkbox change in a talisman window.
         let ticks = false;
         const listenTicks = () => { if (ticks) return; ticks = true;
@@ -3020,9 +3032,23 @@
                     + (step && step.focus && step.focus.length ? `<div class="mtal-muted">${esc(t("Focus on: {mods}", { mods: step.focus.join(", ") }))}</div>` : "")
                     + `<div class="mtal-muted">${esc(pkg.plan ? t("Plan: {plan} · weights for {who}", { plan: pkg.plan.title || pkg.plan.key, who: pkg.player || "" }) : t("Weights for {who}, {zone}", { who: pkg.player || "", zone: pkg.zone || "" }))}${meta ? "" : clearButtons(true)}</div>` + legend() + viewSwitch();
             }
-            if (!html) { if (panel) panel.remove(); return; }
-            if (!panel) { panel = document.createElement("div"); panel.className = "mtal-panel"; const head = modal.querySelector(":scope > header"); if (head) head.insertAdjacentElement("afterend", panel); else modal.prepend(panel); }
-            if (lastHtml.get(panel) !== html) { panel.innerHTML = html; lastHtml.set(panel, html); }
+            // The advice in a panel of its own, docked to the window's left with its bottom level with the window's
+            // (operator, 2026-11-26: the box had grown taller than the window's own content); inside the window as before
+            // when the screen has no room beside it.
+            let dock = docks.get(modal);
+            if (!html) { if (panel) panel.remove(); if (dock) { dock.remove(); docks.delete(modal); } return; }
+            const roomLeft = modal.getBoundingClientRect().left >= DOCK_W + 16;
+            if (roomLeft) {
+                if (panel) panel.remove();
+                if (!dock || !dock.isConnected) { dock = document.createElement("div"); dock.className = "mtal-panel mtal-dock"; document.body.appendChild(dock); docks.set(modal, dock); }
+                if (lastHtml.get(dock) !== html) { dock.innerHTML = html; lastHtml.set(dock, html); }
+                placeDock(modal, dock);
+                if (!docking) { docking = true; requestAnimationFrame(followDocks); }
+            } else {
+                if (dock) { dock.remove(); docks.delete(modal); }
+                if (!panel) { panel = document.createElement("div"); panel.className = "mtal-panel"; const head = modal.querySelector(":scope > header"); if (head) head.insertAdjacentElement("afterend", panel); else modal.prepend(panel); }
+                if (lastHtml.get(panel) !== html) { panel.innerHTML = html; lastHtml.set(panel, html); }
+            }
         }
         // A line's worth, beside the game's value: as a share of the most valuable line there is.
         // How good a line is, at a glance (operator, 2026-11-26: "a text highlight based on how good the mods are"): the
@@ -3164,7 +3190,8 @@
         }
         // The game's reroll box keeps empty space below the orb picker (121 px for a 60 px picker, operator's capture
         // 2026-11-26); it shrinks to what it holds.
-        const CSS = ".mtal-view{margin-top:6px;font-size:11.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}.mtal-view .mtal-btn{margin-left:0}.mtal-btn.mtal-on{border-color:#8fe3b5;color:#8fe3b5}"
+        const CSS = ".mtal-dock{position:fixed;z-index:1400;width:360px;box-sizing:border-box;margin:0!important;background:#1d2b2a!important;color:#e6eff3;box-shadow:0 10px 30px rgba(0,0,0,.55);font-family:Inter,system-ui,sans-serif}"
+            + ".mtal-view{margin-top:6px;font-size:11.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}.mtal-view .mtal-btn{margin-left:0}.mtal-btn.mtal-on{border-color:#8fe3b5;color:#8fe3b5}"
             + "label.mtal-untick{outline:2px solid #e26d6d!important;outline-offset:1px}"
             + "[class*='TalismanModal_rerollBody']{min-height:0!important;height:auto!important;flex:0 0 auto!important}"
             + ".mtal-wrap{flex-wrap:wrap!important}.mtal-wrap>.mtal-meta{flex:1 0 100%;justify-content:flex-start;margin:8px 0 0!important;gap:8px}.mtal-wrap>.mtal-meta button{margin-left:0}"
@@ -3195,12 +3222,14 @@
         };
         function scan() { watch(); listenClicks(); listenGuard(); listenTicks(); draw(); }
         function draw() {
+            // Docked panels: a window that is gone takes its panel with it; the others are put back beside their window.
+            for (const [m, d] of docks) { if (!m.isConnected || !d.isConnected) { d.remove(); docks.delete(m); } else placeDock(m, d); }
             // Stepping aside for the other script leaves the page alone: the boxes on it are the other script's (operator,
             // 2026-11-26: the Helper took Stats' tooltip lines out every half second, the "jumping").
             if (host.yield()) return;
             const on = !!pkg;
             if (!document.getElementById("mtal-css")) { const st = document.createElement("style"); st.id = "mtal-css"; st.textContent = CSS; (document.head || document.documentElement).appendChild(st); }
-            if (!on) { for (const el of document.querySelectorAll(".mtal-panel,.mtal-line,.mtal-tip,.mtal-tab,.mtal-icon")) el.remove(); for (const el of document.querySelectorAll(".mtal-pick")) el.classList.remove("mtal-pick"); for (const c of [...Q_CLASSES, ...G_CLASSES]) for (const el of document.querySelectorAll("." + c)) el.classList.remove(c); for (const el of document.querySelectorAll(".mtal-head")) el.remove(); for (const el of document.querySelectorAll(".mtal-untick")) el.classList.remove("mtal-untick"); if (typeof host.toSite === "function") { try { for (const modal of document.querySelectorAll('[class*="TalismanModal_talismanModal"]')) drawModal(modal); } catch (error) { if (host.log) host.log("talisman advisor", error); } } return; }
+            if (!on) { for (const el of document.querySelectorAll(".mtal-panel,.mtal-line,.mtal-tip,.mtal-tab,.mtal-icon")) el.remove(); for (const el of document.querySelectorAll(".mtal-pick")) el.classList.remove("mtal-pick"); for (const c of [...Q_CLASSES, ...G_CLASSES]) for (const el of document.querySelectorAll("." + c)) el.classList.remove(c); for (const el of document.querySelectorAll(".mtal-head")) el.remove(); for (const el of document.querySelectorAll(".mtal-untick")) el.classList.remove("mtal-untick"); for (const [m, d] of docks) { d.remove(); docks.delete(m); } if (typeof host.toSite === "function") { try { for (const modal of document.querySelectorAll('[class*="TalismanModal_talismanModal"]')) drawModal(modal); } catch (error) { if (host.log) host.log("talisman advisor", error); } } return; }
             try {
                 for (const modal of document.querySelectorAll('[class*="TalismanModal_talismanModal"]')) drawModal(modal);
                 if (host.full) {
