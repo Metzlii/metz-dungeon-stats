@@ -43,7 +43,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.7";
+    const BUILD = "2026-11-26.8";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2786,7 +2786,62 @@
             if (!box) { box = document.createElement("div"); box.className = "mtal-tab"; section.appendChild(box); }
             if (lastHtml.get(box) !== html) { box.innerHTML = html; lastHtml.set(box, html); }
         }
-        const CSS = ".mtal-panel{margin:6px 0 8px;padding:6px 9px;border:1px solid rgba(120,200,160,.45);border-radius:6px;background:rgba(40,90,70,.18);font-size:12.5px;line-height:1.45}"
+        // Each combat talisman's icon (Talismans tab, bag, loadouts): its share of the best talisman in the bottom-left corner
+        // (operator, 2026-11-26; the game's own number sits bottom-right). An icon says nothing about which talisman it is,
+        // so the talisman is read off the game's component that draws it: its props carry `talisman` (the capture of
+        // 2026-11-26: { talisman, talismanClickedHandler } with the id and lines). Firefox's script sandbox sees the page's
+        // objects through wrappedJSObject.
+        function talismanOfIcon(el) {
+            try {
+                const page = el.wrappedJSObject || el;
+                const key = Object.keys(page).find(k => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+                for (let f = key ? page[key] : null, i = 0; f && i < 15; f = f.return, i++) {
+                    const p = f.memoizedProps, tl = p && p.talisman;
+                    if (tl && tl.id != null) return talismans.get(String(tl.id)) || null;
+                }
+            } catch (_e) { /* not reachable */ }
+            // Fallback: walk the game's tree from the root (the way the capture found them) and note which element each
+            // talisman's component draws; at most once a second.
+            // The id is left on the icon as an attribute, which both sides of Firefox's sandbox see alike.
+            // Walked again each second, so an icon the game hands to another talisman is put right.
+            if (Date.now() - iconMapAt > 1000) { iconMapAt = Date.now(); mapIcons(); }
+            const id = el.getAttribute("data-mtal-id");
+            return id ? talismans.get(id) || null : null;
+        }
+        let iconMapAt = 0;
+        function mapIcons() {
+            try {
+                const root = document.getElementById("root"), R = root && (root.wrappedJSObject || root);
+                if (!R) return;
+                const c = R._reactRootContainer; let first = (c && (c.current || (c._internalRoot && c._internalRoot.current))) || null;
+                if (!first) { const k = Object.keys(R).find(x => x.startsWith("__reactContainer$")); if (k) first = R[k]; }
+                const hostOf = f => { const todo = [f.child], seen = 0; while (todo.length && seen < 60) { const x = todo.shift(); if (!x) continue; const s = x.stateNode; if (s && typeof s.getAttribute === "function") return s; if (x.child) todo.push(x.child); if (x.sibling && x !== f.child) todo.push(x.sibling); } return null; };
+                const pending = first ? [first] : [], seen = new Set();
+                while (pending.length && seen.size < 30000) {
+                    const f = pending.pop(); if (!f || seen.has(f)) continue; seen.add(f);
+                    const tl = f.memoizedProps && f.memoizedProps.talisman;
+                    if (tl && tl.id != null) {
+                        const host = hostOf(f), sel = '[class*="Talisman_talisman__"]';
+                        const icon = host && (host.matches && host.matches(sel) ? host : host.querySelector && host.querySelector(sel));
+                        if (icon && icon.getAttribute("data-mtal-id") !== String(tl.id)) icon.setAttribute("data-mtal-id", String(tl.id));
+                    }
+                    if (f.child) pending.push(f.child); if (f.sibling) pending.push(f.sibling);
+                }
+            } catch (_e) { /* not reachable */ }
+        }
+        function drawIcon(el) {
+            const tl = talismanOfIcon(el), mm = tl && isCombat(tl) ? model(tl.id) : null;
+            let badge = el.querySelector(":scope > .mtal-icon");
+            if (!mm) { if (badge) badge.remove(); return; }
+            const text = pct(mm.m.share(linesOf(tl)));
+            if (!badge) {
+                if (getComputedStyle(el).position === "static") el.style.position = "relative";
+                badge = document.createElement("span"); badge.className = "mtal-icon"; el.appendChild(badge);
+            }
+            if (badge.textContent !== text) { badge.textContent = text; badge.title = t("{p} of the best talisman", { p: text }); }
+        }
+        const CSS = ".mtal-icon{position:absolute;left:2px;bottom:1px;font-size:10px;line-height:1;padding:1px 2px;border-radius:3px;background:rgba(0,0,0,.55);color:#fff;pointer-events:none;font-variant-numeric:tabular-nums}"
+            + ".mtal-panel{margin:6px 0 8px;padding:6px 9px;border:1px solid rgba(120,200,160,.45);border-radius:6px;background:rgba(40,90,70,.18);font-size:12.5px;line-height:1.45}"
             + ".mtal-panel b{font-weight:600;margin-right:4px}.mtal-muted{opacity:.7;font-size:11.5px}.mtal-verdict{font-weight:600;color:#8fe3b5}"
             + ".mtal-line{margin-left:8px;font-size:11px;opacity:.75;font-variant-numeric:tabular-nums}.mtal-pick{outline:2px solid #8fe3b5;outline-offset:1px}"
             + ".mtal-tip{margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.18);font-size:11.5px}.mtal-tab{margin-top:6px;font-size:12.5px;opacity:.9}";
@@ -2806,12 +2861,13 @@
             if (host.yield()) return;
             const on = !!pkg;
             if (!document.getElementById("mtal-css")) { const st = document.createElement("style"); st.id = "mtal-css"; st.textContent = CSS; (document.head || document.documentElement).appendChild(st); }
-            if (!on) { for (const el of document.querySelectorAll(".mtal-panel,.mtal-line,.mtal-tip,.mtal-tab")) el.remove(); for (const el of document.querySelectorAll(".mtal-pick")) el.classList.remove("mtal-pick"); return; }
+            if (!on) { for (const el of document.querySelectorAll(".mtal-panel,.mtal-line,.mtal-tip,.mtal-tab,.mtal-icon")) el.remove(); for (const el of document.querySelectorAll(".mtal-pick")) el.classList.remove("mtal-pick"); return; }
             try {
                 for (const modal of document.querySelectorAll('[class*="TalismanModal_talismanModal"]')) drawModal(modal);
                 if (host.full) {
                     for (const tip of document.querySelectorAll('[class*="Talisman_talismanTooltip"]')) drawTooltip(tip);
                     for (const sec of document.querySelectorAll('[class*="TalismansPanel_slotsSection"]')) drawTab(sec);
+                    for (const el of document.querySelectorAll('[class^="Talisman_talisman__"], [class*=" Talisman_talisman__"]')) drawIcon(el);
                 }
             } catch (error) { if (host.log) host.log("talisman advisor", error); }
         }
