@@ -596,5 +596,8 @@
  "Worth nothing on these weights": "按这些权重毫无价值",
  "The plan says Use New Roll: this roll moves it on. Keep the current lines anyway?": "方案建议“使用新词条”：这次重铸能推进方案。仍要保留当前词条吗？",
  "The plan says Keep Current: this roll does not move it on. Use the new roll anyway?": "方案建议“保留当前”：这次重铸不能推进方案。仍要使用新词条吗？",
- "The plan's next step is: {step} Do this anyway?": "方案的下一步是：{step} 仍要这样做吗？"
+ "The plan's next step is: {step} Do this anyway?": "方案的下一步是：{step} 仍要这样做吗？",
+ "Against the plan": "与方案不符",
+ "Do it anyway": "仍然执行",
+ "Follow the plan": "按方案来"
 }

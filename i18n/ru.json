@@ -596,5 +596,8 @@
  "Worth nothing on these weights": "Ничего не стоит по этим весам",
  "The plan says Use New Roll: this roll moves it on. Keep the current lines anyway?": "План говорит «Взять новый бросок»: этот бросок продвигает план. Всё равно оставить текущие строки?",
  "The plan says Keep Current: this roll does not move it on. Use the new roll anyway?": "План говорит «Оставить текущее»: этот бросок не продвигает план. Всё равно взять новый бросок?",
- "The plan's next step is: {step} Do this anyway?": "Следующий шаг плана: {step} Всё равно выполнить?"
+ "The plan's next step is: {step} Do this anyway?": "Следующий шаг плана: {step} Всё равно выполнить?",
+ "Against the plan": "Против плана",
+ "Do it anyway": "Всё равно сделать",
+ "Follow the plan": "Следовать плану"
 }
