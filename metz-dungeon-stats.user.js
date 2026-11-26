@@ -43,7 +43,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.4";
+    const BUILD = "2026-11-26.5";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2747,29 +2747,40 @@
             rows.forEach((r, i) => mark(r.row, lines[i] ? mm.m.line(lines[i].hrid, lines[i].grade) : 0, mm.m.bestSingle));
             const html = `${esc(t("Worth"))} ${esc(fmt(mm.m.value(lines)))} ${esc(t(unit()))} · ${esc(t("{p} of the best talisman", { p: pct(mm.m.share(lines)) }))}`;
             if (!box) { box = document.createElement("div"); box.className = "mtal-tip"; tip.appendChild(box); }
-            if (box.innerHTML !== html) box.innerHTML = html;
+            if (lastHtml.get(box) !== html) { box.innerHTML = html; lastHtml.set(box, html); }
         }
         function drawTab(section) {
             const worn = [...talismans.values()].filter(tl => isCombat(tl) && Number(tl.slotIndex) > 0);
             let box = section.querySelector(":scope > .mtal-tab");
             const mm = model(null);
             if (!mm) { if (box) box.remove(); return; }
+            // Nothing equipped: nothing to say (operator, 2026-11-26: the line only added noise to the tab).
+            if (!worn.length) { if (box) box.remove(); return; }
             let html;
-            if (!worn.length) html = esc(t("No combat talisman is equipped."));
-            else {
+            {
                 // Each equipped talisman against the others (a special counts once), the weakest named.
                 const rated = worn.map(tl => { const own = model(tl.id); return { tl, v: own.m.value(linesOf(tl)), s: own.m.share(linesOf(tl)) }; }).sort((a, b) => a.v - b.v);
                 const total = rated.reduce((s, r) => s + r.v, 0);
                 html = `${esc(t("Equipped combat talismans: {v} {u}", { v: fmt(total), u: t(unit()) }))} · ${esc(t("weakest: slot {n}, {p} of the best", { n: rated[0].tl.slotIndex, p: pct(rated[0].s) }))}`;
             }
             if (!box) { box = document.createElement("div"); box.className = "mtal-tab"; section.appendChild(box); }
-            if (box.innerHTML !== html) box.innerHTML = html;
+            if (lastHtml.get(box) !== html) { box.innerHTML = html; lastHtml.set(box, html); }
         }
         const CSS = ".mtal-panel{margin:6px 0 8px;padding:6px 9px;border:1px solid rgba(120,200,160,.45);border-radius:6px;background:rgba(40,90,70,.18);font-size:12.5px;line-height:1.45}"
             + ".mtal-panel b{font-weight:600;margin-right:4px}.mtal-muted{opacity:.7;font-size:11.5px}.mtal-verdict{font-weight:600;color:#8fe3b5}"
             + ".mtal-line{margin-left:8px;font-size:11px;opacity:.75;font-variant-numeric:tabular-nums}.mtal-pick{outline:2px solid #8fe3b5;outline-offset:1px}"
             + ".mtal-tip{margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.18);font-size:11.5px}.mtal-tab{margin-top:6px;font-size:12.5px;opacity:.9}";
-        function scan() {
+        // The game redraws its windows and takes out what was added to them; drawn again the moment that happens, before
+        // the screen is painted, so nothing blinks (operator, 2026-11-26: the Talismans tab line was cycling). The
+        // interval below stays as the fallback; a draw that changes nothing writes nothing, so this settles at once.
+        let observer = null, queued = false;
+        const watch = () => {
+            if (observer || typeof MutationObserver !== "function" || !document.body) return;
+            observer = new MutationObserver(() => { if (queued) return; queued = true; Promise.resolve().then(() => { queued = false; draw(); }); });
+            observer.observe(document.body, { childList: true, subtree: true });
+        };
+        function scan() { watch(); draw(); }
+        function draw() {
             const on = pkg && !host.yield();
             if (!document.getElementById("mtal-css")) { const st = document.createElement("style"); st.id = "mtal-css"; st.textContent = CSS; (document.head || document.documentElement).appendChild(st); }
             if (!on) { for (const el of document.querySelectorAll(".mtal-panel,.mtal-line,.mtal-tip,.mtal-tab")) el.remove(); for (const el of document.querySelectorAll(".mtal-pick")) el.classList.remove("mtal-pick"); return; }
