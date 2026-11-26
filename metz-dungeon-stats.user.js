@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.33";
+    const BUILD = "2026-11-26.34";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2837,19 +2837,27 @@
             const pending = pendingBox ? readRows(pendingBox, '[class*="TalismanModal_modifierRow"]', '[class*="TalismanModal_modifierLabel"]', '[class*="TalismanModal_grade"]') : null;
             let panel = modal.querySelector(":scope > .mtal-panel");
             const head = modal.querySelector(":scope > header");
-            // Our buttons sit in the window's footer, between Link to Chat and Destroy, in the footer's own button look
-            // (operator, 2026-11-26); without a footer, after the header's Appearance button.
-            const footer = modal.querySelector('[class*="TalismanModal_footer"]'), footBtns = footer ? [...footer.querySelectorAll(":scope > button, :scope > * > button")].filter(b => !b.closest(".mtal-meta")) : [];
+            // Our buttons: a second row beside the icon, under the title and Appearance, the two rows lined up with the icon's
+            // top and bottom (operator, 2026-11-26), in Appearance's own button look.
             const meta = (pkg && typeof host.clear === "function") || typeof host.toSite === "function"
-                ? (footBtns[0] || (head ? [...head.querySelectorAll("button")].find(b => !b.closest(".mtal-meta") && b.textContent.trim()) || null : null)) : null;
+                ? (head ? [...head.querySelectorAll(":scope > button, :scope > * > button")].find(b => !b.closest(".mtal-meta") && b.textContent.trim()) || null : null) : null;
             const tl = current.length ? findTalisman(current, pending) : null;
             modalTalisman.set(modal, tl);
             for (const r of modal.querySelectorAll(".mtal-meta")) if (!meta || r.previousElementSibling !== meta) r.remove();
             for (const h of modal.querySelectorAll(".mtal-wrap")) h.classList.remove("mtal-wrap");
+            if (!meta) for (const c of ["mtal-hgrid", "mtal-h-icon", "mtal-h-title", "mtal-h-app"]) for (const el of modal.querySelectorAll("." + c)) el.classList.remove(c);
             // With or without advice: Send to simulator works before any weights reach the game.
             if (meta) {
                 let row = meta.parentElement.querySelector(":scope > .mtal-meta");
                 if (!row) { row = document.createElement("span"); row.className = "mtal-meta"; meta.insertAdjacentElement("afterend", row); }
+                // The header as a grid: the icon over both rows, the title and Appearance on the first, our buttons on the second.
+                const box = meta.parentElement, icon = box.firstElementChild, title = meta.previousElementSibling;
+                if (icon && title && icon !== title && icon !== meta) {
+                    if (!box.classList.contains("mtal-hgrid")) box.classList.add("mtal-hgrid");
+                    if (!icon.classList.contains("mtal-h-icon")) icon.classList.add("mtal-h-icon");
+                    if (!title.classList.contains("mtal-h-title")) title.classList.add("mtal-h-title");
+                    if (!meta.classList.contains("mtal-h-app")) meta.classList.add("mtal-h-app");
+                }
                 const native = String(meta.className || "").split(/\s+/).filter(c => c && !/^mtal-|selected|active|disabled/i.test(c)).join(" ") || "mtal-btn";
                 const bh = (tl && typeof host.toSite === "function" ? `<button type="button" class="${native}" data-mtal-site="1" title="${esc(t("Send this talisman to the simulator's Talisman Crafting, to find the best way on from it"))}">${esc(sentAt.get(modal) && Date.now() - sentAt.get(modal) < 4000 ? t("Sent") : t("Send to simulator"))}</button>` : "")
                     + clearButtons(true, native);
@@ -3107,7 +3115,7 @@
             + ".mtal-ask-keep{background:#2f8f68;color:#fff;border:1px solid #8fe3b5}.mtal-ask-keep:hover{background:#38a679}.mtal-ask-btns button:focus-visible{outline:2px solid #8fe3b5;outline-offset:2px}"
             + ".mtal-q-top{color:#ffcf5a!important;font-weight:600}.mtal-q-good{color:#8fe3b5!important}.mtal-q-none{opacity:.55}"
             + ".mtal-g1{color:#c9d1d9!important;font-weight:400}.mtal-g3{color:#8fe3b5!important}.mtal-g4{color:#6fb7ff!important;font-weight:600}.mtal-g5{color:#c38cff!important;font-weight:600}.mtal-g6{color:#ff9d4d!important;font-weight:700}"
-            + ".mtal-btn{margin-left:8px;padding:1px 7px;font-size:11px;line-height:1.5;border-radius:4px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:inherit;cursor:pointer;opacity:1}.mtal-btn:hover{background:rgba(255,255,255,.18)}.mtal-meta{display:contents}.mtal-meta button{margin:0!important;padding-left:7px!important;padding-right:7px!important}"
+            + ".mtal-btn{margin-left:8px;padding:1px 7px;font-size:11px;line-height:1.5;border-radius:4px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:inherit;cursor:pointer;opacity:1}.mtal-btn:hover{background:rgba(255,255,255,.18)}.mtal-meta{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}.mtal-hgrid{display:grid!important;grid-template-columns:auto auto 1fr;grid-template-rows:auto auto;column-gap:12px;row-gap:6px;align-items:start}.mtal-hgrid>.mtal-h-icon{grid-row:1/3;grid-column:1;align-self:center}.mtal-hgrid>.mtal-h-title{grid-row:1;grid-column:2;align-self:start}.mtal-hgrid>.mtal-h-app{grid-row:1;grid-column:3;justify-self:start;align-self:start}.mtal-hgrid>.mtal-meta{grid-row:2;grid-column:2/4;align-self:end;justify-self:start}.mtal-meta button{margin:0!important}"
             + ".mtal-icon{position:absolute;left:2px;bottom:1px;font-size:10px;line-height:1;padding:1px 2px;border-radius:3px;background:rgba(0,0,0,.55);color:#fff;pointer-events:none;font-variant-numeric:tabular-nums}"
             + ".mtal-panel{margin:6px 0 8px;padding:6px 9px;border:1px solid rgba(120,200,160,.45);border-radius:6px;background:rgba(40,90,70,.18);font-size:12.5px;line-height:1.45}"
             + ".mtal-panel b{font-weight:600;margin-right:4px}.mtal-muted{opacity:.7;font-size:11.5px}.mtal-verdict{font-weight:600;color:#8fe3b5}"
