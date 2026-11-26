@@ -44,7 +44,7 @@
     const VERSION = "0.2.20";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.66";
+    const BUILD = "2026-11-26.67";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -4033,8 +4033,7 @@
 
 
     // ---------------------------------------------------------------------------------------------------------------
-    // Panel: Overview, Runs, Data. Docked as a "Dungeon Stats" tab in the game's Combat tab strip when that strip is on
-    // screen; a small floating button opens it anywhere else.
+    // Panel: Overview, Runs, Data. A "Dungeon Stats" tab in the game's Combat tab strip, and only there: it never floats.
     // ---------------------------------------------------------------------------------------------------------------
     const CSS = `
 /* Every size inside the panel is in em of the root font size, so the Settings text-size control scales the whole panel.
@@ -4803,11 +4802,13 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
             // Rows are held while the reader is scrolled down; they catch up at the top.
             els.wrap.addEventListener("scroll", () => { if (rowsHeld && els.wrap.scrollTop <= 8) renderRows(true); }, { passive: true });
             els.runsWrap.addEventListener("scroll", () => { if (runsHeld && els.runsWrap.scrollTop <= 8) renderRuns(true); }, { passive: true });
-            document.body.appendChild(toggle); document.body.appendChild(root);
+            // The panel lives only in the Combat page's tab strip, never floating (operator, 2026-11-26: "It should never
+            // float"): no floating button, and away from the Combat page there is nothing to open.
+            document.body.appendChild(root);
             floatSize();
             try { open = localStorage.getItem(PANEL_KEY) === "open"; tab = localStorage.getItem(PANEL_KEY + "-tab") || tab; } catch (_e) { open = false; }
             setTab(tab, true);
-            root.hidden = !open; if (open) render();
+            open = false; root.hidden = true;
             dockStart();
         }
         // -----------------------------------------------------------------------------------------------------------
@@ -4958,7 +4959,7 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
         function setOpen(v) {
             if (dock.active) { if (!v) dockDeactivate(); return; }
             if (v && dock.strip) { dockActivate(); return; }
-            open = v; if (root) root.hidden = !v; try { localStorage.setItem(PANEL_KEY, v ? "open" : "closed"); } catch (_e) { /* fine */ } if (v) render();
+            open = false; if (root) root.hidden = true;   // never floating: only the Combat strip's tab opens it
         }
         function touch() { dirty = true; if (!timer) timer = setTimeout(() => { timer = null; if (dirty && open) render(); dirty = false; }, 1000); }
         function refresh() { ensure(); touch(); }
