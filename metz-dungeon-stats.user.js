@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Metz Dungeon Stats
 // @namespace    metzlii
-// @version      0.2.16
+// @version      0.2.17
 // @description  One permanent record of your XP, your dungeon runs and the dungeon cash flow: keys crafted, consumables used, chests opened, loot sold. A damage meter per run, by player and ability. Tracked from the game's own messages, nothing estimated.
 // @author       Metzli
 // @license      MIT
@@ -41,7 +41,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.2.16";
+    const VERSION = "0.2.17";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
     const BUILD = "2026-11-26.38";
