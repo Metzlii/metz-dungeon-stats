@@ -587,5 +587,7 @@
  "Clear plan": "プランを消去",
  "Clear weights": "重みを消去",
  "Stop showing this crafting plan in the game; the weights stay": "このクラフトプランをゲームに表示しないようにします。重みは残ります",
- "Stop showing the simulator's talisman advice in the game until the next Send to game": "次に「ゲームに送る」を使うまで、シミュレーターのタリスマン助言をゲームに表示しません"
+ "Stop showing the simulator's talisman advice in the game until the next Send to game": "次に「ゲームに送る」を使うまで、シミュレーターのタリスマン助言をゲームに表示しません",
+ "Either: the new roll is worth the same ({a} → {b}).": "どちらでも：新しいロールの価値は同じです（{a} → {b}）。",
+ "Decide the new roll first, then: {step}": "まず新しいロールを決めてから：{step}"
 }
