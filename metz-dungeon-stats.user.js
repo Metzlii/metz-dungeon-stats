@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.19";
+    const BUILD = "2026-11-26.20";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2800,9 +2800,10 @@
                 // The orbs show as named tiles without an icon (operator's screenshot, 2026-11-26), so a tile is matched by its
                 // icon when it has one, else by the orb's name (English, or as this script translates it).
                 const menuTiles = [...document.querySelectorAll('[class*="ItemSelector_menu"] [class*="ItemSelector_itemContainer"], .MuiPopper-root [class*="ItemSelector_itemContainer"]')].filter((x, i, a) => a.indexOf(x) === i);
-                if (want) for (const tile of menuTiles) if (tile.querySelector(`use[href$="#${want}_orb"], use[*|href$="#${want}_orb"]`) || named(tile, want)) picks.add(tile);
+                // Outlined on the tile's own box, inside it: the list may clip anything drawn around its edge.
+                if (want) for (const tile of menuTiles) if (tile.querySelector(`use[href$="#${want}_orb"], use[*|href$="#${want}_orb"]`) || named(tile, want)) picks.add(tile.querySelector('[class*="Item_item__"]') || tile);
                 picks.delete(null); picks.delete(undefined);
-                for (const el of [...modal.querySelectorAll(".mtal-pick"), ...menuTiles.filter(x => x.classList.contains("mtal-pick"))]) if (!picks.has(el)) el.classList.remove("mtal-pick");
+                for (const el of [...modal.querySelectorAll(".mtal-pick"), ...document.querySelectorAll('[class*="ItemSelector_menu"] .mtal-pick, .MuiPopper-root .mtal-pick')]) if (!picks.has(el)) el.classList.remove("mtal-pick");
                 for (const el of picks) if (!el.classList.contains("mtal-pick")) el.classList.add("mtal-pick");
                 html = `<div><b>${esc(t("Worth"))}</b> ${[`${fmt(value)} ${t(unit())}`, ...others(tl)].map(esc).join(" · ")} · ${esc(t("{p} of the best talisman", { p: pct(share) }))}</div>`
                     + (verdict ? `<div class="mtal-verdict">${esc(verdict)}</div>` : "")
@@ -2916,7 +2917,7 @@
             + ".mtal-icon{position:absolute;left:2px;bottom:1px;font-size:10px;line-height:1;padding:1px 2px;border-radius:3px;background:rgba(0,0,0,.55);color:#fff;pointer-events:none;font-variant-numeric:tabular-nums}"
             + ".mtal-panel{margin:6px 0 8px;padding:6px 9px;border:1px solid rgba(120,200,160,.45);border-radius:6px;background:rgba(40,90,70,.18);font-size:12.5px;line-height:1.45}"
             + ".mtal-panel b{font-weight:600;margin-right:4px}.mtal-muted{opacity:.7;font-size:11.5px}.mtal-verdict{font-weight:600;color:#8fe3b5}"
-            + ".mtal-line{margin-left:8px;font-size:11px;opacity:.75;font-variant-numeric:tabular-nums}.mtal-pick{outline:2px solid #8fe3b5;outline-offset:1px}"
+            + ".mtal-line{margin-left:8px;font-size:11px;opacity:.75;font-variant-numeric:tabular-nums}.mtal-pick{outline:2px solid #8fe3b5;outline-offset:1px}[class*='Item_item__'].mtal-pick{outline-offset:-2px;box-shadow:inset 0 0 0 2px #8fe3b5}"
             + ".mtal-tip{margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.18);font-size:11.5px}.mtal-tab{margin-top:6px;font-size:12.5px;opacity:.9}";
         // The game redraws its windows and takes out what was added to them; drawn again the moment that happens, before
         // the screen is painted, so nothing blinks (operator, 2026-11-26: the Talismans tab line was cycling). The
