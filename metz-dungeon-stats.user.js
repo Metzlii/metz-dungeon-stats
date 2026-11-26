@@ -44,7 +44,7 @@
     const VERSION = "0.2.18";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.58";
+    const BUILD = "2026-11-26.59";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -3273,8 +3273,8 @@
             + ".mtal-ask-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.mtal-ask-btns button{font:500 13px/1.2 Inter,system-ui,sans-serif;padding:7px 12px;border-radius:6px;cursor:pointer}"
             + ".mtal-ask-go{background:transparent;color:#e6eff3;border:1px solid rgba(230,239,243,.3)}.mtal-ask-go:hover{border-color:#ffcf5a;color:#ffcf5a}"
             + ".mtal-ask-keep{background:#2f8f68;color:#fff;border:1px solid #8fe3b5}.mtal-ask-keep:hover{background:#38a679}.mtal-ask-btns button:focus-visible{outline:2px solid #8fe3b5;outline-offset:2px}"
-            + ".mtal-q-top{color:#ffcf5a!important;font-weight:600}.mtal-q-good{color:#8fe3b5!important}.mtal-q-none{opacity:.55}"
-            + ".mtal-g1{color:#c9d1d9!important;font-weight:400}.mtal-g3{color:#8fe3b5!important}.mtal-g4{color:#6fb7ff!important;font-weight:600}.mtal-g5{color:#c38cff!important;font-weight:600}.mtal-g6{color:#ff5f5f!important;font-weight:700}"
+            + ".mtal-q-top{color:#5fd4e8!important;font-weight:600}.mtal-q-good{color:#8fe3b5!important}.mtal-q-none{opacity:.55}"
+            + ".mtal-g1{color:#c9d1d9!important;font-weight:400}.mtal-g3{color:#8fe3b5!important}.mtal-g4{color:#6fb7ff!important;font-weight:600}.mtal-g5{color:#c38cff!important;font-weight:600}.mtal-g6{color:#ff9d4d!important;font-weight:700}"
             // The game's tooltips are pale lavender (operator, 2026-11-26: the bright colours were "blinding" there, a dark
             // backing "looks awful", deeper shades "dont love it", a full outline "sticks out too much from the native text"): the crafting window's
             // own colours, the game's own weight, and a faint shadow.
