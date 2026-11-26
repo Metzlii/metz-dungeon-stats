@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.10";
+    const BUILD = "2026-11-26.12";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -3562,6 +3562,13 @@
 #mds-toggle[hidden]{display:none}
 #mds-root{position:fixed;left:10px;bottom:46px;z-index:2147483000;width:min(840px,calc(100vw - 20px));max-height:min(72vh,700px);display:flex;flex-direction:column;background:#101b24;color:#e6eff3;border-radius:8px;box-shadow:0 0 0 1px #595d6c,0 16px 40px rgba(0,0,0,.65);font:400 14px/1.5 "Inter",system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
 #mds-root[hidden]{display:none}
+/* The floating panel's size (operator, 2026-11-26: away from the Combat tab strip it could not be resized). It is held
+   at the bottom-left, so the grip is the top-right corner: drag up and right to grow. The size is kept per browser. */
+#mds-root .mds-grip{position:absolute;top:-1px;right:-1px;width:16px;height:16px;cursor:nesw-resize;touch-action:none;z-index:4;border-top-right-radius:8px;background:linear-gradient(225deg,#45c8d8 0 3px,transparent 3px 6px,rgba(69,200,216,.6) 6px 8px,transparent 8px)}
+#mds-root.docked .mds-grip{display:none}
+#mds-root.mds-sized{max-height:none}
+#mds-root.mds-sized .mds-body{flex:1 1 auto;min-height:0}
+#mds-root.docked{width:auto!important;height:auto!important}
 #mds-root.docked{position:static;z-index:auto;width:auto;max-height:none;border:0;border-radius:0;box-shadow:none;background:transparent;margin:0;text-align:left}
 /* z-index:auto matters: the strip is a flex container, and a flex item's z-index makes a stacking context even when static, which put the docked panel above the game's popups (z 300). */
 #mds-root *{box-sizing:border-box}
@@ -4310,6 +4317,7 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
             els.wrap.addEventListener("scroll", () => { if (rowsHeld && els.wrap.scrollTop <= 8) renderRows(true); }, { passive: true });
             els.runsWrap.addEventListener("scroll", () => { if (runsHeld && els.runsWrap.scrollTop <= 8) renderRuns(true); }, { passive: true });
             document.body.appendChild(toggle); document.body.appendChild(root);
+            floatSize();
             try { open = localStorage.getItem(PANEL_KEY) === "open"; tab = localStorage.getItem(PANEL_KEY + "-tab") || tab; } catch (_e) { open = false; }
             setTab(tab, true);
             root.hidden = !open; if (open) render();
@@ -4328,7 +4336,9 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
             for (const list of document.querySelectorAll('[class*="TabsComponent_tabsComponent"] [role="tablist"]')) {
                 const tabs = [...list.querySelectorAll('[role="tab"]')].filter(t => t !== dock.tab);
                 const names = [...STRIP_TABS, ...["combatZones", "findParty", "myParty"].map(k => gameName("combatPanel", k, ""))].filter(Boolean);
-                if (tabs.length >= 3 && tabs.some(t => names.includes(tabText(t)))) return list;
+                // Any count of tabs: out of a party the strip has only Combat Zones and Find Party (operator, 2026-11-26:
+                // the old "at least three" left the panel floating whenever he was not in a party).
+                if (tabs.length && tabs.some(t => names.includes(tabText(t)))) return list;
             }
             return null;
         }
@@ -4427,6 +4437,36 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
             for (const p of root.querySelectorAll(".mds-pane")) p.hidden = p.dataset.pane !== k;
             try { localStorage.setItem(PANEL_KEY + "-tab", k); } catch (_e) { /* fine */ }
             if (!silent) render();
+        }
+        // The floating panel's resize grip (top-right corner; the panel is held at the bottom-left). Width and height are
+        // kept in this browser and clamped to the window; double-click the grip for the default size.
+        function floatSize() {
+            const KEY = "mds-float-size";
+            const grip = document.createElement("div"); grip.className = "mds-grip"; grip.title = "Drag to resize · double-click for the default size";
+            root.appendChild(grip);
+            const fit = (w, h) => {
+                const maxW = window.innerWidth - 20, maxH = window.innerHeight - 56;
+                root.style.width = `${Math.round(Math.max(360, Math.min(maxW, w)))}px`;
+                root.style.height = `${Math.round(Math.max(220, Math.min(maxH, h)))}px`;
+                root.classList.add("mds-sized");
+            };
+            const reset = () => { root.style.width = ""; root.style.height = ""; root.classList.remove("mds-sized"); };
+            try { const saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved && saved.w && saved.h) fit(saved.w, saved.h); } catch (_e) { /* none */ }
+            grip.addEventListener("pointerdown", e => {
+                if (root.classList.contains("docked")) return;
+                e.preventDefault(); e.stopPropagation();
+                const r = root.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY;
+                grip.setPointerCapture(e.pointerId);
+                const move = ev => fit(r.width + ev.clientX - x0, r.height - (ev.clientY - y0));
+                const up = () => {
+                    grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up); grip.removeEventListener("pointercancel", up);
+                    try { localStorage.setItem(KEY, JSON.stringify({ w: root.offsetWidth, h: root.offsetHeight })); } catch (_e) { /* fine */ }
+                };
+                grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", up); grip.addEventListener("pointercancel", up);
+            });
+            grip.addEventListener("dblclick", e => { e.stopPropagation(); reset(); try { localStorage.removeItem(KEY); } catch (_e) { /* fine */ } });
+            // A smaller window keeps the panel inside it.
+            window.addEventListener("resize", () => { if (root.classList.contains("mds-sized")) fit(root.offsetWidth, root.offsetHeight); });
         }
         function setOpen(v) {
             if (dock.active) { if (!v) dockDeactivate(); return; }
