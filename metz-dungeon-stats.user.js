@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.36";
+    const BUILD = "2026-11-26.37";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2804,6 +2804,10 @@
             }, true);
         };
         const modalTalisman = new WeakMap(), sentAt = new WeakMap();
+        // A tick changes no element, so the page is drawn again on every checkbox change in a talisman window.
+        let ticks = false;
+        const listenTicks = () => { if (ticks) return; ticks = true;
+            document.addEventListener("change", e => { if (e.target && e.target.closest && e.target.closest('[class*="TalismanModal_talismanModal"]')) draw(); }, true); };
 
         // What to do next with this talisman: the plan's step when a plan was sent, else nothing beyond the worth.
         function nextStep(tl, mm) {
@@ -2823,9 +2827,11 @@
             // A Focus Orb asks which modifiers to favour: the 10 worth most at G6 (not specials), the set the crafting odds
             // assume (zoneTalismanRolls focusSet).
             // The plan's own set when the simulator sent one (site 1.0.56 on: the count that did best, 1 to 10).
+            const focusHrids = act.orb === "focus" ? (Array.isArray(p.focus) && p.focus.length ? p.focus
+                : (pkg.modifiers || []).filter(m => m.group !== "special").map(m => ({ h: m.hrid, v: mm.m.line(m.hrid, 6) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 10).map(x => x.h)) : null;
             const sent = act.orb === "focus" && Array.isArray(p.focus) && p.focus.length ? p.focus.map(h => t(nameOf(h))) : null;
             const focus = sent || (act.orb === "focus" ? (pkg.modifiers || []).filter(m => m.group !== "special").map(m => ({ name: m.name, v: mm.m.line(m.hrid, 6) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 10).map(x => t(x.name)) : null);
-            return { kind: "orb", orb: act.orb, focus, text: t(/^[AEIOU]/.test(ORB_NAMES[act.orb] || "") ? "Use an {orb}." : "Use a {orb}.", { orb: t(ORB_NAMES[act.orb] || act.orb) }), why, act, lines };
+            return { kind: "orb", orb: act.orb, focus, focusHrids, text: t(/^[AEIOU]/.test(ORB_NAMES[act.orb] || "") ? "Use an {orb}." : "Use a {orb}.", { orb: t(ORB_NAMES[act.orb] || act.orb) }), why, act, lines };
         }
 
         function drawModal(modal) {
@@ -2928,8 +2934,18 @@
                     const text = ((nameEl && nameEl.textContent) || tile.textContent || "").replace(/[\d,.\s]+$/, "").trim().toLowerCase(); return names.includes(text) || names.some(x => text.startsWith(x)); };
                 const chosen = orb => !!(picker && (picker.querySelector(`use[href$="#${orb}_orb"], use[*|href$="#${orb}_orb"]`)
                     || [...picker.querySelectorAll('[class*="Item_item"]')].some(x => named(x, orb))));
+                // The Focus Orb's "Choose focus modifiers" checkboxes (operator's screenshot, 2026-11-26): the plan's set ticked,
+                // nothing else. A box is found by its label, the modifier's name in English or as translated.
+                const focusBoxes = modify && step && step.focusHrids ? [...modify.querySelectorAll("label")].filter(l => l.querySelector('input[type="checkbox"]')) : [];
+                const wantName = new Map((step && step.focusHrids || []).flatMap(h => [nameOf(h), t(nameOf(h))].map(x => [String(x).trim().toLowerCase(), h])));
+                const focusMissing = [], focusOff = [];
+                for (const lb of focusBoxes) { const on = lb.querySelector('input[type="checkbox"]').checked, want = wantName.has(lb.textContent.trim().toLowerCase());
+                    if (want && !on) focusMissing.push(lb); else if (!want && on) focusOff.push(lb); }
+                for (const lb of focusBoxes) lb.classList.toggle("mtal-untick", focusOff.includes(lb));
                 if (step && !step.done && !picks.size) {
-                    if (step.kind === "orb") picks.add(chosen(step.orb) ? footBtn(modify) : slot);
+                    if (step.kind === "orb" && step.orb === "focus" && chosen("focus") && focusOff.length + focusMissing.length) {
+                        for (const b of focusMissing) picks.add(b); // ticks wanted: green; ticks to take off are red (.mtal-untick)
+                    } else if (step.kind === "orb") picks.add(chosen(step.orb) ? footBtn(modify) : slot);
                     else if (step.kind === "unlock" && unlockButton) picks.add(unlockButton.querySelector("button")); // free, no orb
                     else if (step.kind === "lock" || step.kind === "unlock") {
                         if (lockRows.length) { if (step.lock != null && lockRows[step.lock]) picks.add(lockRows[step.lock].querySelector('[title] button, button')); }
@@ -2949,7 +2965,7 @@
                 if (pkg.plan && step && !verdict) {
                     const ask = t("The plan's next step is: {step} Do this anyway?", { step: step.text });
                     const reroll = footBtn(modify), up = footBtn(upgrade);
-                    if (reroll && !(step.kind === "orb" && chosen(step.orb))) against.set(reroll, ask);
+                    if (reroll && !(step.kind === "orb" && chosen(step.orb) && !(step.orb === "focus" && focusOff.length + focusMissing.length))) against.set(reroll, ask);
                     if (up && step.kind !== "addLine") against.set(up, ask);
                     lockButtons.forEach(r => {
                         const b = r.querySelector('[title] button, button'); if (!b) return;
@@ -3113,7 +3129,8 @@
         }
         // The game's reroll box keeps empty space below the orb picker (121 px for a 60 px picker, operator's capture
         // 2026-11-26); it shrinks to what it holds.
-        const CSS = "[class*='TalismanModal_rerollBody']{min-height:0!important;height:auto!important;flex:0 0 auto!important}"
+        const CSS = "label.mtal-untick{outline:2px solid #e26d6d!important;outline-offset:1px}"
+            + "[class*='TalismanModal_rerollBody']{min-height:0!important;height:auto!important;flex:0 0 auto!important}"
             + ".mtal-wrap{flex-wrap:wrap!important}.mtal-wrap>.mtal-meta{flex:1 0 100%;justify-content:flex-start;margin:8px 0 0!important;gap:8px}.mtal-wrap>.mtal-meta button{margin-left:0}"
             + ".mtal-head{font-size:11px!important;letter-spacing:.06em;text-transform:uppercase;opacity:.6;padding-top:0!important;padding-bottom:2px!important;min-height:0!important;border:0!important;background:none!important}"
             + ".mtal-head>span{font-size:inherit!important;font-weight:500!important;color:inherit!important}.mtal-legend{margin-top:4px;font-size:11px;opacity:.75}"
@@ -3140,14 +3157,14 @@
             observer = new MutationObserver(() => { if (queued) return; queued = true; Promise.resolve().then(() => { queued = false; draw(); }); });
             observer.observe(document.body, { childList: true, subtree: true });
         };
-        function scan() { watch(); listenClicks(); listenGuard(); draw(); }
+        function scan() { watch(); listenClicks(); listenGuard(); listenTicks(); draw(); }
         function draw() {
             // Stepping aside for the other script leaves the page alone: the boxes on it are the other script's (operator,
             // 2026-11-26: the Helper took Stats' tooltip lines out every half second, the "jumping").
             if (host.yield()) return;
             const on = !!pkg;
             if (!document.getElementById("mtal-css")) { const st = document.createElement("style"); st.id = "mtal-css"; st.textContent = CSS; (document.head || document.documentElement).appendChild(st); }
-            if (!on) { for (const el of document.querySelectorAll(".mtal-panel,.mtal-line,.mtal-tip,.mtal-tab,.mtal-icon")) el.remove(); for (const el of document.querySelectorAll(".mtal-pick")) el.classList.remove("mtal-pick"); for (const c of [...Q_CLASSES, ...G_CLASSES]) for (const el of document.querySelectorAll("." + c)) el.classList.remove(c); for (const el of document.querySelectorAll(".mtal-head")) el.remove(); if (typeof host.toSite === "function") { try { for (const modal of document.querySelectorAll('[class*="TalismanModal_talismanModal"]')) drawModal(modal); } catch (error) { if (host.log) host.log("talisman advisor", error); } } return; }
+            if (!on) { for (const el of document.querySelectorAll(".mtal-panel,.mtal-line,.mtal-tip,.mtal-tab,.mtal-icon")) el.remove(); for (const el of document.querySelectorAll(".mtal-pick")) el.classList.remove("mtal-pick"); for (const c of [...Q_CLASSES, ...G_CLASSES]) for (const el of document.querySelectorAll("." + c)) el.classList.remove(c); for (const el of document.querySelectorAll(".mtal-head")) el.remove(); for (const el of document.querySelectorAll(".mtal-untick")) el.classList.remove("mtal-untick"); if (typeof host.toSite === "function") { try { for (const modal of document.querySelectorAll('[class*="TalismanModal_talismanModal"]')) drawModal(modal); } catch (error) { if (host.log) host.log("talisman advisor", error); } } return; }
             try {
                 for (const modal of document.querySelectorAll('[class*="TalismanModal_talismanModal"]')) drawModal(modal);
                 if (host.full) {
