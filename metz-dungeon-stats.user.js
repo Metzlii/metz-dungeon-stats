@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.18";
+    const BUILD = "2026-11-26.19";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2781,8 +2781,10 @@
                 const upgrade = actions.find(x => x !== modify && x.querySelector('[class*="TalismanModal_cost"]'));
                 const footBtn = sec => sec && sec.querySelector('[class*="TalismanModal_actionFooter"] > button, [class*="TalismanModal_actionFooter"] button');
                 // The orb in the picker, by its icon (the same in every language): href ...#reshaping_orb.
+                const named = (tile, orb) => { const names = [ORB_NAMES[orb], t(ORB_NAMES[orb] || "")].filter(Boolean).map(x => x.toLowerCase()); const nameEl = tile.querySelector('[class*="Item_name"]');
+                    const text = ((nameEl && nameEl.textContent) || tile.textContent || "").replace(/[\d,.\s]+$/, "").trim().toLowerCase(); return names.includes(text) || names.some(x => text.startsWith(x)); };
                 const chosen = orb => !!(picker && (picker.querySelector(`use[href$="#${orb}_orb"], use[*|href$="#${orb}_orb"]`)
-                    || [...picker.querySelectorAll('[class*="Item_name"]')].some(n => n.textContent.trim() === (ORB_NAMES[orb] || "") || n.textContent.trim() === t(ORB_NAMES[orb] || ""))));
+                    || [...picker.querySelectorAll('[class*="Item_item"]')].some(x => named(x, orb))));
                 if (step && !step.done && !picks.size) {
                     if (step.kind === "orb") picks.add(chosen(step.orb) ? footBtn(modify) : picker);
                     else if (step.kind === "lock" || step.kind === "unlock") {
@@ -2795,8 +2797,10 @@
                 // The orb list the picker opens (a popup outside the window: ItemSelector_menu, one tile per orb, each with its
                 // icon ...#reshaping_orb): the orb the step wants is outlined there too.
                 const want = step && !step.done && !picks.has(footBtn(modify)) ? (step.kind === "orb" ? step.orb : (step.kind === "lock" || step.kind === "unlock") && !lockRows.length ? "binding" : null) : null;
-                const menuTiles = [...document.querySelectorAll('[class*="ItemSelector_menu"] [class*="ItemSelector_itemContainer"]')];
-                if (want) for (const tile of menuTiles) if (tile.querySelector(`use[href$="#${want}_orb"], use[*|href$="#${want}_orb"]`)) picks.add(tile);
+                // The orbs show as named tiles without an icon (operator's screenshot, 2026-11-26), so a tile is matched by its
+                // icon when it has one, else by the orb's name (English, or as this script translates it).
+                const menuTiles = [...document.querySelectorAll('[class*="ItemSelector_menu"] [class*="ItemSelector_itemContainer"], .MuiPopper-root [class*="ItemSelector_itemContainer"]')].filter((x, i, a) => a.indexOf(x) === i);
+                if (want) for (const tile of menuTiles) if (tile.querySelector(`use[href$="#${want}_orb"], use[*|href$="#${want}_orb"]`) || named(tile, want)) picks.add(tile);
                 picks.delete(null); picks.delete(undefined);
                 for (const el of [...modal.querySelectorAll(".mtal-pick"), ...menuTiles.filter(x => x.classList.contains("mtal-pick"))]) if (!picks.has(el)) el.classList.remove("mtal-pick");
                 for (const el of picks) if (!el.classList.contains("mtal-pick")) el.classList.add("mtal-pick");
