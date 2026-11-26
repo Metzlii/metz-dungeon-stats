@@ -21,6 +21,7 @@
 // @grant        GM_setValue
 // @grant        GM.getValue
 // @grant        GM.setValue
+// @grant        GM_addValueChangeListener
 // @noframes
 // @require      https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js
 // ==/UserScript==
@@ -43,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.8";
+    const BUILD = "2026-11-26.9";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2615,6 +2616,10 @@
           */
         function step(plan, model, lines, target) {
             if (model.share(lines) >= target - 1e-12) return { done: true, phase: "done" };
+            // A talisman short of the lines the plan starts from is built up first, the way the crafting odds run it (runRolls
+            // adds them before the first step, so there this never fires). Operator, 2026-11-26: a one-line talisman was told to
+            // use orbs.
+            if (lines.length < (plan.build || TALISMAN_INFO.maxModifierCount)) return { addLine: true, phase: "build" };
             if (plan.next) return plan.next(lines);
             if (plan.lock) { const li = plan.lock(lines); if (li >= 0) return { lock: li, phase: "plainLock" }; }
             const orb = plan.orb(lines);
@@ -2876,6 +2881,7 @@
     // END talismanAdvisor
     // END talisman shared
     const TALISMAN_ADVICE_KEY = "mds-talisman-advice", TALISMAN_ROLLS_KEY = "mds-talisman-rolls";
+    let talismanStatus = () => null;
     const talismans = (() => {
         const advisor = talismanAdvisor({ t, full: true, yield: () => false, log: warn });
         try { document.documentElement.dataset.mdsTalisman = VERSION; } catch (_e) { /* fine */ }
@@ -2884,17 +2890,27 @@
         // The newer one wins (each carries the moment it was sent); an empty package from the Helper is its Clear.
         let current = null;
         const stamp = pkg => (pkg && pkg.at) || "";
+        // What arrived, from where and when: __mds.talismanStatus() (operator, 2026-11-26: an open crafting window
+        // did not take a package sent while it was open).
+        const status = { reads: 0, lastReadMs: 0, lastReadAt: null, lastUse: null, refused: null, listener: false };
         const use = (pkg, from) => {
-            if (pkg !== null && !(isObj(pkg) && pkg.schema === "metz-talisman-advice/1")) return;
+            if (pkg !== null && !(isObj(pkg) && pkg.schema === "metz-talisman-advice/1")) { status.refused = { from, why: "not a package", ms: Date.now() }; return; }
             if (pkg && current && stamp(pkg) <= stamp(current)) return;
             if (!pkg && from !== "helper") return;
             current = pkg;
+            status.lastUse = { from, at: stamp(pkg), plan: pkg && pkg.plan ? pkg.plan.key : null, ms: Date.now() };
             advisor.setPackage(pkg);
+            try { advisor.scan(); } catch (error) { warn("talisman advice", error); }
             try { if (pkg) localStorage.setItem(TALISMAN_ADVICE_KEY, JSON.stringify(pkg)); else localStorage.removeItem(TALISMAN_ADVICE_KEY); } catch (_e) { /* storage full or blocked */ }
         };
         try { const saved = localStorage.getItem(TALISMAN_ADVICE_KEY); if (saved) use(JSON.parse(saved), "saved"); } catch (_e) { /* none */ }
         const read = () => { const node = document.getElementById("metz-talisman-advice"); if (!node) return; try { use(JSON.parse(node.textContent || "null"), "helper"); } catch (_e) { /* not JSON */ } };
-        const readOwn = () => gmGet(TALISMAN_GM_KEY).then(pkg => { if (pkg) use(pkg, "own"); }, () => {});
+        const readOwn = () => gmGet(TALISMAN_GM_KEY).then(pkg => { status.reads++; status.lastReadMs = Date.now(); status.lastReadAt = stamp(pkg) || null; if (pkg) use(pkg, "own"); }, () => {});
+        // Told at once when the simulator's page stores a package (the script manager's change listener), the 3 s read
+        // below stays as the fallback.
+        try { if (typeof GM_addValueChangeListener === "function") { GM_addValueChangeListener(TALISMAN_GM_KEY, (_k, _old, pkg) => { if (pkg) use(pkg, "own"); }); status.listener = true; } } catch (_e) { /* not offered */ }
+        talismanStatus = () => ({ ...status, current: current ? { at: stamp(current), plan: current.plan ? current.plan.key : null, player: current.player } : null, hidden: document.hidden, now: Date.now(),
+            modals: document.querySelectorAll('[class*="TalismanModal_talismanModal"]').length, panels: document.querySelectorAll(".mtal-panel").length, panelText: (document.querySelector(".mtal-panel") || {}).textContent || null });
         document.addEventListener("metz-talisman-advice", read);
         if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", read); else read();
         readOwn();
@@ -6039,6 +6055,6 @@ html[data-mds-tg] [class*="BattlePanel_battleArea"]:has([class*="BattlePanel_gui
     const boot = () => { panel.refresh(); try { labMount(); } catch (error) { warn("lab panel", error); } };
     if (document.body) boot(); else document.addEventListener("DOMContentLoaded", boot, { once: true });
     // Diagnostics and the replay harness (test/index.html): feed() takes a frame as the game would send it.
-    W.__mds = { talismans, talismanRolls: () => { try { return JSON.parse(localStorage.getItem(TALISMAN_ROLLS_KEY) || "[]"); } catch (_e) { return []; } }, lab, state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
+    W.__mds = { talismans, talismanStatus: () => JSON.stringify(talismanStatus()), talismanRolls: () => { try { return JSON.parse(localStorage.getItem(TALISMAN_ROLLS_KEY) || "[]"); } catch (_e) { return []; } }, lab, state, ref, prices, version: VERSION, build: BUILD, panel, toolasha: TOOLASHA, importToolasha, xp: { record: xpRec, summary: () => xpSummary(serverNow()), levelOf, toNextLevel }, importRecordData, meter: () => state.meter.snapshot(), damage: () => state.damage, money: () => deriveMoney(state.timeline, panel.moneyCtx()), derive: () => derive(state.timeline, serverNow(), { selfName: state.characterName, recordStart: state.meta.recordStart || 0, isChest: h => !!ref.chestItems[h], isKey: h => ref.keyItems.has(h), isCounted, keyOf: z => (ref.dungeons[z] && ref.dungeons[z].keyItem) || null, maxWavesOf: z => (ref.dungeons[z] && ref.dungeons[z].maxWaves) || null }), feed: f => onMessage(typeof f === "string" ? f : JSON.stringify(f)), feedOut: f => onOutgoing(typeof f === "string" ? f : JSON.stringify(f)), flush: () => state.record && state.record.flush(), status: () => ({ character: state.characterName, events: state.counts.events, frames: state.counts.frames, sockets: state.sockets, viaData: state.viaData, ref: ref.ready, run: state.run && { zone: state.run.zone, waves: state.run.waves }, record: state.record && state.record.stats() }) };
     info(`v${VERSION} loaded`);
 })();
