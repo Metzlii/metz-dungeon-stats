@@ -44,7 +44,7 @@
     const VERSION = "0.2.16";
     // Which build of that version this file is: the version number moves once a release, so builds handed over in
     // between are told apart by this (shown on hovering the version in the panel, and as __mds.build).
-    const BUILD = "2026-11-26.28";
+    const BUILD = "2026-11-26.29";
     const LOG = "[Metz Dungeon Stats]";
     const W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
     // The script's own storage, the one store the simulator's page and the game's page both reach (operator,
@@ -2750,9 +2750,10 @@
         const pct = v => `${(100 * v).toFixed(v < 0.1 ? 1 : 0)}%`;
         const unit = () => (pkg && pkg.unit) || "";
         // Clearing the advice in the game (operator, 2026-11-26): the plan alone, or everything until the next Send to game.
-        const clearButtons = withPlan => (typeof host.clear !== "function" || !pkg ? "" : " "
-            + (withPlan && pkg.plan ? `<button type="button" class="mtal-btn" data-mtal-clear="plan" title="${esc(t("Stop showing this crafting plan in the game; the weights stay"))}">${esc(t("Clear plan"))}</button>` : "")
-            + `<button type="button" class="mtal-btn" data-mtal-clear="all" title="${esc(t("Stop showing the simulator's talisman advice in the game until the next Send to game"))}">${esc(t("Clear weights"))}</button>`);
+        // cls: the game's own button classes in the talisman window (they look like Appearance), ours elsewhere.
+        const clearButtons = (withPlan, cls = "mtal-btn") => (typeof host.clear !== "function" || !pkg ? "" : " "
+            + (withPlan && pkg.plan ? `<button type="button" class="${cls}" data-mtal-clear="plan" title="${esc(t("Stop showing this crafting plan in the game; the weights stay"))}">${esc(t("Clear plan"))}</button>` : "")
+            + `<button type="button" class="${cls}" data-mtal-clear="all" title="${esc(t("Stop showing the simulator's talisman advice in the game until the next Send to game"))}">${esc(t("Clear weights"))}</button>`);
         // The questions for clicks against the plan, per window; one listener, before the game's own (capture on document).
         const guards = new WeakMap();
         let guarding = false;
@@ -2789,14 +2790,14 @@
             if (clicks || (typeof host.clear !== "function" && typeof host.toSite !== "function")) return;
             clicks = true;
             document.addEventListener("click", e => {
-                const send = e.target && e.target.closest && e.target.closest(".mtal-btn[data-mtal-site]");
+                const send = e.target && e.target.closest && e.target.closest("button[data-mtal-site]");
                 if (send) {
                     e.preventDefault(); e.stopPropagation();
                     const modal = send.closest('[class*="TalismanModal_talismanModal"]'), tl = modal && modalTalisman.get(modal);
                     if (tl) { try { host.toSite(tl); sentAt.set(modal, Date.now()); setTimeout(draw, 4100); draw(); } catch (error) { if (host.log) host.log("talisman to simulator", error); } }
                     return;
                 }
-                const b = e.target && e.target.closest && e.target.closest(".mtal-btn[data-mtal-clear]");
+                const b = e.target && e.target.closest && e.target.closest("button[data-mtal-clear]");
                 if (!b) return;
                 e.preventDefault(); e.stopPropagation();
                 try { host.clear(b.getAttribute("data-mtal-clear")); } catch (error) { if (host.log) host.log("talisman advice clear", error); }
@@ -2847,8 +2848,12 @@
                 // Its own line under the title (operator, 2026-11-26: three buttons squeezed the title and Appearance). The row
                 // sits beside Appearance, so the box that holds both wraps.
                 const holder = row.parentElement; if (holder && !holder.classList.contains("mtal-wrap")) holder.classList.add("mtal-wrap");
-                const bh = (tl && typeof host.toSite === "function" ? `<button type="button" class="mtal-btn" data-mtal-site="1" title="${esc(t("Send this talisman to the simulator's Talisman Crafting, to find the best way on from it"))}">${esc(sentAt.get(modal) && Date.now() - sentAt.get(modal) < 4000 ? t("Sent") : t("Send to simulator"))}</button>` : "")
-                    + clearButtons(true);
+                // The game's own button look, Appearance's classes, and the row lined up under the title.
+                const native = String(meta.className || "").split(/\s+/).filter(c => c && !/^mtal-|selected|active/i.test(c)).join(" ") || "mtal-btn";
+                const title = meta.previousElementSibling, pad = title && holder ? Math.max(0, Math.round(title.getBoundingClientRect().left - holder.getBoundingClientRect().left)) : 0;
+                if (row.style.paddingLeft !== `${pad}px`) row.style.paddingLeft = `${pad}px`;
+                const bh = (tl && typeof host.toSite === "function" ? `<button type="button" class="${native}" data-mtal-site="1" title="${esc(t("Send this talisman to the simulator's Talisman Crafting, to find the best way on from it"))}">${esc(sentAt.get(modal) && Date.now() - sentAt.get(modal) < 4000 ? t("Sent") : t("Send to simulator"))}</button>` : "")
+                    + clearButtons(true, native);
                 if (lastHtml.get(row) !== bh) { row.innerHTML = bh; lastHtml.set(row, bh); }
             }
             const mm = tl ? model(tl.id) : null;
@@ -3087,7 +3092,7 @@
             }
             if (badge.textContent !== text) { badge.textContent = text; badge.title = t("{p} of the best talisman", { p: text }); }
         }
-        const CSS = ".mtal-wrap{flex-wrap:wrap!important}.mtal-wrap>.mtal-meta{flex:1 0 100%;justify-content:flex-end;margin:6px 0 0!important;gap:6px}.mtal-wrap>.mtal-meta .mtal-btn{margin-left:0}"
+        const CSS = ".mtal-wrap{flex-wrap:wrap!important}.mtal-wrap>.mtal-meta{flex:1 0 100%;justify-content:flex-start;margin:8px 0 0!important;gap:8px}.mtal-wrap>.mtal-meta button{margin-left:0}"
             + ".mtal-head{font-size:11px!important;letter-spacing:.06em;text-transform:uppercase;opacity:.6;padding-top:0!important;padding-bottom:2px!important;min-height:0!important;border:0!important;background:none!important}"
             + ".mtal-head>span{font-size:inherit!important;font-weight:500!important;color:inherit!important}.mtal-legend{margin-top:4px;font-size:11px;opacity:.75}"
             + "#mtal-ask{position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);padding:16px}"
