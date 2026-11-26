@@ -609,5 +609,8 @@
  "5th to 10th": "5〜10位",
  "worth something": "価値あり",
  "worth nothing": "価値なし",
- "Grades:": "グレード："
+ "Grades:": "グレード：",
+ "Send to simulator": "シミュレーターへ送る",
+ "Sent": "送信済み",
+ "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "このタリスマンをシミュレーターのタリスマンクラフトに送り、ここからの最善の進め方を探します"
 }

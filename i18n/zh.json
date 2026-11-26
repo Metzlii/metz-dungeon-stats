@@ -609,5 +609,8 @@
  "5th to 10th": "第 5 至 10",
  "worth something": "有价值",
  "worth nothing": "无价值",
- "Grades:": "等级："
+ "Grades:": "等级：",
+ "Send to simulator": "发送到模拟器",
+ "Sent": "已发送",
+ "Send this talisman to the simulator's Talisman Crafting, to find the best way on from it": "把这个护符发送到模拟器的护符制作，找出从它出发的最佳方案"
 }
